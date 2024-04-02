@@ -3,8 +3,8 @@ c++ dev for tpx readout various and checking scripts
 # C librarry for tpx3 fifo readout
 
 currently two relevant files:
-    - myReadoutBuffer.cpp (main bulk of code)
-    - tpx3constants.h (file for future constants to avoid hardcode)
+* myReadoutBuffer.cpp (main bulk of code)
+* tpx3constants.h (file for future constants to avoid hardcode)
 
 compile with `./compileBuffer.sh`
 
