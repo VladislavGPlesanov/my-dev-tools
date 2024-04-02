@@ -11,12 +11,12 @@ compile with `./compileBuffer.sh`
 # what else does what
 What present python functions do:
 
-## hexReg-to-bits.py
+1. hexReg-to-bits.py
 decodes MDIO registers read out from an SFP plug by the means of mii-tool
 ```bash
 mii-tool <intf> -vv
 ```
-## quick\_n\_dirty\_hdf\_read.py
+2. quick\_n\_dirty\_hdf\_read.py
  Code loops through the HDF files in a quick and simple way.
 
  Params(input converted to string by default):
