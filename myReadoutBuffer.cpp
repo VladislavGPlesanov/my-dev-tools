@@ -134,11 +134,11 @@ extern "C" {
 
     };
 
-    void checkNPYversion(){
-        std::cout<<"numpy api version:"<<NPY_VERSION<<"\n"<<std::flush;
-        std::cout<<"numpy C version:"<<PyArray_GetNDArrayCVersion<<"\n"<<std::flush;
-        std::cout<<"numpy Feature version:"<<PyArray_GetNDArrayCFeatureVersion<<"\n"<<std::flush;
-    }
+    //void checkNPYversion(){
+    //    std::cout<<"numpy api version:"<<NPY_VERSION<<"\n"<<std::flush;
+    //    std::cout<<"numpy C version:"<<PyArray_GetNDArrayCVersion<<"\n"<<std::flush;
+    //    std::cout<<"numpy Feature version:"<<PyArray_GetNDArrayCFeatureVersion<<"\n"<<std::flush;
+    //}
 
     void checkArray(uint32_t* array, std::size_t size){
         
