@@ -1,6 +1,5 @@
-# my-dev-tools
-c++ dev for tpx readout various and checking scripts
-# C librarry for tpx3 fifo readout
+# CONTENTS
+## C++ librarry for tpx3 fifo readout
 
 currently two relevant files:
 * myReadoutBuffer.cpp (main bulk of code)
@@ -8,7 +7,7 @@ currently two relevant files:
 
 compile with `./compileBuffer.sh`
 
-# what else does what
+## what else does what
 What present python functions do:
 
 1. hexReg-to-bits.py
