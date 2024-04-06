@@ -107,9 +107,9 @@ def plot_scat_stack(xdata, ydatalist, plotname, lablist, axisnames):
             ax1.set_xscale("log")
         ax1.set_xlabel(axisnames[0])
         ax1.set_ylabel(axisnames[1])
-        ax1.set_ylim(-1000,2100)
-        if("timestamps" in plotname):
-            ax1.set_ylim([0,20])
+        #ax1.set_ylim(-1000,2100)
+        #if("timestamps" in plotname):
+        #    ax1.set_ylim([0,20])
 
         #ax1.text(0.1,0.8,'YIPEEKAYEY \nfornicator of \nthy motherhood!',transform=ax1.transAxes)
         #ax1.axvline(x = 1275, 
@@ -243,14 +243,14 @@ with tb.open_file(filename, 'r') as f:
            scanid.append(mdata[i][5])
             
         ##########
-        plot_scat_stack(scanid,
+        plot_scat_stack(x, #scanid,
                        [dec,dis],
                        clean_filename+"_DecDiscErrors",
                        ["decoding","discard"],
                        ["scan parameter ID","Errors,[N]"])
         #########
 
-        plot_scat(scanid,
+        plot_scat(x, #scanid,
                   datalen,
                   clean_filename+"_DataLength-vs-DAC",
                   "Data length",
@@ -268,14 +268,14 @@ with tb.open_file(filename, 'r') as f:
 
         if("DataTake" in filename):
             #plot_scat(idx_start,
-            plot_scat(tstamp_0,
+            plot_scat(x, #tstamp_0,
                       datalen,
                       clean_filename+"_DataLength-vs-iterationIndex",
                       "len(Data)",
                       ["Start Index","Data length"])
 
             #plot_scat(idx_start,
-            plot_scat(tstamp_0,
+            plot_scat(x,#tstamp_0,
                       dec,
                       clean_filename+"_DecodingErr-vs-iterationIndex",
                       "Decoding Err.",

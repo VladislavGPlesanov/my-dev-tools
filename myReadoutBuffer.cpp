@@ -59,6 +59,10 @@ extern "C" {
 
        //////// some utils here /////////
 
+    chronoTime tick(){
+        return std::chrono::high_resolution_clock::now();
+    }
+
     void scream(std::string msg){
         std::cout<<msg<<"\n"<<std::flush;
     };
@@ -231,9 +235,17 @@ extern "C" {
          return millisec;
     };
 
+
     float timeDiff(chronoTime t0, chronoTime t1){
          float millisec = std::chrono::duration<float, std::milli>(t1 - t0).count();
          return millisec;
+    };
+
+
+    void updateTimeStamp(float &t_global, chronoTime t_start, chronoTime t_end){
+        float t_diff = timeDiff(t_start, t_end);
+        //std::cout<<"\t OLO:"<<t_diff<<"\t"<<std::flush;
+        t_global = t_global + t_diff;
     };
 
     void checkObject(PyObject *obj, std::string opt){
@@ -408,16 +420,20 @@ PyObject* getFifoData(PyObject *chip, float t_interval){
 
     // put mutex lock on the bytecode of the object in interpretr
     // to have thread-safe execution 
+    auto start_time = std::chrono::high_resolution_clock::now();
+
     PyGILState_STATE gstate = PyGILState_Ensure(); 
     Py_Initialize();
     import_array();
 
-    auto start_time = std::chrono::high_resolution_clock::now();
-    
     std::vector<uint32_t> temp;
     std::vector<uint32_t> fifo_data;
-
     long int cnt = 0; 
+
+    float total_time = 0.0;
+
+    //auto start_time = std::chrono::high_resolution_clock::now();
+
     while(time_to_read(start_time) < t_interval){
         temp = localQuerryFifo(chip);
         if(temp.size()!=0){
@@ -428,12 +444,25 @@ PyObject* getFifoData(PyObject *chip, float t_interval){
         temp.clear();
         cnt++;
     }
+    ///////////////////////////////////////////////////////////////
+    auto end_time = tick();
+    //auto end_time = std::chrono::high_resolution_clock::now();
 
-    auto end_time = std::chrono::high_resolution_clock::now();
+    float tdiff = timeDiff(start_time,end_time);
+    
+    std::cout<<"t0="<<total_time<<"\n"<<std::flush;
+    //std::cout<<"tdiff="<<tdiff<<"\n"<<std::flush;
+
+    //total_time = total_time + tdiff;
+    updateTimeStamp(total_time, start_time, end_time);
+    std::cout<<"newt0="<<total_time<<"\n"<<std::flush;
+
+    /////////////////////////////////////////////////////////////
     const std::size_t dsize = fifo_data.size();
     const npy_intp test_dsize[] = {(npy_intp)(dsize)};
 
     std::cout<<"got ["<<dsize<<"] words\n"<<std::flush;
+    //std::cout<<"test:["<<test_dsize<<"]\n"<<std::flush;
 
     PyObject* array = PyArray_SimpleNew(1,test_dsize,NPY_UINT32);
     if(array==NULL){
@@ -444,6 +473,18 @@ PyObject* getFifoData(PyObject *chip, float t_interval){
             PyArray_DATA(reinterpret_cast<PyArrayObject*>(array)));
 
     thisData = &fifo_data[0];
+
+
+    float tdiff_i = timeDiff(end_time,tick());
+    
+    std::cout<<"t0="<<total_time<<"\n"<<std::flush;
+    //std::cout<<"tdiff="<<tdiff_i<<"\n"<<std::flush;
+    
+    //total_time = total_time + tdiff_i;
+    updateTimeStamp(total_time, end_time, tick());
+    std::cout<<"newt0="<<total_time<<"\n"<<std::flush;
+
+
 
     if(fifo_data.data()!=NULL){
         PyGILState_Release(gstate); 
@@ -468,48 +509,85 @@ PyObject* getFifoData(PyObject *chip, float t_interval){
 /// WIP, to be tested below///
 ////////////////////////////////////////////////////////
 
-int testFifoSize(PyObject *self){
+//int testFifoSize(PyObject *self){
+PyObject *testFifoSize(PyObject *self){
+//void testFifoSize(PyObject *self){
  
     PyGILState_STATE gstate = PyGILState_Ensure(); 
     PyObject *chip = PyObject_GetAttrString(self,"chip");
 
-    PyObject *rxena, *discerr, *decerr;
+    std::size_t nent = 1;
+    const npy_intp size[] = {(npy_intp)(nent)};
+    scream("KAKOGO");
+    
+    long int ndatawords = 0;
+    uint32_t temp;
 
+    scream("HUYA");
     if(chip == NULL){
         scream("ERROR ArraySorter::testFifosize: chip is NULL!");
         //return NULL; // use NULL for pointers...
-        return -1;
+        //return -1;
     }else{
         PyObject *fifo = PyObject_GetItem(chip,PyUnicode_FromString("FIFO"));
         if(fifo == NULL){
             scream("ERROR ArraySorter::testFifosize: chip->fifo is NULL!");
-            return -1;      
+            //return -1;      
+            //return NULL;      
         }else{
             PyObject *fsize = PyObject_GetItem(fifo, PyUnicode_FromString("FIFO_SIZE"));
             if(fsize == NULL){
                 scream("ERROR ArraySorter::testFifosize: chip->fifo->fsize is NULL!");
-                return -1;      
-            }else{ 
-                long ndatawords = PyLong_AsLong(fsize);
-                //PyObject * result = PyLong_FromLong(ndatawords);
+                //return -1;      
+                //return NULL;      
+            }else{
+                //std::cout<<"type(fsize)=long?:"<<PyLong_Check(fsize)<<"\n"<<std::flush; //YES!
+                //std::cout<<"type(fsize)=long?:"<<PyLong_Check(fsize)<<"\n"<<std::flush; //YES!
+                scream("NIHERA");
+                ndatawords = PyLong_AsLong(fsize);
+                temp = static_cast<uint32_t>(ndatawords);
+                scream("NE");
+                //Py_DECREF(fsize);
+                std::cout<<"READING:{"<<ndatawords<<"}words in fifo\n"<<std::flush;
+                //long ndatawords = PyLong_AsLong(fsize);
+                ////smth = PyLong_FromLong(*ndatawords);
+                //result = PyLong_FromLong(ndatawords);
+                //PyObject_Print(result,stdout,0);
                 if(ndatawords == -1 && PyErr_Occurred()){
                 //if(result ==NULL){
                     scream("ERROR ArraySorter::testFifosize: chip->fifo->fsize->result is NULL!");
                 }
-                Py_DECREF(fsize);
-                Py_DECREF(fifo);
-                Py_DECREF(chip);
-                Py_DECREF(self);
+                //Py_INCREF(thisSize);
+                //thisSize = PyLong_FromLong(ndatawords);
+                //Py_DECREF(self);
+                //Py_DECREF(fifo);
+                //Py_DECREF(chip);
 
-                PyGILState_Release(gstate); 
-                //return PyLong_FromLong(ndatawords);
+                //PyGILState_Release(gstate); 
+                //return ndatawords;
                 //return result;
-                return ndatawords;
-                //return fsize; 
+                //return PyLong_AsLong(fsize);// instant segfault
+
             }
+            Py_DECREF(fsize);
         }
+        Py_DECREF(fifo);
     }
+    Py_DECREF(chip);
+    Py_DECREF(self);
+    scream("PROISHODIT");
+
+    PyObject *result = PyArray_SimpleNew(1,size,NPY_UINT32);
+
+    uint32_t* thisFifoSize = reinterpret_cast<uint32_t*>(
+                PyArray_DATA(reinterpret_cast<PyArrayObject*>(result)));
+   
+    scream(",SUKA!");
+    thisFifoSize = &temp; 
+
+    PyGILState_Release(gstate); 
     //// might be working but not sure yet
+    return result;
 
 };
 
@@ -691,15 +769,82 @@ PyObject *setRegister(PyObject *self, const char* SETTING, int value){
 
 };
 
+PyObject *ReaderLoop(PyObject *chip, float t_interval, int interupt){
+
+    PyGILState_STATE gstate = PyGILState_Ensure(); 
+    Py_Initialize();
+    import_array();
+
+    auto current_time = std::chrono::high_resolution_clock::now();
+
+    std::vector<uint32_t> temp;
+    std::vector<uint32_t> fifo_data;
+
+    //get read_time()
+    auto start_time = std::chrono::high_resolution_clock::now();
+
+    float t_wait = 0.0;
+
+    long int cnt = 0; 
+    while(time_to_read(start_time) < t_interval){
+        temp = localQuerryFifo(chip);
+        if(temp.size()!=0){
+            fifo_data.insert(fifo_data.end(),
+                             temp.begin(),
+                             temp.end());
+        }
+        temp.clear();
+        cnt++;
+    }
+
+    // count words - fifo.size()
+
+    // get timestamp
+
+    // get error count
+     
+    auto end_time = std::chrono::high_resolution_clock::now();
+    const std::size_t dsize = fifo_data.size();
+    const npy_intp test_dsize[] = {(npy_intp)(dsize)};
+
+    std::cout<<"got ["<<dsize<<"] words\n"<<std::flush;
+    std::cout<<"test:["<<test_dsize<<"]\n"<<std::flush;
+
+    PyObject* array = PyArray_SimpleNew(1,test_dsize,NPY_UINT32);
+    if(array==NULL){
+        scream("ARRAY IS NULL!");
+    }
+
+    uint32_t* thisData = reinterpret_cast<uint32_t*>(
+            PyArray_DATA(reinterpret_cast<PyArrayObject*>(array)));
+
+    thisData = &fifo_data[0];
+    ///////////////////////////////////
+  
+    //std::time_t tstamp = getTimeStamp(start_time, end_time);
+
+    //////////////////////////////////
+
+    if(fifo_data.data()!=NULL){
+        PyGILState_Release(gstate); 
+        return array;
+
+    }else{/*else block will stay as is*/
+        fifo_data.clear();
+        PyGILState_Release(gstate); 
+        return Py_None;
+    } 
+
+    //release mutex lock
+    Py_Finalize();
+    PyGILState_Release(gstate); 
+
+    return Py_None;
 
 
 
 
-
-
-
-
-
+};
 
 
 //curr_time = self.get_float_time() [ ] questionable...
@@ -784,6 +929,7 @@ PyObject* querryFifoSize(PyObject *fChipFifoSize){
 
         return result;
 };
+
 
 //struct PyCinterface{
 //
