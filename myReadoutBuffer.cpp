@@ -225,6 +225,9 @@ extern "C" {
         std::cout<<"\nRECDATA:{"<<vect.data()<<"}\n"<<std::flush;
         for(int i = 0; i < vect.size();i++){
             std::cout<<vect.at(i)<<"|"<<std::flush;
+            if(i==64){
+                break;
+            }
         }
     }
 
@@ -299,15 +302,93 @@ extern "C" {
  
     };
 
+
+/////////////// TODO: for these two make error handling if they work ////////////////
+int printobject(PyObject *obj){return PyObject_Print(obj,stdout,0);};
+
+PyObject* getChip(PyObject *self){
+
+    PyObject *chip; 
+
+    chip = PyObject_GetAttrString(self, "chip");
+
+    return chip;
+
+}
+
+PyObject* getFifo(PyObject *self){
+    
+    PyObject *chip, *fifo; 
+
+    chip = PyObject_GetAttrString(self, "chip");
+    
+    fifo = PyObject_GetItem(chip, PyUnicode_FromString("FIFO"));
+
+    return fifo;
+
+};
+
+PyObject* emptyList(){//probs working 
+    PyObject *emList = PyList_New(8);
+    for(int i=0; i<8; i++){
+        PyObject *val = PyLong_FromLong(0);
+        PyList_SetItem(emList, i, val);
+    }
+    return emList;
+}
+
+PyObject* fillPyArray(std::vector<uint32_t> &data){// works perfectly fine
+
+    const std::size_t datasize = data.size();
+    const npy_intp pyarrsize[] = {(npy_intp)(datasize)};
+
+    PyObject* pyarray = PyArray_SimpleNew(1,pyarrsize,NPY_UINT32);
+    if(pyarray==NULL){
+        scream("ARRAY IS NULL!");
+    }
+
+    uint32_t* thisData = reinterpret_cast<uint32_t*>(
+            PyArray_DATA(reinterpret_cast<PyArrayObject*>(pyarray)));
+
+    thisData = &data[0];
+
+    return pyarray;
+
+};
+
+std::vector<uint32_t> fillVectorFromPyData(PyArrayObject *pyarray){
+
+    uint32_t* result_data = (uint32_t*)PyArray_DATA(pyarray);
+    npy_intp* arr_dim = PyArray_DIMS(pyarray);
+    npy_intp* arr_size = &arr_dim[0];
+    std::vector<uint32_t> result_vector(result_data, result_data + *arr_size);
+
+    return result_vector;
+
+};
+
+PyObject* fillPyList(std::vector<long int> &stats){// maybe works
+
+    Py_ssize_t statlen = (Py_ssize_t)(stats.size());
+    PyObject * pylist = PyList_New(0);
+    for(Py_ssize_t ith = 0; ith < statlen; ++ith ){
+        PyObject *pyval = PyLong_FromLong(stats[ith]);
+        PyList_Append(pylist, pyval);
+    }
+
+    return pylist;
+
+};
+
 //////////////////////////////////////////////////////////////////////////
 ///---------- working numpy C-API functions --------------------------
 //////////////////////////////////////////////////////////////////////////
 
+//TODO: make a local version
 PyObject* readFifoStatus(PyObject *self, const char* option){       
 
 // test case when passing self in fifo_readout 
 // object should be: <tpx3.fifo_readout.FifoReadout>
-
     PyGILState_STATE gstate = PyGILState_Ensure(); 
     PyObject *res;
     /*returns status and counters for FIFO for following options:
@@ -318,20 +399,80 @@ PyObject* readFifoStatus(PyObject *self, const char* option){
     */
     if(self != NULL){
         Py_INCREF(self);
+        //scream("readFifoStatus::self not null");
         res = PyObject_CallMethod(self,option,NULL);// not null
-        Py_DECREF(self);
-    }   
+    }else{
+        scream("readFifoStatus::self object is NULL!");
+        return emptyList();
+    }
 
+    if(PyObject_Size(res)<=0){
+        std::cout<<"result for status {"<<option<<"} is <=0!\n"<<std::flush;
+        return emptyList();
+    }
     Py_ssize_t llen = PyList_Size(res);
     PyObject *list = PyList_New(0);
     for(Py_ssize_t ith = 0; ith < llen; ++ith ){
+        Py_INCREF(res);
         PyList_Append(list, PyList_GetItem(res,ith));
+        Py_DECREF(res);
     }
-    Py_DECREF(res);
+    //std::cout<<"readFifoStatus::obj=[["<<option<<"]] list="
+    //         <<printobject(list)<<"\n"<<std::flush;
+
+    Py_DECREF(self);    
     PyGILState_Release(gstate); 
     return list;
     // if one returns "res" object directly -> segfault!                     
 };
+
+std::vector<long int> local_readFifoStatus(PyObject *self, const char* option){       
+
+// test case when passing self in fifo_readout 
+// object should be: <tpx3.fifo_readout.FifoReadout>
+    std::vector<long int> rxstatus;
+    scream("[ebal]");
+    PyGILState_STATE gstate = PyGILState_Ensure(); 
+    PyObject *res;
+    /*returns status and counters for FIFO for following options:
+        get_rx_sync_status,
+        get_rx_en_status,
+        get_rx_fifo_discard_count,
+        get_rx_decode_error_count
+    */
+    scream("[tvoy]");
+    if(self != NULL){
+        res = PyObject_CallMethod(self,option,NULL);// not null
+    }else{
+        scream("call object is NULL!");
+    }
+
+    scream("[suchiy]");
+
+    long int llen = reinterpret_cast<long int>(PyObject_Length(res));
+
+    std::cout<<"statlen="<<PyObject_Length(res)<<"\n"<<std::flush;
+    std::cout<<"statsize="<<PyObject_Size(res)<<"\n"<<std::flush;
+    if(PyObject_Size(res)<=0){
+        std::cout<<"result for status {"<<option<<"} is <=0!"<<"\n"<<std::flush;
+        return {0,0,0,0,0,0,0,0};
+    }else{
+        for(int i=0;i<llen;i++){
+           Py_INCREF(res);
+           rxstatus.push_back(reinterpret_cast<long int>(PyList_GetItem(res,i)));
+           Py_DECREF(res);
+        }
+    }
+    scream("[rot1]");
+    Py_DECREF(res);
+    Py_DECREF(self);
+    PyGILState_Release(gstate); 
+    return rxstatus;
+
+};
+
+
+
 
 PyObject* querryDataFromFifo(PyObject *chip){
 
@@ -384,10 +525,10 @@ std::vector<uint32_t> localQuerryFifo(PyObject *chip){
     PyGILState_STATE gstate = PyGILState_Ensure(); 
         
     PyArrayObject *result; 
-    //scream("I'm in \"localQuerry\"");
+
     if(chip != NULL){
         PyObject *meth = PyObject_GetAttrString(chip, "get_data");
-        // increase and then decreaase reference to *chip
+        // increase and then decrease reference to *chip
         Py_INCREF(chip); 
         result = reinterpret_cast<PyArrayObject*>(PyObject_CallMethod(chip,"get_data",NULL));
         Py_DECREF(chip);
@@ -398,16 +539,19 @@ std::vector<uint32_t> localQuerryFifo(PyObject *chip){
     }
 
     // TODO: optimize following 4 lines into util function/template
-    uint32_t* result_data = (uint32_t*)PyArray_DATA(result);
-    npy_intp* arr_dim = PyArray_DIMS(result);
-    npy_intp* arr_size = &arr_dim[0];
-    std::vector<uint32_t> result_vector(result_data, result_data + *arr_size);
+    //uint32_t* result_data = (uint32_t*)PyArray_DATA(result);
+    //npy_intp* arr_dim = PyArray_DIMS(result);
+    //npy_intp* arr_size = &arr_dim[0];
+    //std::vector<uint32_t> result_vector(result_data, result_data + *arr_size);
+
+    // test below
+    Py_INCREF(result);
+    std::vector<uint32_t> result_vector = fillVectorFromPyData(result);// technically works
 
     //if(result_vector.size() > 0){ 
     //    std::cout<<std::boolalpha<<is_contiguous(result_vector.begin(),result_vector.end());
     //}
 
-    //scream("localQuerryFifo::recorded:"+std::to_string(result_vector.size()));
     Py_DECREF(result);
     //releases mutex lock
     PyGILState_Release(gstate); 
@@ -416,26 +560,64 @@ std::vector<uint32_t> localQuerryFifo(PyObject *chip){
 
 };
 
-PyObject* getFifoData(PyObject *chip, float t_interval){
 
+long int localFifoSize(PyObject *chipFifo){
+    /*
+     *   Requires PyObject => self.chip['FIFO']
+     *   only for internal use inside this class
+     */
+ 
+    PyGILState_STATE gstate = PyGILState_Ensure(); 
+
+    long int ndatawords = 0;
+
+    PyObject *fsize = PyObject_GetItem(chipFifo, PyUnicode_FromString("FIFO_SIZE"));
+    if(fsize == NULL){
+        scream("ERROR ArraySorter::testFifosize: chipFifo->fsize is NULL!");
+        return -1;      
+    }else{
+        ndatawords = PyLong_AsLong(fsize);
+        std::cout<<"READING:{"<<ndatawords<<"}words in fifo\n"<<std::flush;
+        if(ndatawords == -1 && PyErr_Occurred()){
+            scream("ERROR ArraySorter::testFifosize: chipFifo->fsize->result is NULL!");
+        }
+    }
+    Py_DECREF(fsize);
+    Py_DECREF(chipFifo);
+
+    PyGILState_Release(gstate); 
+
+    return ndatawords;
+
+};
+
+// TODO: make a copy for internal use inside of this class
+PyObject* getFifoData(PyObject *chipFifo, float t_interval){ 
+    /*
+     Accepts << self.chip['FIFO'] >> object from python side
+    */
     // put mutex lock on the bytecode of the object in interpretr
     // to have thread-safe execution 
-    auto start_time = std::chrono::high_resolution_clock::now();
 
     PyGILState_STATE gstate = PyGILState_Ensure(); 
     Py_Initialize();
+    auto start_time = std::chrono::high_resolution_clock::now();
     import_array();
 
     std::vector<uint32_t> temp;
     std::vector<uint32_t> fifo_data;
-    long int cnt = 0; 
 
-    float total_time = 0.0;
+    //Py_INCREF(chipFifo);
+    //long int fifowords = localFifoSize(chipFifo);
+    //Py_DECREF(chipFifo);
+    //std::cout<<"FIFO size before reading = "<<fifowords<<"\n"<<std::flush;
+
+    long int cnt = 0; 
 
     //auto start_time = std::chrono::high_resolution_clock::now();
 
     while(time_to_read(start_time) < t_interval){
-        temp = localQuerryFifo(chip);
+        temp = localQuerryFifo(chipFifo);
         if(temp.size()!=0){
             fifo_data.insert(fifo_data.end(),
                              temp.begin(),
@@ -446,79 +628,90 @@ PyObject* getFifoData(PyObject *chip, float t_interval){
     }
     ///////////////////////////////////////////////////////////////
     auto end_time = tick();
-    //auto end_time = std::chrono::high_resolution_clock::now();
 
     float tdiff = timeDiff(start_time,end_time);
     
-    std::cout<<"t0="<<total_time<<"\n"<<std::flush;
-    //std::cout<<"tdiff="<<tdiff<<"\n"<<std::flush;
+    std::cout<<"read="<<cnt<<"times\n"<<std::flush;
+    std::cout<<"loop time="<<tdiff<<"[ms]\n"<<std::flush;
 
-    //total_time = total_time + tdiff;
-    updateTimeStamp(total_time, start_time, end_time);
-    std::cout<<"newt0="<<total_time<<"\n"<<std::flush;
-
-    /////////////////////////////////////////////////////////////
-    const std::size_t dsize = fifo_data.size();
-    const npy_intp test_dsize[] = {(npy_intp)(dsize)};
-
-    std::cout<<"got ["<<dsize<<"] words\n"<<std::flush;
-    //std::cout<<"test:["<<test_dsize<<"]\n"<<std::flush;
-
-    PyObject* array = PyArray_SimpleNew(1,test_dsize,NPY_UINT32);
-    if(array==NULL){
-        scream("ARRAY IS NULL!");
-    }
-
-    uint32_t* thisData = reinterpret_cast<uint32_t*>(
-            PyArray_DATA(reinterpret_cast<PyArrayObject*>(array)));
-
-    thisData = &fifo_data[0];
-
-
-    float tdiff_i = timeDiff(end_time,tick());
+    //////test below//////////
+    PyObject* array = fillPyArray(fifo_data);// works, substitutes lines above 
     
-    std::cout<<"t0="<<total_time<<"\n"<<std::flush;
-    //std::cout<<"tdiff="<<tdiff_i<<"\n"<<std::flush;
-    
-    //total_time = total_time + tdiff_i;
-    updateTimeStamp(total_time, end_time, tick());
-    std::cout<<"newt0="<<total_time<<"\n"<<std::flush;
-
-
 
     if(fifo_data.data()!=NULL){
         PyGILState_Release(gstate); 
+        Py_DECREF(chipFifo);
         return array;
 
     }else{/*else block will stay as is*/
         fifo_data.clear();
+        Py_DECREF(chipFifo);
         PyGILState_Release(gstate); 
         return Py_None;
     } 
 
+    Py_DECREF(chipFifo);
     //release mutex lock
     Py_Finalize();
     PyGILState_Release(gstate); 
-
     return Py_None;
 
 };
+
+std::vector<uint32_t> local_getFifoData(PyObject *chipFifo, float interval){
+
+    PyGILState_STATE gstate = PyGILState_Ensure(); 
+    auto start_time = std::chrono::high_resolution_clock::now();
+
+    std::vector<uint32_t> temp;
+    std::vector<uint32_t> fifo_data;
+
+    long int cnt = 0; 
+
+    while(time_to_read(start_time) < interval){
+        temp = localQuerryFifo(chipFifo);
+        if(temp.size()!=0){
+            fifo_data.insert(fifo_data.end(),
+                             temp.begin(),
+                             temp.end());
+        }
+        temp.clear();
+        cnt++;
+    }
+    ///////////////////////////////////////////////////////////////
+    auto end_time = tick();
+
+    float tdiff = timeDiff(start_time,end_time);
+    
+    std::cout<<"tried="<<cnt<<"times, redorded "<<fifo_data.size()<<" events\n"<<std::flush;
+    std::cout<<"loop time="<<tdiff<<"[ms]\n"<<std::flush;
+
+    return fifo_data;
+
+};
+
+
 
 
 ////////////////////////////////////////////////////////
 /// WIP, to be tested below///
 ////////////////////////////////////////////////////////
 
-//int testFifoSize(PyObject *self){
 PyObject *testFifoSize(PyObject *self){
-//void testFifoSize(PyObject *self){
+
+    /* 
+     * trying to access fifo size from the top object "self"
+     */
  
     PyGILState_STATE gstate = PyGILState_Ensure(); 
+    //Py_Initialize();
+    //import_array();
+
     PyObject *chip = PyObject_GetAttrString(self,"chip");
 
     std::size_t nent = 1;
-    const npy_intp size[] = {(npy_intp)(nent)};
-    scream("KAKOGO");
+    //const npy_intp size[] = {(npy_intp)(nent)};
+    //scream("KAKOGO");
     
     long int ndatawords = 0;
     uint32_t temp;
@@ -541,33 +734,19 @@ PyObject *testFifoSize(PyObject *self){
                 //return -1;      
                 //return NULL;      
             }else{
-                //std::cout<<"type(fsize)=long?:"<<PyLong_Check(fsize)<<"\n"<<std::flush; //YES!
-                //std::cout<<"type(fsize)=long?:"<<PyLong_Check(fsize)<<"\n"<<std::flush; //YES!
                 scream("NIHERA");
                 ndatawords = PyLong_AsLong(fsize);
-                temp = static_cast<uint32_t>(ndatawords);
+                //temp = static_cast<uint32_t>(ndatawords);
                 scream("NE");
-                //Py_DECREF(fsize);
-                std::cout<<"READING:{"<<ndatawords<<"}words in fifo\n"<<std::flush;
+                //std::cout<<"READING:{"<<ndatawords<<"}words in fifo\n"<<std::flush;
                 //long ndatawords = PyLong_AsLong(fsize);
                 ////smth = PyLong_FromLong(*ndatawords);
                 //result = PyLong_FromLong(ndatawords);
                 //PyObject_Print(result,stdout,0);
                 if(ndatawords == -1 && PyErr_Occurred()){
-                //if(result ==NULL){
                     scream("ERROR ArraySorter::testFifosize: chip->fifo->fsize->result is NULL!");
                 }
-                //Py_INCREF(thisSize);
-                //thisSize = PyLong_FromLong(ndatawords);
-                //Py_DECREF(self);
-                //Py_DECREF(fifo);
-                //Py_DECREF(chip);
-
-                //PyGILState_Release(gstate); 
-                //return ndatawords;
-                //return result;
-                //return PyLong_AsLong(fsize);// instant segfault
-
+             
             }
             Py_DECREF(fsize);
         }
@@ -577,21 +756,29 @@ PyObject *testFifoSize(PyObject *self){
     Py_DECREF(self);
     scream("PROISHODIT");
 
-    PyObject *result = PyArray_SimpleNew(1,size,NPY_UINT32);
+    // TODO: segfault after this point 
+    //PyObject *result = PyArray_SimpleNew(1,size,NPY_UINT32);
+    //scream("SUKa"); 
 
-    uint32_t* thisFifoSize = reinterpret_cast<uint32_t*>(
-                PyArray_DATA(reinterpret_cast<PyArrayObject*>(result)));
-   
-    scream(",SUKA!");
-    thisFifoSize = &temp; 
-
+    //uint32_t* thisFifoSize = reinterpret_cast<uint32_t*>(
+    //            PyArray_DATA(reinterpret_cast<PyArrayObject*>(result)));
+     
     PyGILState_Release(gstate); 
+
+    return PyLong_FromLong(ndatawords);
+
     //// might be working but not sure yet
-    return result;
+    //return result;
 
 };
 
 PyObject* testOutput(PyObject *self){
+    /*
+    *
+    * playground to test if i can read & return status of RX 
+    * back to python 
+    *
+    */
 
     PyGILState_STATE gstate = PyGILState_Ensure(); 
     PyObject *chip; // top object reference
@@ -769,83 +956,72 @@ PyObject *setRegister(PyObject *self, const char* SETTING, int value){
 
 };
 
-PyObject *ReaderLoop(PyObject *chip, float t_interval, int interupt){
 
-    PyGILState_STATE gstate = PyGILState_Ensure(); 
-    Py_Initialize();
-    import_array();
+PyObject* dequeDataOut(PyObject *self, float interval){
 
-    auto current_time = std::chrono::high_resolution_clock::now();
+  PyGILState_STATE gstate = PyGILState_Ensure(); 
+  // 2 lines below should be used in "main" function only, others 
+  // should use only PyGILState f-ncs.
+  Py_Initialize();
+  import_array();
 
-    std::vector<uint32_t> temp;
-    std::vector<uint32_t> fifo_data;
+  // Allocating memory for output tuple
+  PyObject *tuple = PyTuple_New(3);
+  // initializin' objects for dat and rx error counters
+  PyObject *fifo, *fifoData, *fifo_decerr, *fifo_discerr; 
+  // vector for local readout of fifo data
+  std::vector<uint32_t> data;
 
-    //get read_time()
-    auto start_time = std::chrono::high_resolution_clock::now();
+  PyObject *chip = PyObject_GetAttrString(self,"chip");
+  fifo = PyObject_GetItem(chip,PyUnicode_FromString("FIFO"));
 
-    float t_wait = 0.0;
+  // recod fifo data locally
+  Py_INCREF(fifo);
+  data = local_getFifoData(fifo,interval); 
+  Py_DECREF(fifo);
 
-    long int cnt = 0; 
-    while(time_to_read(start_time) < t_interval){
-        temp = localQuerryFifo(chip);
-        if(temp.size()!=0){
-            fifo_data.insert(fifo_data.end(),
-                             temp.begin(),
-                             temp.end());
-        }
-        temp.clear();
-        cnt++;
-    }
+  // debug check of contents of recorded data
+  //printVectUint(data);
 
-    // count words - fifo.size()
-
-    // get timestamp
-
-    // get error count
-     
-    auto end_time = std::chrono::high_resolution_clock::now();
-    const std::size_t dsize = fifo_data.size();
-    const npy_intp test_dsize[] = {(npy_intp)(dsize)};
-
-    std::cout<<"got ["<<dsize<<"] words\n"<<std::flush;
-    std::cout<<"test:["<<test_dsize<<"]\n"<<std::flush;
-
-    PyObject* array = PyArray_SimpleNew(1,test_dsize,NPY_UINT32);
-    if(array==NULL){
-        scream("ARRAY IS NULL!");
-    }
-
-    uint32_t* thisData = reinterpret_cast<uint32_t*>(
-            PyArray_DATA(reinterpret_cast<PyArrayObject*>(array)));
-
-    thisData = &fifo_data[0];
-    ///////////////////////////////////
+  // this on puts vector.data() into numpy array
+  fifoData = fillPyArray(data);
   
-    //std::time_t tstamp = getTimeStamp(start_time, end_time);
+  // reading fifo discard and decoding errors
+  Py_INCREF(self); 
+  fifo_discerr = readFifoStatus(self,tpx3::CNTR_DISCARD_ERR);
+  Py_DECREF(self); 
+  Py_INCREF(self); 
+  fifo_decerr = readFifoStatus(self,tpx3::CNTR_DECODING_ERR);
+  Py_DECREF(self); 
 
-    //////////////////////////////////
+  // filling output tuple 
+  // as (<fifo data>, <listof discard errors>, <list of decode errors>)
+  // 
+  // should become:
+  // (<fifo data>, 
+  // <timestamp_beg>, 
+  // <timestamp_end>, 
+  // <list of disc. err.>, 
+  // <list of dec. err.>)
+  // to fit _data_deque operation in fifo_readout.py and handleData in scan_base.py
+  Py_INCREF(fifoData);
+  PyTuple_SetItem(tuple, 0, fifoData);
+  Py_DECREF(fifoData);
 
-    if(fifo_data.data()!=NULL){
-        PyGILState_Release(gstate); 
-        return array;
+  Py_INCREF(fifo_discerr);
+  PyTuple_SetItem(tuple, 1, fifo_discerr);
+  Py_DECREF(fifo_discerr);
 
-    }else{/*else block will stay as is*/
-        fifo_data.clear();
-        PyGILState_Release(gstate); 
-        return Py_None;
-    } 
+  Py_INCREF(fifo_decerr);
+  PyTuple_SetItem(tuple, 2, fifo_decerr);
+  Py_DECREF(fifo_decerr);
 
-    //release mutex lock
-    Py_Finalize();
-    PyGILState_Release(gstate); 
-
-    return Py_None;
-
-
-
+  ///// finita la comedia! //////
+  Py_DECREF(chip); 
+  PyGILState_Release(gstate);   
+  return tuple;
 
 };
-
 
 //curr_time = self.get_float_time() [ ] questionable...
 //self.get_rx_fifo_discard_count()  [V]
@@ -946,3 +1122,40 @@ PyObject* querryFifoSize(PyObject *fChipFifoSize){
 
 }
 
+
+//////////////////////////////////////////////////
+//
+//
+//
+//
+// implemented in "fillPyArray"
+    //const std::size_t dsize = fifo_data.size();
+    //const npy_intp test_dsize[] = {(npy_intp)(dsize)};
+
+    //std::cout<<"got ["<<dsize<<"] words\n"<<std::flush;
+
+    //PyObject* array = PyArray_SimpleNew(1,test_dsize,NPY_UINT32);
+    //if(array==NULL){
+    //    scream("ARRAY IS NULL!");
+    //}
+
+    //uint32_t* thisData = reinterpret_cast<uint32_t*>(
+    //        PyArray_DATA(reinterpret_cast<PyArrayObject*>(array)));
+
+    //thisData = &fifo_data[0];
+
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//

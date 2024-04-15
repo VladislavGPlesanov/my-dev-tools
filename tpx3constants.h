@@ -14,8 +14,12 @@ namespace tpx3{
     const std::string DATA_DELAY = "DATA_DELAY";
     const std::string FIFO = "FIFO";
     const std::string FIFO_SIZE = "FIFO_SIZE";
-    //const std::string FIFO = "FIFO";
-    //const std::string FIFO = "FIFO";
+
+    // python fifo_readout function names
+    const char* CNTR_DECODING_ERR = "get_rx_decode_error_count";
+    const char* CNTR_DISCARD_ERR = "get_rx_fifo_discard_count";
+    const char* FIFO_STATUS_ENA = "get_rx_en_status";
+    const char* FIFO_STATUS_SYNC = "get_rx_sync_status";
 
 };
 
