@@ -231,6 +231,17 @@ extern "C" {
         }
     }
 
+    // needs adjustments 
+    //double duration_time(chronoTime time){
+    //     float millisec =  std::chrono::duration<float, std::milli>(
+    //                       time - 0.0).count();
+    //                        |      |
+    //                        |      float
+    //                        chronoTime
+    //     return millisec;
+    //};
+
+
     float time_to_read(chronoTime start_time){
          float millisec =  std::chrono::duration<float, std::milli>(
                            std::chrono::high_resolution_clock::now() - start_time).count();
@@ -304,6 +315,25 @@ extern "C" {
 
 
 /////////////// TODO: for these two make error handling if they work ////////////////
+long int getNerror(PyObject *list){
+
+    long int n_errors = 0;
+    Py_ssize_t listlen = PyObject_Length(list);
+    for(Py_ssize_t it = 0; it < listlen; ++it){
+        PyObject *item = PyList_GetItem(list, it);
+        if(item!=NULL){
+            Py_INCREF(item);
+            n_errors+=PyLong_AsLong(item); 
+            Py_DECREF(item);
+        }else{
+            scream("can not access item in:");
+            PyObject_Print(list,stdout,0);
+        }
+    };
+    return n_errors;
+
+};
+
 int printobject(PyObject *obj){return PyObject_Print(obj,stdout,0);};
 
 PyObject* getChip(PyObject *self){
@@ -956,8 +986,7 @@ PyObject *setRegister(PyObject *self, const char* SETTING, int value){
 
 };
 
-
-PyObject* dequeDataOut(PyObject *self, float interval){
+PyObject* dequeDataOut(PyObject *self, float interval){/*works good*/
 
   PyGILState_STATE gstate = PyGILState_Ensure(); 
   // 2 lines below should be used in "main" function only, others 
@@ -967,6 +996,9 @@ PyObject* dequeDataOut(PyObject *self, float interval){
 
   // Allocating memory for output tuple
   PyObject *tuple = PyTuple_New(3);
+  // add a check if *tuple is NULL!
+  // release GIL if yes
+
   // initializin' objects for dat and rx error counters
   PyObject *fifo, *fifoData, *fifo_decerr, *fifo_discerr; 
   // vector for local readout of fifo data
@@ -982,7 +1014,7 @@ PyObject* dequeDataOut(PyObject *self, float interval){
 
   // debug check of contents of recorded data
   //printVectUint(data);
-
+  
   // this on puts vector.data() into numpy array
   fifoData = fillPyArray(data);
   
@@ -1022,6 +1054,135 @@ PyObject* dequeDataOut(PyObject *self, float interval){
   return tuple;
 
 };
+
+PyObject* readoutToDeque(PyObject *self, PyObject *deque, float interval){
+
+  PyGILState_STATE gstate = PyGILState_Ensure();
+  // 2 lines below should be used in "main" function only, others 
+  // should use only PyGILState f-ncs.
+  Py_Initialize();
+  import_array();
+
+  // last chunk read time
+  float last_read = 0.0;
+  // for now, waiting only for a stop signal from user input
+  while (!PyObject_IsTrue(PyObject_GetAttrString(self, "force_stop"))){
+    /*the rest of code inside*/ 
+
+    auto start_read = tick();
+    // Allocating memory for output tuple
+    // add a check if *tuple is NULL!
+    // release GIL if yes
+    PyObject *tuple = PyTuple_New(5);
+    // (array(data), t_0, t_end, rx_disc, rx_dec)
+    if(tuple==NULL){
+        scream("Could not instantiate data tuple");
+        PyGILState_Release(gstate); 
+        return NULL;
+    };
+
+    // initializin' objects for dat and rx error counters
+    PyObject *fifo, *fifoData, *fifo_decerr, *fifo_discerr; 
+    // vector for local readout of fifo data
+    std::vector<uint32_t> data;
+
+    PyObject *chip = PyObject_GetAttrString(self,"chip");
+    fifo = PyObject_GetItem(chip,PyUnicode_FromString("FIFO"));
+
+    // recod fifo data locally
+    Py_INCREF(fifo);
+    data = local_getFifoData(fifo,interval); 
+    Py_DECREF(fifo);
+
+    // debug check of contents of recorded data
+    //printVectUint(data);
+    
+    // this on puts vector.data() into numpy array
+    fifoData = fillPyArray(data);
+    
+    // reading fifo discard and decoding errors
+    Py_INCREF(self); 
+    fifo_discerr = readFifoStatus(self,tpx3::CNTR_DISCARD_ERR);
+    Py_INCREF(fifo_discerr);
+    long int n_errdisc = getNerror(fifo_discerr);
+    Py_DECREF(fifo_discerr);
+    Py_DECREF(self); 
+    Py_INCREF(self); 
+    fifo_decerr = readFifoStatus(self,tpx3::CNTR_DECODING_ERR);
+    Py_INCREF(fifo_decerr);
+    long int n_errdec = getNerror(fifo_decerr);
+    Py_DECREF(fifo_decerr);
+    Py_DECREF(self); 
+
+    //auto stop_read = tick();
+    float t_diff = timeDiff(start_read, tick());
+    float stop_read = last_read + t_diff;
+    // evaluate waiting time...?
+    // update timestamp   
+    //updateTimeStamp(last_read, start_read, stop_read);
+    updateTimeStamp(last_read, start_read, tick());
+
+    // filling output tuple 
+    // as (<fifo data>, <listof discard errors>, <list of decode errors>)
+    // 
+    // should become:
+    // (<fifo data>, 
+    // <timestamp_beg>, 
+    // <timestamp_end>, 
+    // <list of disc. err.>, 
+    // <list of dec. err.>)
+    // to fit _data_deque operation in fifo_readout.py and handleData in scan_base.py
+   
+    Py_INCREF(fifoData);
+    PyTuple_SetItem(tuple, 0, fifoData);
+    Py_DECREF(fifoData);
+
+    PyTuple_SetItem(tuple, 1, PyFloat_FromDouble(last_read));
+    PyTuple_SetItem(tuple, 2, PyFloat_FromDouble((double)stop_read)); 
+    PyTuple_SetItem(tuple, 3, PyLong_FromLong(n_errdisc));
+    PyTuple_SetItem(tuple, 4, PyLong_FromLong(n_errdec));
+
+    // Add tuple to deque:
+    PyObject *result = PyObject_CallMethod(deque, "append", (0), tuple);
+    if(result==NULL){
+        Py_DECREF(result);
+        PyGILState_Release(gstate);
+        return NULL;
+    }
+
+    // add command to reset rx error counters //
+    //PyObject *reg = setRegister(self,,)
+    if(n_errdisc != 0 || n_errdec !=0){
+        PyObject *reg = PyObject_CallMethod(self,"reset_rx",NULL);
+        if(reg==NULL){
+            scream("failed to reset RX!");
+        }else{
+            scream("RX reset!"); 
+        }
+        Py_DECREF(reg);
+    }
+
+    Py_DECREF(tuple); 
+    Py_DECREF(chip); 
+
+    std::cout<<"timings:"
+             <<"last_read:"<<last_read
+             <<"\tinterval:"<<interval
+             //<<"\tstart_read:"<<duration_time(start_read)
+             //<<"\tstop_read:"<<duration_time(stop_read)
+             <<"\n"<<std::flush;
+
+  };// end the while loop
+
+  ///// finita la comedia! ////// 
+  PyGILState_Release(gstate);   
+  //return Py_RETURN_NONE;
+  return Py_None;
+
+};
+
+
+
 
 //curr_time = self.get_float_time() [ ] questionable...
 //self.get_rx_fifo_discard_count()  [V]
