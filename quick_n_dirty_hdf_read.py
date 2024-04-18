@@ -243,14 +243,14 @@ with tb.open_file(filename, 'r') as f:
            scanid.append(mdata[i][5])
             
         ##########
-        plot_scat_stack(x, #scanid,
+        plot_scat_stack(scanid,
                        [dec,dis],
                        clean_filename+"_DecDiscErrors",
                        ["decoding","discard"],
                        ["scan parameter ID","Errors,[N]"])
         #########
 
-        plot_scat(x, #scanid,
+        plot_scat(scanid,
                   datalen,
                   clean_filename+"_DataLength-vs-DAC",
                   "Data length",
