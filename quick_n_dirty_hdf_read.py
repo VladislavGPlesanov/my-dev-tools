@@ -117,7 +117,9 @@ def plot_scat_stack(xdata, ydatalist, plotname, lablist, axisnames):
         #           ymax = 250) 
         #           #colors = 'magenta', 
         #           #label = 'more than 1RX is full')
-        ax1.grid(color='grey', linestyle='--', linewidth=0.5)
+        ax1.grid(which='major', color='grey', linestyle='-', linewidth=0.5)
+        ax1.grid(which='minor', color='grey', linestyle='-', linewidth=0.125)
+        ax1.minorticks_on()
         plt.legend(loc='upper center')
         ax1.plot()
         fig.savefig(plotname+'.png', dpi=300)

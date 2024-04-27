@@ -1,0 +1,1074 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN" "http://www.w3.org/TR/html4/loose.dtd">
+<html>
+<head>
+	<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+	<title>HOW-TO-FIRMWARE</title>
+	<meta name='Generator' content='Zim 0.74.3'>
+	<style type='text/css'>
+		a          { text-decoration: none      }
+		a:hover    { text-decoration: underline }
+		a:active   { text-decoration: underline }
+		strike     { color: grey                }
+		u          { text-decoration: none;
+					 background-color: yellow   }
+		tt         { color: #2e3436;            }
+		pre        { color: #2e3436;
+					 margin-left: 20px          }
+		h1         { text-decoration: underline;
+					 color: #4e9a06; margin-bottom: 0 }
+		h2         { color: #4e9a06; margin-bottom: 0 }
+		h3         { color: #4e9a06; margin-bottom: 0 }
+		h4         { color: #4e9a06; margin-bottom: 0 }
+		h5         { color: #4e9a06; margin-bottom: 0 }
+		p          { margin-top: 0              }
+        .code-cpp  { width: 35%; margin-left; 5%;}
+        .code-py   { width: 30%; margin-left; 5%;}
+        .code-bash { width: 18%; margin-left; 5%;}
+        .code-def  { width: 50%; margin-left; 5%;}
+    p          { text-indent: 30 px }
+    table, th, td {
+       border: 1px solid black;
+       border-collapse: collapse;
+     }
+    mark.red{
+      color:Tomato;
+      background: none;
+    }
+    mark.Ored{
+      color:OrangeRed;
+      background: none;
+    }
+    span.zim-tag {
+			color: #ce5c00;
+		}
+		div.zim-object {
+			border-style:solid;
+			border-width:1px;
+		}
+		.checked-box {list-style-image: url(data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABgAAAAYCAYAAADgdz34AAAAAXNSR0IArs4c6QAAAAZiS0dEAP8A/wD/oL2nkwAAAAlwSFlzAAANOgAADMQBiN+4gQAAAAd0SU1FB9gKGQ8sMEGsKGkAAAAZdEVYdENvbW1lbnQAQ3JlYXRlZCB3aXRoIEdJTVBXgQ4XAAAEBUlEQVRIx62V22tdRRTGf7Nn73P2ybntnNOe3NqkPTGgLTVUUZF6QatSLOKTPgqCIqLgQ0H/A1sQQbBYCBb1QfAxiC8tSO1FqHkwJVKtjdTGNraUmObsc9nXmfGh7cGYpM1D5nHWzPetteZb3wg2eB2YqYm4zSadsMtoboiNBH/3TE0awx6j+MRoxoTg/IYRvP19TQrJS0bzhdHGSyKFkLTtjSKwMjyiEz43ynhtP6bdjBCWyFobAf7eT7VhNF/q1FRbjYjmUohlCVPwnB+6FUxMTJipqSmUUhhjEGKd3bMT4ks/Y6oLBK2Yth8hHYtCJXOix7Nf7xLMzc0xOzvLzp078TyPNE3viW3QJPXzhNWbxFFKHCmMhoLn/FHodd48vGfhapdAacXQlkFK5dL6wIUm6fuTZPuvqDQhaMUYYyiVyuQr6rXDexYuAdi3tSv1ZJNs/R/CaszzT+1na88uXFnCEnJVgivBNN8uTJKmHQI/ptOOcXNZzMz9mOqFs90OHpipWcYwlo5P4ebnuOkrvr5wgrH+h3im7y36MzuwRXYZeKha/OhP0EkadFoxQSdGSotedR/+XwMc2XvKdNUFOFqZx6LKZWIiwjgkikNmLp/hm8sH+K1zjFTHXfBYdTi+eJArzXM0GxFxoBDCopLvo/fqEwi1XPkWkGqjFo2TgB1jOYZUKZTS/D1/ncmLh7jon0IbRWoiTi59ymzzJEEQE3cStNZsGxqlfPE57MBbOR8fP3hDGalOO9fq2DlBvmZw8xa2IxACGn6TydlD/O6f5OzSV/zif0cYhLQaEXGkKBbz7Ov/AOlXV1cxgBJRI3fuSTrpTawt18kWIZN1CFuaONI0w0WOXfsI43YIggh/KUSlhqxrMz74AkOZcWBm9QkH+Gw8NDLuITi+m0yzhluSyJzBLcpblUhFxywSRAEtPwQjsKVN30CNh0uvYuOubSHLtN3J0TO1j0pmBNuFbFWRK0gyPRZpktL2I5JQkclKakNlnh54g6ocvevUr/Ai2a7wineEkcJupA3S1Wg0nVZM2E6wbEF5U5G9Q++wI7sfR7h3N8HVNstykBfzH+KJEZwiWD0aIwxCgJ0R1Mu7GXOeJSuK93bZtQIle4D9pUNU5DC5jEsu55AvZakM5NicGyEj8uuz8bUCQgj67QfY671P3vEoeC69gy695U1U7NG7XV0pUwBjDJa1/JJlWWxzHuflzQe5FJ/GsgUVuZ2t8lEkTvfc0aNHb72flBhjVicQQqCUuvM3/M+WDVguWBrMVdDXEGZlBVEUrVCU9d9s5+fnaTQa2PZyPxEIhJaI1EEoZwX4ncynp6fXrmB4eJjR0VFarRbNZnP9P9rt9gohqNVq1Ov1ZbF/AZGev3hLJ2/zAAAAAElFTkSuQmCC)}
+		.xchecked-box {list-style-image: url(data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABgAAAAYCAYAAADgdz34AAAAAXNSR0IArs4c6QAAAAZiS0dEAP8A/wD/oL2nkwAAAAlwSFlzAAANOgAADMQBiN+4gQAAAAd0SU1FB9gKGQ8bDYnDxEwAAAAZdEVYdENvbW1lbnQAQ3JlYXRlZCB3aXRoIEdJTVBXgQ4XAAAEK0lEQVRIx9WVS2hTWRjHf/eR3CY1nbxMH2YiZRQS6qO13YlMVxY3SnVcuNIBFezGpSADLoQqLu1sHJCqdCFSXFpw4YOCSH3BtFqttTNamabX3DS5bfO6uffMoglja3RGcDMHzuac7/z/53++//cd+L8P6VuCPQYZ8ADNgBd4J31DcDcQs+GnHByRocEDv0kfBSjAOlYCs11Q+gpwDegS8LMJ+3QIK0ATzEhV8Odnz5bzw8P4dJ25aJQ/WlvJ1df/K7hSLtOcTNI+Pk69rpMTgqIQhCDvh1/VSpw79+gRrRMTmLZNezLJJsPg+a5dmOEwQlFqg1sWG16/Jv7sGWXDwBACFQjC9HcwIMONKkGp4PGAJGEDS0IQmZlhnWnye3c3eiyGo6qr3WHbrJ+dJf7gAXI6zSIr72T7/fgzmT4FHnTBsgrQBfYvTU0km5vxz86iADnAm0rRPTWFt7cXZccOJJcLAGHb2K9ekT93jmwmwwdAAFpjI6Ntbfxw5879ag7l6o1sr5eHHR3IsRgeQK/M4sQE+YEB7JcvEY6zAj45SWFgAPPxYwzHoQxIkQjTPT0kIxE+Noj8sexFn4/xnh58iQTeSpHkHAdrbIzi0BCOrmNPTpK/eJHM3bt8sCyKQCiR4NWePWSiUZw1+ZLXJm4pFKLhzBlCsRh2RUXacVgeGaF47RrL58+zcP8+RrmMkCQinZ1EL1zAjERqmkH+tLYl1G3bCJw4QUjT0IA0MJfLMX/5MqmHD0nZNiUgtGULG/r7ccXjINWuWbnmqsuFu7sb/4EDNLlcBIEioNs2KUAFGmMxmk6dQm1tRZI+3xBqEkiShBQOox05Ql1nJ26gvuIUAWiKQnj/ftStW5Fk+YuF+NldsbBA4cYN9KdPmaso8Fc62ZJtk7l1C2t0FGdxESHE1xE4hkHh6lX0oSHSpRIewC/LrPf7CSgKNpCamkI/fZr8pUuIZBIcpyaBunahPp1mub+fDyMjGKUSChCsq6Nh717q9u2jbnSU0uAgRrFIwTThyhUCqRS+hgZKLS1fJvDm87SNjZGcnsYUAjcQ8vsJ9/Xh7u1FDgRQN20iks3iDA+zZFmYhQLqzZtsj8WY3L0baY2Sf55ICCKpFHUzM2SEQAJCHg+hY8fQDh5EDgRWDoRC1J88SePRo2geD0XAcBy8b98Sv3ePYDZbbf2rFQjLIphMsmDbaEBQVQkePox26BCSz7e6i4bDrDt+nGYhmBscpFAskheC4Js3bPR4qHphFYEnlcI7P4/jdqNpGu8TCe4oCsXr1z//F2ga3+/cSfTJE0qmSVYIsKzaOZDcbjKyzFIiwfvt21kMBLA07YsetzWNd+3tLLW0sH5igvT8PH9Go/z44kX+E4LGjg7GDYOcy4XlOEgLC//5P/5LCFzxOPLmzWyIx+m6fduu7v0NVGqyTSycKksAAAAASUVORK5CYII=)}
+		.unchecked-box {list-style-image: url(data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABgAAAAYCAYAAADgdz34AAAAAXNSR0IArs4c6QAAAAZiS0dEAP8A/wD/oL2nkwAAAAlwSFlzAAANOgAADMQBiN+4gQAAAAd0SU1FB9gKGQ8qAt8h3m8AAAAZdEVYdENvbW1lbnQAQ3JlYXRlZCB3aXRoIEdJTVBXgQ4XAAAA60lEQVRIx+2VsQqDMBRF70sCLg5OLoKgjk7+lJ/hh+STXBwcnRz8ArMEkrxOFktbaC3tULzTg5e8k5vADXDq70VbobXmvu/hvQczg4heHrJfXxQFuq67blZbMc8zpmlCXddIkgTOuZcBUko45zCOI6y1Nz2xFSEEZFmGOI7fGg4A3nsQEZqmuXOu9jallACAtm3fvmutNaIoAjM/dkBECCF89KCbk4eAb+kEnIAT8EsAM0OIz3hSyrssUvss8t5fg+uIrLXPs0gIgWVZYIyBUurQyYdheO4gz3NUVQVjDNZ1PfSjpWmKsixvehfB9GBZ3NndrgAAAABJRU5ErkJggg==)}
+		.migrated-box {list-style-image: url(data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABgAAAAYCAYAAADgdz34AAAABGdBTUEAALGPC/xhBQAAAAZiS0dEAP8A/wD/oL2nkwAAAAlwSFlzAAANOgAADMQBiN+4gQAAAAd0SU1FB+AKHREFA8vJSnkAAAAZdEVYdENvbW1lbnQAQ3JlYXRlZCB3aXRoIEdJTVBXgQ4XAAAC1klEQVRIx+2VT0hUURTGf/e958w4Tc3TYowMw1GyEgwr1MqsFmbZIrIWQZsWJUjbdoHQpl3Qps0swnCRECQFYkR/TC1iKkqmfzAKTo2Vf8hoRsfR995tkRMT87RRWkUHHhy495zvnvvu933wP/75EKkkEAjIYDCIaZpIKRFCZN0kfX9xcTGtra2/irVUEolECIfDlJeXo+s6hmFkDaCqKoZhEAqFSCaTv60pqcSyLAoLC/F4PEtqDmCaJkIIKisrMybX0sdUVRWA5ubmPzdNjjI1cpXkZC/O1fV03PXgdDqRUtpPIITAsqxsDz0Z/3CZQv8uqo4N4C8/Tp2/DdM0MiZQlvk41OTkI/LW1SGtCVb5drD3eCc71wcA+VcAHA5vDd8+3UGakxiJV7i9pdQevU5T1R35pJ3MV5QW1pf+0kWBheJ2SWua8EQXZXsu4fVVYEz1sEKvof5EuxjoPvzpcRvrdp9C2gGMx6cpOHBmbImMesds7BZubwMVDTfXDnQ3vQfK7AC8wLfExMX5whyQc3q2OEnjGm5vE76SQxsfBLr77a7CNf+n0r/l6sSMtsBSnurckiIILCobAtVZhpF4gZF4jubaymj4Ch/fd380LE7bAnjc0NPxk2yqpmEuwGxF0ag+0k5uTpzZeBeaazvj0We8fXojainsb2xh2BZgbe0gSIllzSIUh63wfQ6dZ/O2fbjcKlOj58jJ3cVENESw5yErc9nf2MLQ4jwQAkV1Lqiq37/cZ9WaahJjF9AcmxiPDhLs7ePe23oOnmUwg2hSShQle96tKDjA2HAniusgo9FxnvY9Jxw7RWzGYy92QghM00x5g53qp9sHmtB58/o2umOI2NwGolMnMYUHIb7aAyiKwsjICLqu2/qBEIKUUAohMaSHSLyBSMoPTINQ6CX5+fn2AEVFRZSUlBCPx4nFYhl3L4RESjF/GEgX3pSj+Xw+/H7/b3U/AEOZFnp7O5+5AAAAAElFTkSuQmCC)}
+		ul {list-style-image: none}
+		/* ul rule needed to reset style for sub-bullets */
+    .holine {
+        width: 50%;
+        height: 25px;
+        border-top: 1px solid black;
+        line-height: 80%;
+    }
+    .hugLineTop {
+        width: 50%;
+        height: 15px;
+        border-top: 1px solid black;
+        line-height: 80%;
+    }
+   .hugLineBot {
+        width: 50%;
+        height: 15px;
+        border-top: 1px solid black;
+    }
+   p.indent{text-indent: 30px;} 
+</style>
+</head>
+<body>
+
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.3.1/styles/default.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.3.1/highlight.min.js"></script>
+<script>hljs.highlightAll(); hljs.initLineNumbersOnLoad();</script>
+
+<!-- Header -->
+<div class='header'>
+	[ <span class='insen'>Prev</span> ]
+
+	[ <span class='insen'>Index</span> ]
+
+	[ <span class='insen'>Next</span> ]
+</div>
+
+<hr />
+
+<!--MAIN PAGE CONTENT STARTS HERE! -->
+
+<div class='pages'>
+	<div class='heading'>
+	<h1 style="color:Blue;"> <ul> HOW-TO-FIRMWARE </ul> <a name='HOW-TO-FIRMWARE'></a></h1>
+	</div>
+<div class='content'>
+
+<p>
+<sub>Created on 17.11.2023 when author was not ok...</sub>
+</p>
+
+<p>
+here, i will assemble some guidelines, tips where-to-look etc.
+Maybe there will be some documentation about the timepix3 FW as well
+</p>
+
+<!--<h2 style="color:LightSeaGreen;">General remarks<a id="setting-up-IP-core" class="h_anchor"></a></h2>
+
+<p>
+Virtex 6 FPGAs on ML605 and FECs are of differen models and packages, BUT their pinouts are apparently the same.
+SOURCE: <a href="url">https://0x04.net/~mwk/xidocs/ug/ug365.pdf</a>
+</p>
+
+-->
+<h2 style="color:Blue;"> <ul> Sources of Info </ul> <a id="setting-up-IP-core" class="h_anchor"></a></h2>
+
+<p></p>
+
+<p> PINOUTS for FPGAs we use: <a href="url">https://0x04.net/~mwk/xidocs/ug/ug365.pdf</a> </p>
+<p> Xilinx PG 047 for LogiCORE IP Ethernet 1000Base-X PCS/PMA Or SGMII V11.4: <a href="url">https://usermanual.wiki/Document/pg047gigethpcspma.1251859111/html</a> </p>
+<p> Introduciton to Verilog for newbies: <a href="url">https://www.chipverify.com/tutorials/verilog</a> </p>
+<p> List of primitives for Virtex6 (list of supported components/modules): <a href="url">https://docs.xilinx.com/v/u/en-US/virtex6_scm</a> </p>
+
+<!--<p> PINOUTS fro FPGAs we use: <a href="url">https://0x04.net/~mwk/xidocs/ug/ug365.pdf</a> </p>
+<p> PINOUTS fro FPGAs we use: <a href="url">https://0x04.net/~mwk/xidocs/ug/ug365.pdf</a> </p>
+-->
+
+<h2 style="color:Blue;"> <ul>Setting up ISE design suite</ul> <a id="setting-up-IP-core" class="h_anchor"></a></h2>
+<p></p>
+
+<p> Prepare yourself for constant facepalms, psychotic episodes, and depression while working with this thing...</p>
+
+<p>First step, get the tpx3_daq project from github: </p>
+<p><i style="background-color: Gainsboro">git clone https://github.com/GasDet-Bonn/tpx3-daq/</i> </p>
+
+<p>There's directory <mark class="red"><i>firmware</i></mark> that contains <mark class="red"><i>ise, src, lib, vivado</i></mark>. You need the <b><i>ise</i></b> 
+and <b><i>src</i></b>.</p>
+
+<p>One can keep working within the tpx3_daq directory, but i found easier to copy <mark class="red"><i>firmware</i></mark> directory and work in a detached way to keep path refs shorter.</p>
+
+<p>Second step - install ISE Design Suite 14.7. The instalaltion of ISE design suite is neatly described in confluence.</p>
+
+<p>Third step - set up the project files and paths. The pain starts here.</p>
+
+<p>You need: IP project file for gigabit ethernet PCS PMA core, which is usually generated by xilinx coregen WHICH works out of the box only on Windows 7 </p>
+<p>and Red Hat Linux distros like Centos 7 (Do not bother to try coregen on ubuntu of version above 16, it'll fail). </p>
+
+<p>Your desired directory is named <mark class="red"><i>gig_eth_pcs_pma_v11_5/</i></mark></p>
+
+<p>Usually, you ask for a pre-generatd zip file with it from colleagues (some of us have to have it).</p>
+
+<p>After unpacking the archive, or just copying the whole directory from some PC with previously working ISE software put it in the</p>
+
+<p><mark class="red"><i>firmware/src/coregen</i></mark> directory.</p>
+
+<p>Double check if the path to <mark class="red"><i>gig_eth_pcs_pma_v11_5/</i></mark> is the same as in the project description file of your choice: </p>
+
+<p><mark class="red"><i>tpx3_ml605.xise</i></mark>, or <mark class="red"><i>tpx3_fecv6.xise</i></mark> or <mark class="red"><i>tpx3_mimas7.xise</i></mark> or else. The path is included in the top of the file with type <i>FILE_COREGEN</i></p>
+
+<p>While the <i>.xise</i> file is open, check the path to <mark class="red"><i>basil</i></mark> installation described in property <i>"Verilog Include Directories"</i>.</p>
+<p>Based on how one chooses the location of <i>basil</i> project the defalt path might not work, so its better to put in full path in your <i>.xise</i> file </p>
+<p>After you start the ise software this path will be reformated to realtive path suitable for your project.</p>
+
+<p>....Profit!   </p><p> start synthesis right away and hopefully you get to the bit file generation.</p>
+<p>Dont mind the Warnings, since even the files generated by the Xiling coregen generate warnings due to their architecture, and yet they work somehow.</p>
+
+<h2 style="color:Blue;"><ul>Programing FPGAs</ul><a id="setting-up-IP-core" class="h_anchor"></a></h2>
+<p></p>
+
+<p>So you've got to the point where you've generated a <i>.bit</i> file and ready to upload it to an FPGA. Life is easy here.</p>
+
+<p>Get Xilinx usb/JTAG cable (With a red box) connect to a PC and working FEC/ML605/MIMAS or DUT of your choice.</p>
+
+<p>Start up <i style="background-color: Gainsboro">impact</i> (installed according to guideline in confluence of GasDet group). Start neew project, or boundry scan </p>
+
+<p>One can directly assign configuration files in the pop-up windows or just cancel them all at first (author prefers the second option).</p>
+
+<p>and the available FPGAs are going to be shown to you in the GUI. For FECv6 you get only one entity. Right click on it and</p>
+<p><i style="background-color: Gainsboro">assign a new configuration file</i> for it, then right click on it again and <i style="background-color: Gainsboro">program</i> it.</p>
+
+<p>For the ML605 evaluation board one gets two entities after the chain initiation. Choose the one specifying <mark class="Ored"><i>xc6vlx240t</i></mark> 
+(FECv6 have <mark class="Ored"><i>xc6vlx130t</i></mark>).</p>
+<p>The procedure is same here - 1) assign config file, 2) program the FPGA.</p>
+
+<p></p>
+<p></p>
+<p></p>
+<p></p>
+<p></p>
+<p></p>
+<p></p>
+<p></p>
+
+<h2 style="color:Blue;"><ul>Some usefull command line tools to debug things</ul><a id="setting-up-IP-core" class="h_anchor"></a></h2>
+<p></p>
+<!--<p> ethtool: sample usage - <i>sudo ethtool &lteno0&gt</i> (outputs detailed ) </p>
+<p> mii-tool: sample usage - <i>sudo mii-tool &lteno0&gt -w</i> (will notify about changes in connection to eno0) </p>
+<p> &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+    &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+    &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;   
+- <i>sudo mii-tool &lteno0&gt -v</i> (verboses deatils of the connection like advertised neg-ation abilities and link partner abilities, putting <i>-vv</i> gives you MDIO regs of external PHY) </p>
+-->
+<pre class="box code-bash">
+  <code class="language-bash">
+     sudo ethtool &lteno1&gt
+     sudo mii-tool &lteno1&gt -w
+     sudo mii-tool &lteno1&gt -vv
+  </code>
+</pre>
+
+<!--<pre class="line-numbers">
+  <code class="language-python">
+     include huya
+     print("huyase")
+  </code>
+</pre>
+-->
+<h2 style="color:Blue;"><ul>Using ChipScope to Debug</ul><a id="setting-up-IP-core" class="h_anchor"></a></h2>
+
+<p>Shortly, procedure to add Chipscope to your design and use it in ISE Design Suite is following:</p>
+<p>1) Generate the IP cores for the chipscope ILA and chipscope ICON using Xilinx Core generator in the tools tab of the ISE Project navigator.</p>
+ 
+<p>In the IP Catalog view by function browse: Debug and Verification / Debug / ICON (Integrated controller) or ILA (Integrated Logic Analyzer).</p>
+<p>1.1) To generte ICON - tick example design generation and use any number of ports (boundary scan disabling should stay unchecked)</p>
+<p>1.2) To generate ILA - in the first step: tick example design generation, use either number of trigger and data ports (can use data same as trigger option to use only trigger port)</p>
+
+<!--<div class="hugLineTop"></div>-->
+<p>In the second step: select trigger port width and other trigger options (default options are sufficient for simple checks) </p>
+<!--<div class="hugLineBot"></div>-->
+
+<p>2) Include generated designs into your project.</p>
+<p>2.1) Add <i>chipscope_ILA</i> and <i>chipscope_ICON</i> instances at the end of the TOP module design (in case fo ML605 it would be end of file tpx3_ml605.v)</p>
+<p>2.2) Module definition does not require any additional input/output wires to be defined in the preamble. The chipscope analyzer automatically detects contriol outputs</p>
+<p>upon the boundry scan initiation. However, the module under inspection is required to have the trigger and data lines added into the definition.</p>
+<br>
+<p></p>
+<p></p>
+<p><i>The example of instantiation of both modules is shown below.</i></p>
+<!--<p><img src="/home/vlad/Pictures/Screenshots/chipscope-ila-icon-topmodule-example.png" alt="chipscope-verilog" width="500" height="300"></p>-->
+<div class="box code-def" style="width: 25%">
+<pre>
+<code class="language-verilog hljs">
+
+// declare at the end of the top module file
+// such as - tpx3_ml605.v
+
+    wire [35:0] ILAControl;
+    wire [35:0] data;
+    wire [23:0] trig0;
+    wire t_clk;
+
+    chipscope_icon inst_icon(.CONTROL0(ILAControl));
+    
+    chipscope_ila inst_ila(
+        .CONTROL(ILAControl),
+        .CLK(t_clk),
+        .DATA(data),
+        .TRIG0(trig0)
+    );
+
+endmodule
+
+</code>
+</pre>
+</div>
+
+<p>After successfull synthesis the RTL view of the module should include the ICON/ILA as follows in the screenshot below.</p>
+<p><img src="/home/vlad/fromTPC30/useful-info/icon-ila-RTLview-connection.png" alt="chipscope-verilog" width="500" height="600"></p>
+<p></p>
+<p></p>
+<p></p>
+<p></p>
+<p></p>
+
+<h2 style="color:Blue;"> <ul>Using Oscilloscope for Debug</ul><a id="setting-up-IP-core" class="h_anchor"></a></h2>
+
+<p>First and foremost - inspect the pinout of the FPGA in use and user manual to understand which output pins are connected to I/O SMA connectors and can be repurposed.</p>
+<p>In the case of ML605 with FPGA of model vlx240t with speed grade -1 and ff1156 package type one ca use following pins:</p>
+
+ <ul>
+  <li> <b>PIN</b> | <b>BANK</b> | <b>SMA connector</b> (name in the .ucf file)</li>
+  <li> <b>M22</b> | <b>IO_L0N_GC_24</b> | <b>J55.1</b> | (user_sma_clk_N) </li>
+  <li> <b>L23</b> | <b>IO_L0P_GC_24</b> | <b>J58.1</b> | (user_sma_clk_P) </li>
+ </ul>
+
+<p></p>
+<p></p>
+<p></p>
+<p></p>
+<p></p>
+<p></p>
+<p></p>
+<p></p>
+<h2 style="color:Blue;"><ul>Architecture of TPX3 Firmware explained</ul><a id="setting-up-IP-core" class="h_anchor"></a></h2>
+
+<p></p>
+<p>Within the firmware directory there are source files for FECv6, ML605, and MIMASv7 boards, separate file for the SFP module description and constraint files for each board</p>
+
+<p>Using ML605 as an example the general hierarchy of modules is following:</p>
+
+ <ul>
+  <li> <b>(TOP MODULE)</b> tpx3_ml605.v that encompases:</li>
+    <ul>
+      <li>tpx3_sfp.v that contains:</li>
+        <ul>
+          <li>tpx3_core.v, IP core for ethernet, MMCM, clocks, counters etc</li>
+        </ul>
+    </ul>
+ </ul>
+
+<p>More to be added</p>
+
+Same as above for the IDELAYCTRL - its output is not connected anywhere...?
+
+<p>Some weird things about the fw files explained:</p>
+
+<p><b>IODELAYCTRL has inputs but no output connection:</b></p>
+
+<p>Even though the synthesis showows that nothing connects to the IODELAYCTRL module, it is laer done automatically at a mapping stage of implementation routine in ISE.</p>
+
+<p>There, the default IODELAY group is assigned, which consists of tpx3 receiver core instances for each link:</p>
+
+<p>More to be added</p>
+
+<h2 style="color:Blue;"><ul> How to understand the configuration of an IP core whit which it was generated </ul><a id="setting-up-IP-core" class="h_anchor"></a></h2>
+
+<p></p>
+<p>
+The file You need is <i>IP-core-name.xco</i> , where the generator settings are written.
+</p>
+<p>
+In the case of TPX3 project firmware its location is:<mark class="red"> <i>tpx3_daq/firmware/src/coregen/gig_eth_pcs_pma_v11_5.xco</i> </mark>
+</p>
+<p>Current applicaion for TPX3 FW for ML605 uses: </p>
+<ul>
+   <li>CSET auto_negotiation=true</li>
+   <li>CSET component_name=gig_eth_pcs_pma_v11_5</li>
+   <li>CSET enable_1588=false </li>
+   <li>CSET management_interface=false </li>
+   <li>CSET physical_interface=Transceiver </li>
+   <li>CSET sgmii_mode=10_100_1000 </li>
+   <li>CSET sgmii_phy_mode=false </li>
+   <li>CSET standard=BOTH <i>(basex and sgmii)</i></li>
+   <li>CSET timing_sim=false </li>
+   <li>CSET transceiver_tile=A </li>
+</ul>
+
+<p></p>
+
+<p>
+Xilinx IP core generator files for ethernet gigabit pcspma core have heir own <i>.ucf</i> files (user constrant files).
+</p>
+
+<h2 style="color:Blue;"> <ul>PCSPMA status registers</ul> <a id="setting-up-IP-core" class="h_anchor"></a></h2>
+<!-- TO BE UPDATED  -->
+<p></p>
+ <table>
+  <tr>
+    <th>Bits</th>
+    <th>Description</th>
+    <th>Signal meaning</th>
+  </tr>
+  <tr>
+    <td>[0]</td>
+    <td>Link Status</td>
+    <td>1=Link established, AN successful, 0=Linking failed, AN failed</td>
+  </tr>
+  <tr>
+    <td>[1]</td>
+    <td>Link synchronization</td>
+    <td>In SGMII mode is not valid</td>
+  </tr>
+  <tr>
+    <td>[2:6]</td>
+    <td>Status of the configuration/Idle data sets</td>
+    <td>huya</td>
+  </tr>
+  <tr>
+    <td>[7]</td>
+    <td>Status of the link with external PHY</td>
+    <td>huay</td>
+  </tr>
+  <tr>
+    <td>[9:8]</td>
+    <td>Remote encoding error status</td>
+    <td>Explains which type of encoding erro happened based on reg [13]</td>
+  </tr>
+  <tr>
+    <td>[10:11]</td>
+    <td>Speed negotiated with link partner</td>
+    <td>11 = reserved, 10 = 1000Mbps, 01 = 100Mbps, 00 = 10Mbps</td>
+  </tr>
+  <tr>
+    <td>[12]</td>
+    <td>Duplex status</td>
+    <td>1 = Full, 0 = Half</td>
+  </tr>
+  <tr>
+    <td>[13]</td>
+    <td>Remote fault</td>
+    <td>Validates regs [8:9]</td>
+  </tr>
+  <tr>
+    <td>[14:15]</td>
+    <td>Pause negotiated towards lnk partner</td>
+    <td>11 = smth, 10 = smth, 01 = smth, 00 = smth</td>
+  </tr>
+
+</table> 
+
+<h2 style="color:Blue;"> <ul>Debuging Communication Data</ul><a id="setting-up-IP-core" class="h_anchor"></a></h2>
+<p>To look at the transmitted or received data from the SFP connect control inputs of ILA to rxd/txd lines of the SFP as:</p>
+
+<div class="hugLineTop"></div>
+<p> <i>assign Ila_Data[7:0] = rxd[7:0];</i></p>
+<p>OR</p>
+<p> <i>assign Ila_Data[7:0] = txd[7:0];</i></p>
+<div class="hugLineBot"></div>
+<p>In the current firmware implementation these are <i>gmii_rxd[7:0]</i> wires of gig_eth_pcs_pma_v11_5_block instance that goes to the SiTCP module.</p>
+<p>The Ideal case of statrt of communication in 1000BASEX standard on the TX side should look as follows:</p>
+<p><img src="/home/vlad/readoutSW/tools/RXD-gmii-signaling-wavedrom.png" alt="wavedrom-readout" width="1100" height="80"></p>
+<!--<table>
+  <tr> 
+    <th>...</th>
+    <th>I2</th>
+    <th>...</th>
+    <th>...</th>
+    <th>I2</th>
+    <th>55</th>
+    <th>55</th>
+    <th>55</th>
+    <th>55</th>
+    <th>55</th>
+    <th>55</th>
+    <th>D5</th>
+    <th>01</th>
+    <th>02</th>
+    <th>03</th>
+  </tr>
+</table>-->
+<br>
+<p>The Auto-negotiation configuration sequence on the <i>gmii_rxd</i> side should look like: </p>
+<p><img src="/home/vlad/readoutSW/tools/an-config-wavedrom.png" alt="wavedrom-an-config" width="1200" height="100"></p>
+<!---<table>
+  <tr style="background-color:gray"> 
+    <th>...</th>
+    <th>I2</th>
+    <th>C2</th>
+    <th>D0</th>
+    <th>D1</th>
+    <th>C1</th>
+    <th>D0</th>
+    <th>D1</th>
+    <th>I2</th>
+    <th>I2</th>
+    <th>...</th>
+    <th>...</th>
+    <th>...</th>
+    <th>I2</th>
+    <th>...</th>
+  </tr>
+</table>-->
+<br>
+<p>with C1 = /BC/B5/ and C2 = /BC/42/ in HEX radix, and D0, D1 are 8 bits of configuration data.</p>
+
+<p>C1 and C2 sequences are configuration markers described in PG047 in BASEX Machine operatiion appendix and in IEEE 208.3-2008 standard whitepapers.</p>
+<p>If link negotiation/configuration is successfull the receiver lines will be continuously receiving ILDE ordered sets /I2/ at any random trigger.</p>
+<p>During An configuration there should be none or as little as possible RX disparity, RXNOTINTABLE, or RXINVALID errors observed.</p>
+<p>BASEX standard is much sensitive to these errors during AN sequence because its configuratioin time is about 10 us while for SGMII its 1 us.</p>
+<p>IF any error occurs during AN, breaklink is sent (</i><b> /BC/B5/00/00/BC/42/... </b></i>), which restarts auto-negotiation. </p>'/home/vlad/Pictures/Screenshots/3csfp-trigOnlinksync.png' 
+
+<div class="hugLineTop"></div>
+
+<p>In case one tries to understand communicatin pronblems through remote fault bits, following table explains bits [9:8] in pcspma status register.</p>
+<table>
+  <tr>
+    <th>MSB</th>
+    <th>LSB</th>
+    <th>Description</th>
+  </tr>
+  <tr>
+    <td>[0]</td>
+    <td>[0]</td>
+    <td>Link OK</td>
+  </tr>
+  <tr>
+    <td>[0]</td>
+    <td>[1]</td>
+    <td>local device offline</td>
+  </tr>
+  <tr>
+    <td>[1]</td>
+    <td>[0]</td>
+    <td>Link failure</td>
+  </tr>
+  <tr>
+    <td>[1]</td>
+    <td>[1]</td>
+    <td>Auto-negotiation failure</td>
+  </tr>
+</table>
+
+<p></p>
+<p></p>
+<p></p>
+<p></p>
+<p></p>
+
+
+<h2 style="color:Blue;"> <ul>Current list of Open Questions (DAFUQs)</ul><a id="setting-up-IP-core" class="h_anchor"></a></h2>
+
+ <ul>
+  <li>In the pinout schemes for VLX130T and VLX240T FPGAs "V5" and "V6" pins are <b>GND</b>, BUT in the coregen <i>.ucf</i> files for the ethernet they connect <i>mgtrefclk_p/n</i> clock pins....?</li>
+  <li>Why does rd53 FW for bdaq have MDIO connections set and where do they go outside the top module?</li>
+  <li>How is it that the default IP address in the SiLAB WRAPER (<i>192.186.10.24</i>) is differnt from the one that we address (<i>192.186.10.16</i>) and its still fine....?</li>
+  <li>Why does FW have ODDR_inst_CLK40_OUT while its output is not connected to any IO pad or module in both ML605/FECv6 files?</li>
+  <li><s>Same as above for the IDELAYCTRL - its output is not connected anywhere...?</s> Its automatically routed to tpx3_rx instances</li>
+  <li>In the timing reorts we have NEGATIVE delays on the HOLD "TS_FALSE_320_BUS" data paths (roughly -0.060 ns, but still...)</li>
+  <li></li>
+</ul>
+
+<!------------------------------------------------------------------------------------>
+<!--Things below are notes from fucking around with the software side developments --->
+<!------------------------------------------------------------------------------------>
+
+<h2 style="color:Blue;"> <ul>Some notes about python-to-C++ interface</ul><a id="setting-up-IP-core" class="h_anchor"></a></h2>
+
+<p><b>(TO BE MOVED TO SEPARATE PAGE)</b></p>
+
+<p>The fifo_readout class objects (native and super class objects) are:</p>
+<ul>
+    <li> <i>self</i> : &lt;tpx3.fifo_readout.FifoReadout&gt; </li>
+    <li> <i>self.chip</i> : &lt;tpx3.tpx3.TPX3&gt;</li>
+    <li> <i>self.chip['FIFO']</i> : &lt;basil.HL.sitcp_fifo.sitcp_fifo&gt;</li>
+    <li> <i>self.chip['FIFO']['FIFO_SIZE']</i> :&lt;int&gt; </li>
+    <!--<li></li>
+    <li></li>-->
+</ul>
+<br>
+<p><b>POTENTIALLY</b>, each object can be accessed from <i>self</i> object by consequtively extracting references according to the hierarchy above:</p>
+<p>[1] PyObject *chip = PyObject_GetAttrString(self,"chip") yields reference object ala <i>self.chip</i> on python side. Similarly:</p>
+<p>[2] PyObject *fifo = PyObject_GetItem(chip, PyUnicode_FromString("FIFO")) yields <i>self.chip['FIFO']</i> object,</p>
+<p>[3] PyObject *fifo_size = PyObject_GetItem(chip, PyUnicode_FromString("FIFO_SIZE")) yields <i>self.chip['FIFO']['FIFO_SIZE']</i> object.</p>
+<p></p>
+<br>
+<p>While the methods like <i>self.chip</i> are attributes of the class <i>obj.attr</i>, the 'chip' attributes are, in fact (and apparently obvious), keys in a dictionary.</p>
+<p>The structue of self.chip is following (Printed by PyObject_Print(obj,stdout,0)):</p>
+<br>
+<div class="box code-def" style="width: 30%">
+<pre>
+ <code class="language-json hljs">
+    {
+     'CONTROL':{
+         'LED': '00000000', 
+         'CNT_FIFO_EN': '0', 
+         'DATA_MUX_SEL': '1', 
+         'EN_POWER_PULSING':'1',
+         'TO_SYNC': '0', 
+         'EXT_TPULSE': '0', 
+         'SHUTTER': '0', 
+         'RESET': '0'
+     },
+     'gpio': {
+         'OUTPUT': [0, 96], 
+         'OUTPUT_EN': [0, 0]
+     }, 
+     'SPI': {
+         'SIZE': 56, 
+         'WAIT': 4, 
+         'REPEAT': 1,
+         'EN': 0
+     },
+     'timestamp': {
+         'ENABLE': 0, 
+         'EXT_TIMESTAMP': 0, 
+         'ENABLE_EXTERN': 1, 
+         'LOST_COUNT': 0
+     },
+     'PULSE_GEN': {
+         'EN': 1, 
+         'DELAY': 40, 
+         'WIDTH': 4056, 
+         'REPEAT': 0
+     },
+     'FIFO': {},
+     'RX0': {
+         'INVERT': 0, 
+         'ENABLE': 1, 
+         'DATA_DELAY': 6, 
+         'SAMPLING_EDGE': 0
+     },
+     //
+     // ... same for RX1-6 with warying 'DELAY' values...
+     //
+     'RX7': {
+         'INVERT': 0, 
+         'ENABLE': 1, 
+         'DATA_DELAY': 9, 
+         'SAMPLING_EDGE': 0
+     },
+     'intf':{}
+    }
+ </code>
+</pre>
+</div>
+
+<br>
+<p>To traverse the 'chip' dictionary one has to extract references to the stored objects through PyObject_GetItem method.</p>
+<p>One also has to pay attention to the object's type on python side (print(type(object))) that can be an instance of an object or an integer number.</p>
+<p>Thus for instance object [2] has to be called via PyObject_CallMethod(...) while object [3], which is type int already contains the value one wants to extract.</p>
+<p>So in later case one gets a reference to [3] converts it to C-type of value creates new object of python type and then returns the new python object.</p>
+<p>A simpler way (to be confirmed) can be declaration of the c function as a c-type of int getPyItemValue(/*args*/) and directly return the c-type value.</p>
+<p></p>
+<br>
+<p>Case for [python -&gt; c++] (no return statements): EASY, just pass pointer to (PyObject*), which can be anything really to a c function and sip cocktails.</p>
+<p>Just dont forget to release references via Py_DECREF when you're done with the objects.</p>
+<p>Case for [python -&gt; c++ -&gt; python]: first, get a full psychiatric evaluation that you're not suicidal and then continue.</p>
+<p>Here the modus operandi should be such that you get reference to a python object that you convert from PyObject types into C++ type operate with it and to return the result </p>
+<p>you <u>MUST ALLOCATE MEMORY on the python side (by reating NEW PyObject) and return this NEW object</u>.</p>
+<p></p>
+<p></p>
+<p></p>
+<p></p>
+<br>
+<p><b>(Python/C++ tips/notes)</b></p>
+<p>One may check if the data is contiguously stored in memory through &ampvect[0]==vect.data() or &amparr[0] == arr.data().</p>
+<p>The type of &ampvect[i]/&amparr[i] is &lt;void*&gt; and storing it in a vecto/array is not a sure way to preserve the addresses (they'll change).</p>
+<p>Convertion of void* to std::string or const char* also works shitty andnot safe. So basically one should print the addresses once to check through std::cout/printf</p>
+<br>
+<p> </p>
+<p>For EACH function dealing with PyObject* must start with interpreter lock set (PyGILState_STATE gstate = PyGILState_Ensure) </p>
+<p>which is released at the end, before the return statement (PyGILState_Release(gstate)).</p>
+<p> </p>
+
+<p>Setting flags for the array objects to own the data as NPY_ARRAY_OWNDATA will not fix memory leaks - only pre-allocation of memory on python side through new PyObject.</p>
+<p>Setting a base object for the initial PyObject to return will NOT fix memory leaks.</p>
+<p>Not a single method of PyArray construction (OTF/FromDescr/ZEROS/EMPTY/SimpleNewFromData/SimeplNew/etc.) will only work temporarily if costructed in the return statement.</p>
+<p></p>
+
+<div class="box code-py" >
+<pre>
+<code class="language-python hljs">
+    import ctypes
+    #
+    # other imports/definitions
+    # 
+    clib = ctypes.CDLL("/path/to/complied-c-class.so")
+    cfunc = clib.cfuncname
+    cfunc.restype = ctypes.py_object
+    cfunc.argtypes = [ctypes.py_object]
+    #
+    # bulk of code  
+    #
+    value = cfunc(object)
+</code>
+</pre>
+</div>
+
+<p>Messing around with c++ snippet:</p>
+<div class="box code-cpp">
+<pre>
+<code class="language-cpp hljs">
+    #include &lt;cstring&gt;
+    #include &lt;vector&gt;
+    #include &lt;numpy/arrayobject.h&gt;
+
+    #define  NPY_NO_DEPRECATED_API NPY_1_7_API_VERSION
+    #define PY_ARRAY_UNIQUE_SYMBOL readoutBuffer_ARRAY_API
+    // some comment
+
+    void checkArray(uint32_t* array, std::size_t size){
+ 
+        for(std::size_t i=0; i&lt;size; i++){
+            if(i % 8 ==0 || i==0){
+                if(i==0){
+                    std::cout&lt;&lt;"["&lt;&lt;&array[i]&lt;&lt;"]\n"&lt;&lt;std::flush;
+                }else{
+                    std::cout&lt;&lt;&array[i]&lt;&lt;"\n"&lt;&lt;std::flush;
+                }
+                if(i % 32 == 0 ){
+                    std::cout&lt;&lt;"\n"&lt;&lt;std::flush;
+                }
+            }
+        }
+
+    };
+
+</code>
+</pre>
+</div>
+
+<br>
+<br>
+<p>Timepix3 DAC settings that worked for Si sensor (from Bachelor thesis of Leonie)</p>
+<table style="text-align:center">
+  <tr>
+    <th> &nbsp;What &nbsp;</th>
+    <th> &nbsp;N<sub>bits</sub> &nbsp;</th>
+    <th> &nbsp;My DACs &nbsp;</th>
+    <th> &nbsp;from Thesis &nbsp;</th>
+    <th> &nbsp;Impact on: &nbsp;</th>
+  </tr>
+  <tr>
+    <td>I<sub>bias preamp ON</sub></td>
+    <td>8 [256]</td>
+    <td>150</td>
+    <td>--//--</td>
+    <td>Bias current of pre-amp - peak time,gain,noise of front-end </td>
+  </tr>
+  <tr>
+    <td>V<sub>preamp NCAS</sub></td>
+    <td>8 [256]</td>
+    <td>128</td>
+    <td>--//--</td>
+    <td>(based on TPX1 man) decreases niput capacitance (better SNR) but limits V<sub>out</sub> range</td>
+  </tr>
+  <tr>
+    <td>I<sub>bias</sub> - I<sub>Krum</sub></td>
+    <td>8 [256]</td>
+    <td>5</td>
+    <td>--//--</td>
+    <td>Pixel discharge capacitior. Impact on N<sub>ToT</sub> clock cycles per pulse</td>
+  </tr>
+  <tr>
+    <td>V<sub>fbk</sub></td>
+    <td>8 [256]</td>
+    <td>132</td>
+    <td>140</td>
+    <td>(based on TPX1 man) control of DC V<sub>out</sub> - incrases dynamic range fro both polarities</td>
+  </tr>
+  <tr>
+    <td>V<sub>thr,FINE</sub></td>
+    <td>9 [512]</td>
+    <td>255</td>
+    <td>480</td>
+    <td>--//--</td>
+  </tr>
+  <tr>
+    <td>V<sub>thr,COARSE</sub></td>
+    <td>4 [16]</td>
+    <td>7</td>
+    <td>2</td>
+    <td>--//--</td>
+  </tr>
+
+  <tr>
+    <td>V<sub>thr,COMBINED</sub></td>
+    <td> &nbsp;13 [SW setting limit @ 2900] &nbsp;</td>
+    <td>--//--</td>
+    <td>--//--</td>
+    <td>--//--</td>
+  </tr>
+
+  <tr>
+    <td>I<sub>bias, disc s1 ON</sub></td>
+    <td>8 [256]</td>
+    <td>100</td>
+    <td>--//--</td>
+    <td>I_bias for 1st stage of front-end Discriminator (~I<sub>PixelDAC</sub>)</td>
+  </tr>
+  <tr>
+    <td>I<sub>bias, disc s2 ON</sub></td>
+    <td>8 [256]</td>
+    <td>128</td>
+    <td>--//--</td>
+    <td>I_bias for 2st stage of front-end Discriminator (~I<sub>PixelDAC</sub>)</td>
+  </tr>
+  <tr>
+    <td>I<sub>bias,pixelDAC</sub></td>
+    <td>8 [256]</td>
+    <td>120</td>
+    <td>145</td>
+    <td>range of Pixel DAD thresholds (~I<sub>Disc1</sub>)</td>
+  </tr>
+  <tr>
+    <td>I<sub>bias, Tp buf IN</sub></td>
+    <td>8 [256]</td>
+    <td>128</td>
+    <td>--//--</td>
+    <td>--//--</td>
+  </tr>
+  <tr>
+    <td>I<sub>bias, disc s1 OUT</sub></td>
+    <td>8 [256]</td>
+    <td>128</td>
+    <td>--//--</td>
+    <td>--//--</td>
+  </tr>
+  <tr>
+    <td>V<sub>TP,coarse</sub></td>
+    <td>8 [256]</td>
+    <td>100</td>
+    <td>--//--</td>
+    <td>--//--</td>
+  </tr>
+  <tr>
+    <td>V<sub>TP,fine</sub></td>
+    <td>9 [512]</td>
+    <td>300</td>
+    <td>--//--</td>
+    <td>--//--</td>
+  </tr>
+  <tr>
+    <td>CP<sub>PLL</sub></td>
+    <td>8 [256]</td>
+    <td>128</td>
+    <td>--//--</td>
+    <td> black box </td>
+  </tr>
+  <tr>
+    <td>V<sub>control,PLL</sub></td>
+    <td>8 [256]</td>
+    <td>128</td>
+    <td>--//--</td>
+    <td>black box</td>
+  </tr>
+
+</table>
+<br><br>
+<p><b>(How tpx3_daq operates: fifo_readout class)</b></p>
+<p>Structure of the tpx3 directory (where the tpx3 readout is programmed):</p>
+
+<table style="text-align: left; border: none; border-collapse: collapse;">
+<tr>
+<th style="border: none;">
+
+<div class="box code-def" style="width: 100%;">
+<pre>
+  <code class="language-bash">
+        tpx3                                   
+        ├── analysis.py
+        ├── dacs.yml
+        ├── fifo_readout.py
+        ├── GeneralConfiguration.yml
+        ├── __init__.py
+        ├── links.yml
+        ├── online_monitor
+        │   ├── __init__.py
+        │   ├── start_tpx3_monitor.py
+        │   ├── tpx3_inter.py
+        │   ├── tpx3_monitor.yaml
+        │   ├── tpx3_recv.py
+        │   └── tpx3_sim.py
+        ├── outputBlock.yml
+        ├── PLLConfig.yml
+        ├── plotting.py
+        ├── __pycache__
+        │   ├── analysis.cpython-311.pyc
+        │   ├── fifo_readout.cpython-311.pyc
+        │   ├── __init__.cpython-311.pyc
+        │   ├── plotting.cpython-311.pyc
+        │   ├── scan_base.cpython-311.pyc
+        │   ├── tpx3.cpython-311.pyc
+        │   ├── tpx3_rx.cpython-311.pyc
+        │   └── utils.cpython-311.pyc
+        ├── scan_base.py
+        ├── scans
+        │   ├── BeamAnalysisPreparation.py
+        │   ├── DataAnalysis.py
+        │   ├── DataTake.py
+        │   ├── EqualisationCharge.py
+        │   ├── EqualisationNoise.py
+        │   ├── NoiseScan.py
+        │   ├── PixelDACopt.py
+        │   ├── __pycache__
+        │   ├── ScanHardware.py
+        │   ├── TestpulseScan.py
+        │   ├── ThresholdCalib.py
+        │   ├── ThresholdScan.py
+        │   └── ToTCalib.py
+        ├── SiUdp.py
+        ├── tpx3.py
+        ├── tpx3_rx.py
+        ├── tpx3.yml
+        └── utils.py
+  </code>
+</pre>
+</div>
+
+</th>
+<th style="border: none; vertical-align: top;">
+<div class="box code-def" style="width: 100%; border : none">
+<pre>
+    <code class="language-bash">
+    UI/
+    ├── CLI
+    │   ├── CLI_Plot_main.py
+    │   ├── __pycache__
+    │   │   └── tpx3_cli.cpython-311.pyc
+    │   └── tpx3_cli.py
+    ├── GUI
+    │   ├── converter
+    │   │   ├── converter_manager.py
+    │   │   ├── __pycache__
+    │   │   ├── settings.py
+    │   │   ├── tpx3_inter.py
+    │   │   ├── transceiver.py
+    │   │   └── utils.py
+    │   ├── GUI.py
+    │   ├── icon.png
+    │   ├── PlotWidget.py
+    │   ├── __pycache__
+    │   │   ├── GUI.cpython-311.pyc
+    │   │   └── PlotWidget.cpython-311.pyc
+    │   └── sim_producer
+    │       ├── producer_sim_manager.py
+    │       ├── producer_sim.py
+    │       ├── __pycache__
+    │       └── tpx3_sim.py
+    ├── __pycache__
+    │   └── tpx3_logger.cpython-311.pyc
+    ├── tpx3_logger.py
+    └── tpx3_monitor.yaml
+    </code>
+</pre>
+</div>
+</th>
+<th style="border: none; vertical-align:top;">
+<div class="box code-def" style="width: 100%; border : none">
+<pre>
+    <code class="language-bash">
+    firmware/
+    ├── ise
+    │   ├── tpx3_ml605.xise
+    │   └── tpx3_fec6.xise
+    ├── lib
+    │   ├── extra
+    │   ├── SiTCP_Netlist_for_Artix7
+    │   ├── SiTCP_Netlist_for_Virtex6
+    │   ├── si_udp
+    │   ├── tpx3_rx
+    │   └── tpx3_timestamp
+    ├── src
+    │   ├── coregen
+    │   ├── fec6.ucf
+    │   ├── gen_gig_eth_pcs_pma_v11_5.tcl
+    │   ├── mimasA7.xdc
+    │   ├── ml605.ucf
+    │   ├── sync_reset.v
+    │   ├── tpx3_core.v
+    │   ├── tpx3_fec6.v
+    │   ├── tpx3_mimasA7.v
+    │   ├── tpx3_ml605.v
+    │   └── tpx3_sfp.v
+    └── vivado
+        ├── make.tcl
+        └── numato_mimasa7.cfg
+    </code>
+</pre>
+</div>
+</th>
+
+</tr>
+</table>
+
+<p><b>TPX3 Readout part operation (described in the order of printout)</b></p>
+<p>If one starts with "init Hardware" then:</p>
+
+<ul>
+<li>
+<p><i>tpx3::scans::ScanHardware</i>: does</p>
+</li>
+<ul>
+    <li>Loading yaml config</li>
+    <li>Checks communication modules (gpio,spi,tpx_rx,etc), prints addresses</li>
+    <li>Checks FPGAlinks </li>
+    <li>making new yamls </li>
+    <li>writes tpx registers </li>
+</ul>
+
+<li>
+<p>Afterone presses "start readout" in GUI:</p>
+</li>
+<li>
+<p><i>tpx3::scan_base:</i> initializes TPX3(DUT) and also dumps spi/gpio/rx addresses and fw versions.</p>
+</li>
+<li>
+<p><i>tpx3::scan_base:</i> tests links and starts "scan".</p>
+</li>
+<li>
+<p>RX's and FIFO are reset.</p>
+</li>
+<li>
+<p><i>tpx3::fifo_readout::__init__</i> initialization.</p>
+<li>
+<p><i>tpx3::scan_base:</i> Initializes links and dumps readout status (<i>tpx3::fifo_readout::start -&gt; print_readout_status </i>).</p>
+</li>
+<p>In parallel: <i>tpx3::scan_base:</i> Configures TPX3 calls scan (or <i>tpx3::fifo_readout:</i>).</p>
+</li>
+<li>
+<p><i>tpx3::fifo_readout:</i> starts readout/worker/watchdog threads. Worker is instantly in "waiting for data" mode.</p>
+</li>
+<li>
+<p><i>tpx3::scan_base::readout</i> context manager starts readout context.</p>
+</li>
+<li>
+<p><i>tpx3::fifo_readout::readout</i> already ties to read data from FIFOs and returns nothing.</p>
+</li>
+<li>
+<p><i>tpx3::fifo_readout::worker</i> receives 0 size/length chunks and keeps waiting.</p>
+</li>
+<li>
+<p><i>tpx3::scan_base::shutter</i> opens the shutter and waits.</p>
+</li>
+<li>
+<p><i>tpx3::fifo_readout::readout</i> receives first bunch of data words from FIFO, writes them to "_data_deque".</p>
+</li>
+<li>
+<p>This and following bunches are arranged in a data chunk = ([array of words],readout_start,readout_stop, N_err_discard, N_err_decoding).</p>
+</li>
+<li>
+<p><i>tpx3::fifo_readout::worker</i> "pops" one such chunk at a time and if its not None transfers it to</p>
+</li>
+<li>
+<p><i>tpx3::scan_base::handle_data</i> to record this chunk, which after writing to hdf is sent to online display.</p>
+</li>
+<li>
+<p>Routine above is recycled for the length of the data run. At the end of run timer <i>tpx3::fifo_readout::stop</i> is called.</p>
+</li>
+<li>
+<p>This instantly stops wating phase of <i>tpx3::scan_base::shutter</i> and <i>tpx3::scan_base::readout</i> context.</p> 
+</li>
+<li>
+<p>In this case no data should be retreived from FIFO. (However, currently its still flowing smhw...)</p>
+</li>
+<li>
+<p>(Ideally)<i>tpx3::fifo_readout::worker</i> "pops" a chunk of type(None), breaks cycle, and stops.</p>
+</li>
+<li>
+<p>Consequtively, reader/worker/watchdog threads are joined and readout status prinout is dumped.</p>
+</li>
+</ul>
+<p>NOTE:For some reason RX's are re-enabled at the end...</p>
+<p></p>
+<br><br>
+<p>start</p>
+<p>reader</p>
+<p>worker</p>
+<ul>
+    <li>Infinite loop (while True:)</li>
+    <li>tries to get data from deque. Data format (&lt;array of words&gt;,t_0,t_end, Nerr_discard, Nerr_decoding)</li>
+    <li>Basically : it POPS A CHUNK of data recored during <i>self.readout_interval</i> time.</li>
+    <li></li>
+    <li></li>
+    <li></li>
+    <li></li>
+</ul>
+<p></p>
+<p></p>
+<p></p>
+<p></p>
+<p></p>
+<p></p>
+<p></p>
+<p></p>
+
+
+<!-- page ends  -->
+
+</div>
+
+	<br />
+
+	<div class='page-footer'>
+
+</div>
+
+	
+
+</div>
+
+</body>
+</html>
