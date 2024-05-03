@@ -50,6 +50,51 @@ def getRunType(string):
     run_file = splitSlash[len(splitSlash)-1].split('_')
     return run_file[0] 
 
+
+def getFirstErrorPos(scanIDList, discList, option):
+    
+    if(len(scanIDList) != len(discList)):
+        print("getFirstErrorPos::List sizes are incompatible!")
+    else:
+        print("getFirstErrorPos::List sizes compatible")
+    step = 40
+    firstpos = 0
+    lastpos = 0
+    for i in range(0,len(discList),step):
+        mean = sum(discList[i:i+step])/step
+        if(option=="disc"):
+            if(mean<-100):
+                firstpos = i
+                lastpos = i+step
+                break
+        else:
+            if(mean>100):
+                firstpos = i
+                lastpos = i+step
+                break
+
+    print("Found range = {} to {} ({} DAC to {} DAC)".format(firstpos,lastpos, scanIDList[firstpos],scanIDList[lastpos]))
+    thispos = 0
+    checkval = 50
+    if(option=="disc"):
+        checkval = -50
+
+    for i in range(firstpos,lastpos,1): 
+        print("position range:[{}] of {}-{}".format(i,firstpos,lastpos))
+        diff = discList[i-1]-discList[i]
+        print("difference: ({}) - ({}) = ({})".format(discList[i-1], discList[i], diff))
+        if(diff<checkval and option=="disc"):
+            thispos = i
+            break
+        if(diff>checkval and option!="disc"):
+            thispos = i
+            break
+    if(thispos==0):
+        thispos = firstpos
+
+    return thispos
+
+
 def fillArray(inputData, data_index):
 
     dataList = []
@@ -89,6 +134,14 @@ def plot_scat_stack(xdata, ydatalist, plotname, lablist, axisnames):
     #print("OLO:{}".format(nUnique))
     #print("OLO:{}".format(len(nUnique)))
     #ntrials = len(ydatalist[1])/len(nUnique)
+
+
+    have_dec = 0
+    have_disc = 0
+    if("Errors" in plotname):
+        print("SUKA! {}".format(plotname))
+        have_dec = getFirstErrorPos(xdata, ydatalist[0], "dec")
+        have_disc = getFirstErrorPos(xdata, ydatalist[1], "disc")
            
     if(len(ydatalist)<6):
         fig = plt.figure()
@@ -120,7 +173,16 @@ def plot_scat_stack(xdata, ydatalist, plotname, lablist, axisnames):
         ax1.grid(which='major', color='grey', linestyle='-', linewidth=0.5)
         ax1.grid(which='minor', color='grey', linestyle='-', linewidth=0.125)
         ax1.minorticks_on()
-        plt.legend(loc='upper center')
+
+        #if(axisnames[1]=="Errors,[N]"):
+        if("Errors" in plotname):
+            plt.axvline(x = xdata[have_disc], 
+                        color='blue',
+                        label="N_discard>100 @ {} DAC".format(xdata[have_disc]))
+            plt.axvline(x = xdata[have_dec], 
+                        color='grey', 
+                        label="N_decode>100 @ {} DAC".format(xdata[have_dec]))
+        plt.legend(loc='upper left')
         ax1.plot()
         fig.savefig(plotname+'.png', dpi=300)
     else:
@@ -270,18 +332,27 @@ with tb.open_file(filename, 'r') as f:
 
         if("DataTake" in filename):
             #plot_scat(idx_start,
-            plot_scat(x, #tstamp_0,
+            #plot_scat(x,#tstamp_0,
+            plot_scat(tstamp_0,
                       datalen,
                       clean_filename+"_DataLength-vs-iterationIndex",
                       "len(Data)",
                       ["Start Index","Data length"])
 
             #plot_scat(idx_start,
-            plot_scat(x,#tstamp_0,
+            #plot_scat(x,#tstamp_0,
+            plot_scat(tstamp_0,
                       dec,
-                      clean_filename+"_DecodingErr-vs-iterationIndex",
+                      clean_filename+"_DecodingErr-vs-Timestamp",
                       "Decoding Err.",
                       ["Start Index","Decoding Errors [N]"])
+
+            plot_scat(tstamp_0,
+                      dis,
+                      clean_filename+"_DiscardErr-vs-Timestamp",
+                      "Discard Err.",
+                      ["Start Index","Discard Errors [N]"])
+
 
      elif(option=="rdata"):
         rdata = f.root.raw_data[:].T 
