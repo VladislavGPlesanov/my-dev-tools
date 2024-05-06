@@ -63,11 +63,11 @@ std::chrono::steady_clock::time_point l_global_start_time;
 
 extern "C" {
 
-       //////// some utils here /////////
-    struct {
-        std::vector<long int> tries;
-        std::vector<float> times;
-    } debugs;
+    //////// some utils here /////////
+    //struct {
+    //    std::vector<long int> tries;
+    //    std::vector<float> times;
+    //} debugs;
 
     ///////////////////////////////////////////////////////////
 
@@ -108,7 +108,7 @@ extern "C" {
 
     };
 
-    struct tpx3data {
+    struct tpx3data { //testing structure output to py
 
         uint32_t* data;
         std::size_t dsize;
@@ -134,13 +134,13 @@ extern "C" {
         
         int vsize = vect.size();
         float sum = std::accumulate(vect.begin(),vect.end(),0.0);
-        float result = sum/vsize;
+        float result = sum/(float)(vsize);
         return result;
 
     };
 
 
-    float getVectorLintAvg(std::vector<long int> vect){
+    float getVectorLongIntAvg(std::vector<long int> vect){
         
         int vsize = vect.size();
         long int sum = std::accumulate(vect.begin(),vect.end(),0.0);
@@ -693,8 +693,9 @@ PyObject* fillPyArray(std::vector<uint32_t> &data){// works perfectly fine
     uint32_t* thisData = reinterpret_cast<uint32_t*>(
             PyArray_DATA(reinterpret_cast<PyArrayObject*>(pyarray)));
 
-    //thisData = &data[0]; // thsi might be the problem...
-    std::copy(data.begin(),data.end(),thisData);
+    //thisData = &data[0]; // this IS the problem...
+    //this actually copies the data into the pyarray PyArray_DATA!
+    std::copy(data.begin(),data.end(),thisData); 
 
     return pyarray;
 
@@ -802,7 +803,11 @@ PyObject* readFifoStatus(PyObject *self, const char* option){
 
 // test case when passing self in fifo_readout 
 // object should be: <tpx3.fifo_readout.FifoReadout>
+
     PyGILState_STATE gstate = PyGILState_Ensure(); 
+
+    std::cout<<"[DEBUG] Checking:"<<option<<"\n"<<std::flush;
+
     PyObject *res;
     /*returns status and counters for FIFO for following options:
         get_rx_sync_status,
@@ -811,8 +816,8 @@ PyObject* readFifoStatus(PyObject *self, const char* option){
         get_rx_decode_error_count
     */
     if(self != NULL){
+        //scream("[DEBUG] readFifoStatus::self not null");
         Py_INCREF(self);
-        scream("[DEBUG] readFifoStatus::self not null");
         res = PyObject_CallMethod(self,option,NULL);// not null
     }else{
         scream("readFifoStatus::self object is NULL!");
@@ -836,9 +841,10 @@ PyObject* readFifoStatus(PyObject *self, const char* option){
 
     Py_DECREF(res);
     Py_DECREF(self);
-    //delete res;
     res=NULL; //instead of delete statement
+
     PyGILState_Release(gstate);  //REENABLE THIS LATER!
+
     return list;
     // if one returns "res" object directly -> segfault!                     
 };
@@ -903,7 +909,8 @@ int readoutIsRunning(PyObject *self){
 }
 
 float getNoDataTimeout(PyObject *self){
-   
+  
+    Py_INCREF(self);
     PyObject *nd_timeout = PyObject_GetAttrString(self, "no_data_timeout");
     if(nd_timeout==NULL){
        scream("could not find no_data_timeout!");
@@ -917,6 +924,9 @@ float getNoDataTimeout(PyObject *self){
         scream("getNoDataTimeout::Object is Py_None, returning 0.0");
         return 0.0;
     }
+    Py_DECREF(nd_timeout);
+    nd_timeout=NULL;
+    Py_DECREF(self);
 
     return 0.0;
 }
@@ -940,15 +950,13 @@ void checkIfForceStop(PyObject *self, float time_wait){
     float t_wait = time_wait >= 0.0 ? time_wait : 0.0;
 
     PyObject *fstop = PyObject_GetAttrString(self,"force_stop");
-    //PyObject *check = PyObject_CallMethod(fstop,"wait",NULL);
+    // testing force stop Event()
+    scream("[TEST] self.force_stop() in action!");
     PyObject *check = PyObject_CallMethod(fstop,"wait","f",t_wait);
-    //PyObject_Print(fstop,stdout,0);    
     Py_DECREF(check);
     Py_DECREF(fstop);
 
 }
-
-
 
 PyObject* querryDataFromFifo(PyObject *chip){
 
@@ -1163,7 +1171,6 @@ std::vector<uint32_t> local_getFifoData(PyObject *chipFifo, float interval){
                              temp.begin(),
                              temp.end());
         }
-        //Py_DECREF(chipFifo);
         temp.clear();
         cnt++;
     }
@@ -1175,18 +1182,13 @@ std::vector<uint32_t> local_getFifoData(PyObject *chipFifo, float interval){
     std::cout<<"tried="<<cnt<<"times, redorded "<<fifo_data.size()<<" events\n"<<std::flush;
     std::cout<<"loop time="<<tdiff<<"[ms]\n"<<std::flush;
    
-    if(fifo_data.size()>0){ 
-      scream("first 64 words of data in \"local_getFifoData\":");
-      printVectUint(fifo_data);
-      scream("last 64 words of data in \"local_getFifoData\":");
-      printReverseVectUint(fifo_data);
-    }
-    //if(fifo_data.size()!=0){
-    //    debugs.tries.push_back(cnt);
-    //    debugs.times.push_back(tdiff);
-    //}    
+    //if(fifo_data.size()>0){ 
+    //  scream("first 64 words of data in \"local_getFifoData\":");
+    //  printVectUint(fifo_data);
+    //  scream("last 64 words of data in \"local_getFifoData\":");
+    //  printReverseVectUint(fifo_data);
+    //}
 
-    //Py_DECREF(chipFifo);
     PyGILState_Release(gstate);  //REENABLE THIS LATER!
     return fifo_data;
 
@@ -1195,6 +1197,65 @@ std::vector<uint32_t> local_getFifoData(PyObject *chipFifo, float interval){
 ////////////////////////////////////////////////////////
 /// WIP, to be tested below///
 ////////////////////////////////////////////////////////
+
+///// the one below is just a reminder on checking PyObjects /////////////
+PyObject* querryFifoSize(PyObject *fChipFifoSize){
+
+   // wana read something like
+   // self.chip['FIFO'].['FIFO_SIZE'] 
+   //  or 
+   // self.chip['FIFO'].get_data() 
+
+        //========= testing shit here ===============
+        PyGILState_STATE gstate = PyGILState_Ensure(); //puts mutex lock on the bytecode of the object
+        PyObject *result;
+
+        if(fChipFifoSize != NULL){
+            PyObject_Print(fChipFifoSize,stdout,0);
+            bool huya = PyCallable_Check(fChipFifoSize);
+            std::cout<<"[["<<huya<<"]]"<<std::flush; //
+            if(huya){
+                Py_INCREF(fChipFifoSize);
+                result = PyObject_CallObject(fChipFifoSize,NULL);
+                Py_DECREF(fChipFifoSize);
+            }else{
+                result = 0;
+                printf("\nResult is NULL\n");
+                return NULL;
+            }
+        }
+
+        Py_DECREF(result);
+        Py_DECREF(fChipFifoSize);
+        ////// these last two should be uncommented at all times (temporarily...) ////////////
+        PyGILState_Release(gstate); //releases mutex lock
+
+        return result;
+};
+
+void checkFifoSize(PyObject *fifo){
+
+    PyObject *fsize = PyObject_GetItem(fifo,PyUnicode_FromString("FIFO_SIZE"));
+    long int fifoSize = PyLong_AsLong(fsize);
+    std::cout<<"[DEBUG] FIFO_SIZE >> "<<fifoSize<<" words\n"<<std::flush;
+    Py_DECREF(fsize);
+    fsize=NULL;
+
+};
+
+void resetRXErrorCounters(PyObject *self){
+
+    std::cout<<"Resetting RX error counters!\n"<<std::flush;
+    PyObject *reg = PyObject_CallMethod(self,"rx_error_reset",NULL);
+    if(reg==NULL){
+        scream("failed to reset RX!");
+    }else{
+        scream("---RX reset!---"); 
+    }
+    Py_DECREF(reg);//-reg
+    reg=NULL;
+
+};
 
 PyObject *testFifoSize(PyObject *self){
 
@@ -1456,7 +1517,8 @@ int checkSHUTTER(PyObject *self){
         return -1;
     }
     Py_DECREF(chip);
-    chip=NULL;
+    //Py_DECREF(self); // addded now 
+    //chip=NULL;
 
     PyGILState_Release(gstate); 
 
@@ -1513,7 +1575,7 @@ PyObject *setRegister(PyObject *self, const char* SETTING, int value){
 ////////////////////////////////////////
 // could work with the struct but need fine tuning
 //
-FIFO_DATA dequeDataOutNoErr(PyObject *self, float interval){/*works good*/
+FIFO_DATA dequeDataOutNoErr(PyObject *self, float interval){/*works ok.. but segfaults*/
 
   PyGILState_STATE gstate = PyGILState_Ensure(); 
   // 2 lines below should be used in "main" function only, others 
@@ -1672,15 +1734,13 @@ PyObject* dequeDataOut(PyObject *self, float interval){/*works good*/
 //  Substitute for tpx3/fifo_readout/readout function
 //
 //---------------------------------------------------------------------------------
-//PyObject* readoutToDeque(PyObject *self, PyObject *deque, float interval){
-// main ^
-//PyObject* readoutToDeque(PyObject *self, PyObject *deque, PyObject *workerCNT, float interval){
 PyObject* readoutToDeque(PyObject *self, PyObject *deque, float interval){
-//tpx3data readoutToDeque(PyObject *self, PyObject *deque, float interval){
 
   PyGILState_STATE gstate = PyGILState_Ensure();
+  //PyEval_InitThreads(); // releases lock instantly maybe try later
+  // together with PyEval_ReleaseLock() at the end
   // 2 lines below should be used in "main" function only, others 
-  // should use only PyGILState f-ncs.
+  // should use only PyGILState func-ns.
   Py_Initialize();
   import_array();
  
@@ -1689,8 +1749,11 @@ PyObject* readoutToDeque(PyObject *self, PyObject *deque, float interval){
     l_global_start_time == std::chrono::steady_clock::now();
   }
 
-  // last chunk read time
-  float last_read = 0.0, curr_time = 0.0, time_wait;
+  std::cout<<"INITIAL refcnt <self>="<<Py_REFCNT(self)<<"\n"<<std::flush;
+  //Py_SET_REFCNT(self, 100);
+
+  // last chunk read time, current time, time to wait (not implemented yet)
+  float last_read = 0.0, curr_time = 0.0, time_wait = 0.0;
   // for now, waiting only for a stop signal from user input
   // for some fuck-reasons PyObject_IsTrue evaluates "unset" state to logic 1...
   // thus logic in while loop is inverted wrt to python side
@@ -1700,36 +1763,70 @@ PyObject* readoutToDeque(PyObject *self, PyObject *deque, float interval){
   std::vector<float> iter_times;
 
   // getting common objects
+  //Py_INCREF(self);
+  std::cout<<"refcnt before \"chip\" acquired <self>="<<Py_REFCNT(self)<<"\n"<<std::flush;
   PyObject *chip = PyObject_GetAttrString(self,"chip");
+  std::cout<<"refcnt after <self>="<<Py_REFCNT(self)<<"\n"<<std::flush;
+
+  //Py_DECCREF(self);
+  //Py_INCREF(chip);
+  std::cout<<"refcnt before \"fifo\" acquired <self>="<<Py_REFCNT(self)<<"\n"<<std::flush;
   PyObject *fifo = PyObject_GetItem(chip,PyUnicode_FromString("FIFO"));
+  std::cout<<"refcnt before fifo acquired <self>="<<Py_REFCNT(self)<<"\n"<<std::flush;
+  //Py_DECREF(chip);
 
   float noDataTimeout = 0.0;
 
-  scream("EEEE");
-  Py_INCREF(self);
-  checkIsRunning(self);
-  scream("MACARENA!");
+  //Py_INCREF(self);
   noDataTimeout = getNoDataTimeout(self);
-  Py_DECREF(self);
+  //Py_DECREF(self);
+
+  std::stringstream initss;
+  initss<<"[DEBUG] INIT COUNTING REFERENCE COUNTERS:"
+    <<"<self>="<<Py_REFCNT(self)
+    <<", <chip>="<<Py_REFCNT(chip)
+    <<", <fifo>="<<Py_REFCNT(fifo)<<"\n"<<std::flush;
+  scream(initss.str());
 
   scream("\n_______________________STARTIN'_WHILE_LOOP___________________________\n");
   while (true){/*just use inf loop that breaks by first signal of shutter being closed*/
   //while (checkIfForceStop(self,time_wait)){/*replica of python loop*/
  
     auto iter_start = std::chrono::steady_clock::now();
-    Py_INCREF(self);
-    checkIsRunning(self);
-    Py_DECREF(self);
 
     Py_INCREF(self);
     int shutter_now = checkSHUTTER(self);
     Py_DECREF(self);
 
-    std::cout<<"[DEBUG] shutter=(--"<<shutter_now<<"--)\n"<<std::flush;
+    std::cout<<"[DEBUG] shutter=(--"<<shutter_now<<"--) [EVENT-"<<glob_tries<<"]\n"<<std::flush;
 
-    /////// break loop if SHUTTER==1 -> 0 (closed)!
+    // adjust later to wait for data
+    //if(prev_shutter==0){
+    //    std::this_thread::sleep_for(interval);
+    //    continue;
+    //}
+    
+    if(shutter_now==1){
+
+        PyObject *fsize = PyObject_GetItem(fifo,PyUnicode_FromString("FIFO_SIZE"));
+        long int fifoSize = PyLong_AsLong(fsize);
+        std::cout<<"[DEBUG] FIFO_SIZE="<<fifoSize<<"\n"<<std::flush;
+        //Py_INCREF(fsize);
+        //PyObject *rslt = querryFifoSize(fsize);
+        Py_DECREF(fsize);
+        //Py_DECREF(rslt);
+        //rslt=NULL;
+        fsize=NULL;
+
+    }
+    //break loop if SHUTTER==1 -> 0 (closed) OR stop_readout Event() is set on Python side!
     //if(shutter_now == 0 && prev_shutter==1){
+    ////if((shutter_now == 0 && prev_shutter==1) || !readoutIsRunning(self) ){
     //   std::cout<<"\n\n---- received STOP/FORCE_STOP signal! ---- \n\n"<<std::flush;
+
+    //   ////checkIfForceStop(self,2); 
+    //   //Py_DECREF(chip);
+    //   //Py_DECREF(self);
     //   break;
     //}
     //////////////////////////////////////////
@@ -1737,7 +1834,8 @@ PyObject* readoutToDeque(PyObject *self, PyObject *deque, float interval){
     scream("[DEBUG] (while) iteration starts"); 
     // Allocating memory for output tuple
     // add a check if *tuple is NULL! release GIL if yes
-    PyObject *tuple = PyTuple_New(5);
+    //PyObject *tuple = PyTuple_New(5);
+    PyObject *tuple = PyTuple_New(tpx3::NUM_DEQUE_TUPLE_ITEMS);
     // (array(data), t_0, t_end, rx_disc, rx_dec)
     if(tuple==NULL){
         scream("Could not instantiate data tuple");
@@ -1749,20 +1847,11 @@ PyObject* readoutToDeque(PyObject *self, PyObject *deque, float interval){
     // initializin' objects for data and rx error counters
     //PyObject *fifo, *fifoData, *fifo_decerr, *fifo_discerr;
     PyObject *fifoData, *fifo_decerr, *fifo_discerr;
-
-    // vector for local readout of fifo data
-    //std::vector<uint32_t> data;
-
-    //PyObject *chip = PyObject_GetAttrString(self,"chip");
-    //fifo = PyObject_GetItem(chip,PyUnicode_FromString("FIFO"));
-
-    scream("[DEBUG] got fifo object");
-    
+  
     // recod fifo data locally
-    Py_INCREF(fifo);
+    //Py_INCREF(fifo);
     std::vector<uint32_t> data = local_getFifoData(fifo,interval); 
-    //data = local_getFifoData(fifo,interval); 
-    Py_DECREF(fifo);
+    //Py_DECREF(fifo);
     
     scream("[DEBUG] recorded data");
     //std::cout<<"Contains "<<getOccurance(data,0)<<" zeros\n"<<std::flush;
@@ -1780,32 +1869,32 @@ PyObject* readoutToDeque(PyObject *self, PyObject *deque, float interval){
 
     /////////////////////
     // reading fifo discard and decoding errors
-    Py_INCREF(self); 
+    //Py_INCREF(self); 
     fifo_discerr = readFifoStatus(self,tpx3::CNTR_DISCARD_ERR);
-    PyObject_Print(fifo_discerr,stdout,0);
-    Py_DECREF(self); 
+    //PyObject_Print(fifo_discerr,stdout,0);
+    //Py_DECREF(self); 
     scream("[DEBUG] got discard errors");
 
-    Py_INCREF(self); 
+    //Py_INCREF(self); 
     fifo_decerr = readFifoStatus(self,tpx3::CNTR_DECODING_ERR);
-    PyObject_Print(fifo_decerr,stdout,0);
-    Py_DECREF(self); 
+    //PyObject_Print(fifo_decerr,stdout,0);
+    //Py_DECREF(self); 
     scream("[DEBUG] got decode errors");
 
-    //fifo_decerr=NULL;
     ///////////////////////////////
     Py_INCREF(fifo_discerr);
     long int n_errdisc = getNerror(fifo_discerr);
     Py_DECREF(fifo_discerr);
+    //fifo_discerr=NULL;
 
     Py_INCREF(fifo_decerr);
     long int n_errdec = getNerror(fifo_decerr);
     Py_DECREF(fifo_decerr);
+    //fifo_decerr=NULL;
     ///////////////////////////////
 
-    scream("[DEBUG] Obtained rx errors");
-    std::cout<<"[DEBUG] N_DISCARD="<<n_errdisc
-             <<", N_DECODE="<<n_errdec<<"\n"<<std::flush;
+    std::cout<<"[DEBUG] Detected: (N_DISCARD="<<n_errdisc
+             <<"), (N_DECODE="<<n_errdec<<") errors.\n"<<std::flush;
     // update timestamp   
     auto iter_end = std::chrono::duration_cast<std::chrono::milliseconds>(
             std::chrono::steady_clock::now() - iter_start);
@@ -1815,22 +1904,20 @@ PyObject* readoutToDeque(PyObject *self, PyObject *deque, float interval){
 
     curr_time = last_read + t_end;
     scream("[DEBUG] got timestamps"); 
-    // filling output tuple 
-    // (<fifo data>, 
+    // filling output tuple with:
+    // (<fifo data>(numpy array), 
     // <timestamp_beg>, 
     // <timestamp_end>, 
     // <list of disc. err.>, 
     // <list of dec. err.>)
 
-    //std::cout<<"READOUT STATUS="<<checkReadStatus(self)<<"\n"<<std::flush;
-
-    Py_INCREF(fifoData);
+    //Py_INCREF(fifoData);
     PyTuple_SetItem(tuple, 0, fifoData);
     PyTuple_SetItem(tuple, 1, PyFloat_FromDouble((double)last_read));
     PyTuple_SetItem(tuple, 2, PyFloat_FromDouble((double)curr_time)); 
     PyTuple_SetItem(tuple, 3, PyLong_FromLong(n_errdisc));
     PyTuple_SetItem(tuple, 4, PyLong_FromLong(n_errdec));
-    Py_DECREF(fifoData);
+    //Py_DECREF(fifoData);
 
     //make the current time -> last_read time
     last_read = curr_time;
@@ -1846,54 +1933,165 @@ PyObject* readoutToDeque(PyObject *self, PyObject *deque, float interval){
         return NULL;
     }
 
-    //Py_INCREF(self);
-    //PyObject *nwords_fifo = testFifoSize(self);
-    //Py_INCREF(nwords_fifo);
-    //std::cout<<"[DEBUG] FINAL FIFO_SIZE:"<<PyObject_Print(nwords_fifo,stdout,0)<<"\n"<<std::flush;
-    //Py_DECREF(nwords_fifo);
-    ////std::cout<<"[DEBUG] FINAL FIFO_SIZE:"<<localFifoSize(fifo)<<"\n"<<std::flush;
-    //Py_DECREF(self);
-
     Py_DECREF(result);
     Py_DECREF(tuple);
     Py_DECREF(deque);
-    Py_DECREF(chip); 
-    result = NULL; 
-    tuple = NULL; 
+
+    std::stringstream midss;
+    midss<<"[DEBUG] MIDDLE COUNTING REFERENCE COUNTERS:"
+           <<"<self>="<<Py_REFCNT(self)              // decrements at the end...?
+           <<", <chip>="<<Py_REFCNT(chip)            // stable
+           <<", <fifo>="<<Py_REFCNT(fifo)<<"\n"      // stable
+           <<"<result>="<<Py_REFCNT(result)          // decrements
+           <<", <tuple>="<<Py_REFCNT(tuple)          // seems stable
+           <<", <deque>="<<Py_REFCNT(deque)<<"\n"    // stable
+           <<"<fifoData>="<<Py_REFCNT(fifoData)      // stable 1
+           <<", <fifo_discerr>="<<Py_REFCNT(fifo_discerr)
+           <<", <fifo_decerr>="<<Py_REFCNT(fifo_decerr)
+           <<"\n"<<std::flush;
+    scream(midss.str());
+  
+
+
+    //Py_DECREF(chip);
+    // setting obj-ts to NULL EXCEPT deque!
+    result = NULL;
+    tuple = NULL;
     fifoData = NULL;
     fifo_discerr = NULL;
     fifo_decerr = NULL;
 
     scream("[DEBUG] Appended data to DEQUE"); 
-    //TODO: realize this:
-    // adding recorded words to global word counter in fifo_readout class object
 
     // THIS ONE IS --NONE-- if you print it... (cuz i dont append anything to it!)
-    PyObject *nw = PyObject_CallMethod(
+    // Add n words to calculate average reading rate
+    //
+    Py_INCREF(self); //+self
+    PyObject *wpread = PyObject_CallMethod(
             PyObject_GetAttrString(self,"_words_per_read"),"append","i", &n_words);
+    if(wpread==NULL){
+        scream("[PyObject ISSUE] Could not append to _words_per_read!\n");
+    }
+    Py_DECREF(self); //-self
     scream("");
-    PyObject_Print(nw,stdout,0); 
-    Py_DECREF(nw);
-    scream("[DEBUG] Added to _words_per_read"); 
+    PyObject_Print(wpread,stdout,0);
+    Py_DECREF(wpread);// -wpread
+    wpread=NULL;
+    scream("\n[DEBUG] Added to _words_per_read"); 
 
-    // add command to reset rx error counters //
-
+    // reset rx error counters if detected any discard
+    // or decoding errors // Now actually works!
+    //
     if(n_errdisc != 0 || n_errdec !=0){
-        std::cout<<"Encountered "<<n_errdisc<<" discard errors and"
-                 <<n_errdec<<" decode errors - Resetting error counters"<<std::endl;
-        PyObject *reg = PyObject_CallMethod(self,"rx_error_reset",NULL);
-        if(reg==NULL){
-            scream("failed to reset RX!");
-        }else{
-            scream("---RX reset!---"); 
-        }
-        Py_DECREF(reg);
-        reg=NULL;
+        Py_INCREF(self);
+        resetRXErrorCounters(self);
+        Py_DECREF(self);
     }
     scream("[DEBUG] Passed RESET RX"); 
+
+    auto glob_iter_end = std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::steady_clock::now() - iter_start);
+
+    float t_iteration = std::chrono::duration_cast<std::chrono::milliseconds>(
+            (iter_start + glob_iter_end).time_since_epoch()).count();
+
+    time_wait = interval - t_iteration;
+
+    /////// break loop if SHUTTER==1 -> 0 (closed)!
+    //if(shutter_now == 0 && prev_shutter==1){ works just fine!
+    bool shutterDown = shutter_now==0 && prev_shutter==1 ? 1 : 0;
+    //if(!readoutIsRunning(self)){
+    if(shutterDown){
+       //std::string str = "\n\n_________________received_STOP/FORCE_STOP_signal!___________________\n\n";
+       std::string str = "\n\n_________________SHUTTER_DOWN->BREKING_LOOP_!________________\n\n";
+       std::cout<<str<<std::flush;
+       data.clear();
+       Py_INCREF(self);
+       break;
+
+    }
+
+    prev_shutter = shutter_now;
+
+    //////////////////////////////////////////
+
+    data.clear();
+
+    glob_tries++;
+    std::stringstream ss;
+    ss<<"[DEBUG] END COUNTING REFERENCE COUNTERS:"
+      <<"<self>="<<Py_REFCNT(self)
+      <<", <chip>="<<Py_REFCNT(chip)
+      <<", <fifo>="<<Py_REFCNT(fifo)<<"\n"<<std::flush;
+    scream(ss.str());
+
+    scream("[DEBUG] iteration end"); 
+
+  };// end the while(true) loop
+
+  // Alternatively i can add NONE in the python func level
+  // for now it sucks though....
+  scream("[DEBUG] OUT OF WHILE LOOP!"); 
+
+  // adding Py_None tuple here
+  //
+  //PyObject *lastTuple = PyTuple_Pack(1,Py_None);
+  //if(lastTuple==NULL){
+  //  scream("Can not create tuple with PY_NONE!");
+  //}
+  //PyObject *append = PyObject_CallMethod(deque, "append", "O", lastTuple);
+  //if(append == NULL){
+  //  scream("[DEBUG] big sad, can no append to deque...");
+  //}else{
+  //  scream("[DEBUG] <<POGCHAMP!>> added tuple with __PY_NONE__!");
+  //}
+  //
+  //Py_DECREF(append);
+  //Py_DECREF(lastTuple);
+  //append = NULL;
+  //lastTuple=NULL;
+
+
+  std::cout<<"N global tries = "<<glob_tries<<"!\n"<<std::flush;
+  //scream("[DEBUG] FIFO_SIZE @ END is:");
+  //Py_INCREF(fifo);
+  //checkFifoSize(fifo);
+  //Py_DECREF(fifo);
+
+  //Py_DECREF(chip);
+  //Py_DECREF(self); // for now
+
+  //debug output
+  //
+  std::stringstream ss;
+  ss<<"[DEBUG] FINAL COUNTING REFERENCE COUNTERS [END]:\n"
+    <<"<self>="<<Py_REFCNT(self)
+    <<", <chip>="<<Py_REFCNT(chip)
+    <<", <fifo>="<<Py_REFCNT(fifo)<<"\n"<<std::flush;
+  scream(ss.str());
+    //<<"<self>="Py_REFCNT(self)
+
+  //chip=NULL;
+  //fifo=NULL;
+  scream("[DEBUG] - readoutToDeque DONE!"); 
+  ///// finita la comedia! ////// 
+  //
+  Py_Finalize();
+  PyGILState_Release(gstate);   
+  return Py_None;
+
+};
+
+// end of class
+
+}
+
+
+//////////////////////////////////////////////////
+//
     //TODO: realize this:
     // checking other fifo_readout attributes:
-    // [] self.rx_error_reset
+    // [v] self.rx_error_reset
     // [] self._calculate.clear()
     // [] self._result.put(sum(self._words_per_read))
     // [] check for n_words==0 && self.stop-readout.is_set() to break sampling loop
@@ -1913,161 +2111,15 @@ PyObject* readoutToDeque(PyObject *self, PyObject *deque, float interval){
     //        scream("could not clear self._calculate ...");
     //    }
     //    
-
     //    PyObject *put = PyObject_CallMethod(result,"put","i",)
-
-
     //    Py_DECREF(res);
     //    Py_DECREF(calc);
     //}
 
-    //std::cout<<"timings:"
-    //         <<"last_read:"<<last_read
-    //         <<"\tinterval:"<<interval
-    //         <<"\tcurr_time:"<<curr_time
-    //         <<"\tt_end:"<<t_end
-    //         <<"\n"<<std::flush;
-    ////   
     //TODO: realize this:
     //check if -> self._calculate_result.is_set()
     //if yes self._calculate_result.clear()
-
-    auto glob_iter_end = std::chrono::duration_cast<std::chrono::milliseconds>(
-            std::chrono::steady_clock::now() - iter_start);
-
-    float t_iteration = std::chrono::duration_cast<std::chrono::milliseconds>(
-            (iter_start + glob_iter_end).time_since_epoch()).count();
-
-    //iter_times.push_back(t_iteration);    
-
-    time_wait = interval - t_iteration;
-
-    prev_shutter = shutter_now;
-
-    Py_INCREF(self);    
-    checkStopReadout(self);
-    Py_DECREF(self);
-
-    /////// break loop if SHUTTER==1 -> 0 (closed)!
-    //if(shutter_now == 0 && prev_shutter==1){
-    //bool shutterDown = shutter_now==0 && prev_shutter==1 ? 1 : 0;
-    //if(!readoutIsRunning(self) or shutterDown){
-    if(!readoutIsRunning(self)){
-       std::string str = "\n\n_________________received_STOP/FORCE_STOP_signal!___________________\n\n";
-       //std::cout<<"\n\n---- received STOP/FORCE_STOP signal! ---- \n\n"<<std::flush;
-       std::cout<<str<<std::flush;
-       break;
-    }
-    //////////////////////////////////////////
-
-    data.clear();
-
-    glob_tries++;
-
-    scream("[DEBUG] iteration end"); 
-
-  };// end the while(true) loop
-
-  // Alternatively i can add NONE in the python func level
-  // for now it sucks though....
-  scream("[DEBUG] OUT OF WHILE LOOP!"); 
-
-  // adding Py_None tuple here
-  //
-  PyObject *lastTuple = PyTuple_Pack(1,Py_None);
-  if(lastTuple==NULL){
-    scream("Can not create tuple with PY_NONE!");
-  }
-  PyObject *append = PyObject_CallMethod(deque, "append", "O", lastTuple);
-  if(append == NULL){
-    scream("[DEBUG] big sad, can no append to deque...");
-  }else{
-    scream("[DEBUG] <<POGCHAMP!>> added tuple with __PY_NONE__!");
-  }
-  
-  Py_DECREF(append);
-  Py_DECREF(lastTuple);
-  append = NULL;
-  lastTuple=NULL;
-  Py_DECREF(self);
-
-  // some minor counters 
-  //
-  if(debugs.tries.size()!=0){
-     std::cout<<"N tries = "<<debugs.tries.size()<<"!\n"<<std::flush;
-     std::cout<<"AVG(tries) = "<<getVectorLintAvg(debugs.tries)<<"!\n"<<std::flush;
-     std::cout<<"N times = "<<debugs.times.size()<<"!\n"<<std::flush;
-  }
-
-  std::cout<<"N gloabl tries = "<<glob_tries<<"!\n"<<std::flush;
-  //std::cout<<"AVG(global loop times) = "<<getVectorFloatAvg(iter_times)<<"!\n"<<std::flush; 
-  iter_times.clear();
-  debugs.tries.clear();
-  debugs.times.clear();
-  scream("[DEBUG] - while loop done"); 
-
-  Py_INCREF(self);
-  checkIsRunning(self);
-  Py_DECREF(self);
-
-  ///// finita la comedia! ////// 
-  //
-  PyGILState_Release(gstate);   
-  return Py_None;
-
-};
-
-
-///// the one below is just a reminder on checking PyObjects /////////////
-PyObject* querryFifoSize(PyObject *fChipFifoSize){
-
-   // wana read something like
-   // self.chip['FIFO'].['FIFO_SIZE'] 
-   //  or 
-   // self.chip['FIFO'].get_data() 
-
-        //========= testing shit here ===============
-        PyGILState_STATE gstate = PyGILState_Ensure(); //puts mutex lock on the bytecode of the object
-        PyObject *result;
-
-        if(fChipFifoSize != NULL){
-            PyObject_Print(fChipFifoSize,stdout,0);
-            bool huya = PyCallable_Check(fChipFifoSize);
-            std::cout<<"[["<<huya<<"]]"<<std::flush; //
-            if(huya){
-                Py_INCREF(fChipFifoSize);
-                result = PyObject_CallObject(fChipFifoSize,NULL);
-                Py_DECREF(fChipFifoSize);
-            }else{
-                result = 0;
-                printf("\nResult is NULL\n");
-            }
-        }
-
-        Py_DECREF(result);
-        Py_DECREF(fChipFifoSize);
-        ////// these last two should be uncommented at all times (temporarily...) ////////////
-        PyGILState_Release(gstate); //releases mutex lock
-
-        return result;
-};
-
-
-//struct PyCinterface{
 //
-//    PyCinterface();
-//    ~PyCinterface(){};
 //
-//    private:   
 //
-//    public:
-//
-//}
-
-// end of class
-
-}
-
-
-//////////////////////////////////////////////////
 

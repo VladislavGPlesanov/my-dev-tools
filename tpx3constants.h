@@ -9,6 +9,7 @@ namespace tpx3{
 
     // tpx3 chip-related numbers 
     const int NUM_RX_CHAN = 8;
+    const int NUM_DEQUE_TUPLE_ITEMS = 5;
     
     // register names
     const std::string DATA_DELAY = "DATA_DELAY";
