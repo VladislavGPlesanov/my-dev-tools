@@ -16,6 +16,7 @@
 #include <Python.h>
 #include <ctime>
 #include <chrono>
+//#include <thread>
 #include <iomanip>
 #include <thread>
 #include <string>
@@ -898,6 +899,24 @@ void checkIsRunning(PyObject *self){
 
     PyObject *isRunning = PyObject_GetAttrString(self, "_is_running");
     std::cout<<"\n\t[self._is_runnning]="<<PyObject_IsTrue(isRunning)<<"\n"<<std::flush;
+
+}
+
+
+void checkCallback(PyObject *self){
+    // based on the if check from python side "if(self.callback)"
+    // which essentially evaluates to "True" as long as the callback object exists
+    //
+
+    PyObject *isCallback = PyObject_GetAttrString(self, "callback");
+    if(isCallback!=NULL){
+      scream("[DEBUG] self.callback (or scan_base->handle_data func object) [EXISTS]");
+    }else{
+      scream("[DEBUG] self.callback (or scan_base->handle_data func object) is NULL!");
+    }
+    //PyObject_Print(isCallback, stdout, 0);
+    Py_DECREF(self);
+    isCallback=NULL;
 
 }
 
@@ -1998,15 +2017,12 @@ PyObject* readoutToDeque(PyObject *self, PyObject *deque, float interval){
     time_wait = interval - t_iteration;
 
     /////// break loop if SHUTTER==1 -> 0 (closed)!
-    //if(shutter_now == 0 && prev_shutter==1){ works just fine!
     bool shutterDown = shutter_now==0 && prev_shutter==1 ? 1 : 0;
     //if(!readoutIsRunning(self)){
     if(shutterDown){
-       //std::string str = "\n\n_________________received_STOP/FORCE_STOP_signal!___________________\n\n";
-       std::string str = "\n\n_________________SHUTTER_DOWN->BREKING_LOOP_!________________\n\n";
+       std::string str = "\n\n_________________SHUTTER_DOWN->BREAKING_LOOP_!________________\n\n";
        std::cout<<str<<std::flush;
        data.clear();
-       Py_INCREF(self);
        break;
 
     }
@@ -2033,24 +2049,30 @@ PyObject* readoutToDeque(PyObject *self, PyObject *deque, float interval){
   // for now it sucks though....
   scream("[DEBUG] OUT OF WHILE LOOP!"); 
 
+  checkCallback(self);
+
   // adding Py_None tuple here
   //
-  //PyObject *lastTuple = PyTuple_Pack(1,Py_None);
-  //if(lastTuple==NULL){
-  //  scream("Can not create tuple with PY_NONE!");
-  //}
-  //PyObject *append = PyObject_CallMethod(deque, "append", "O", lastTuple);
-  //if(append == NULL){
-  //  scream("[DEBUG] big sad, can no append to deque...");
-  //}else{
-  //  scream("[DEBUG] <<POGCHAMP!>> added tuple with __PY_NONE__!");
-  //}
-  //
-  //Py_DECREF(append);
-  //Py_DECREF(lastTuple);
-  //append = NULL;
-  //lastTuple=NULL;
+  PyObject *lastTuple = PyTuple_Pack(1,Py_None);
+  if(lastTuple==NULL){
+    scream("Can not create tuple with PY_NONE!");
+  }
+  PyObject *append = PyObject_CallMethod(deque, "append", "O", lastTuple);
+  if(append == NULL){
+    scream("[DEBUG] big sad, can not append to deque...");
+  }else{
+    scream("[DEBUG] <<POGCHAMP!>> added tuple with __PY_NONE__!");
+  }
+  
+  Py_DECREF(append);
+  Py_DECREF(lastTuple);
+  append = NULL;
+  lastTuple=NULL;
 
+  //std::this_thread::sleep_for(interval*2);
+  //std::this_thread::sleep_for(std::chrono::seconds(1));
+  //std::this_thread::sleep_for(std::chrono::duration_cast<std::chrono::milliseconds>(interval*2).count());
+  sleep(0.5);
 
   std::cout<<"N global tries = "<<glob_tries<<"!\n"<<std::flush;
   //scream("[DEBUG] FIFO_SIZE @ END is:");

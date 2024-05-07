@@ -1,21 +1,51 @@
 import sys
 import time
 import psutil
+import os
+import subprocess
 
-def monitor(pid, freq=1.0):
+def findProc(name):
+    
+    pidlist = []
+    out = subprocess.check_output(["pgrep",name])
+    #print("[1]=> {}".format(out))
+    separatePIDs = out.split()
+    #print("[2]=> {}".format(separatePIDs))
+    for pid in separatePIDs:
+        yoba = int(pid)
+        pidlist.append(yoba)
+            
+    return pidlist
 
-    proc = psutil.Process(pid)
-    print(proc.memory_info_ex())
-    prev_mem = None
+def monitor(pid, freq=0.5):
+
+    prev_mem = [0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0]
 
     while(True):
         try:
-            mem = proc.memory_info().rss / 1e6
-            if(prev_mem is None):
-                print('{:10.3f} [Mb]'.format(mem))
-            else:
-                print('{:10.3f} [Mb] {:+10.3f}[Mb]'.format(mem, mem - prev_mem))
-            prev_meme = mem
+            cnt = 0
+            proclist = findProc("tpx3_gui")
+            outstr = ""
+
+            for proc in proclist:
+                #mem = proc.memory_info().rss / 1e6
+                mem = psutil.Process(proc).memory_info().rss / 1e6
+                if(prev_mem is None):
+                    #print('{:10.3f} [Mb]'.format(mem))
+                    tempstr = "[{}] {:10.3f} [Mb]".format(proc, mem)
+                    if(cnt!=0):
+                        tempstr = "\t" + tempstr
+                    outstr+=tempstr    
+                else:
+                    #print('{:10.3f} [Mb] {:+10.3f}[Mb]'.format(mem, mem - prev_mem))
+                    tempstr = "[{}] {:10.3f} [Mb] {:+10.3f}[Mb]".format(proc, mem, mem - prev_mem[cnt])
+                    if(cnt!=0):
+                        tempstr = "\t" + tempstr
+                    outstr+=tempstr    
+                prev_mem[cnt] = mem
+                cnt+=1
+                print(outstr)
+
             time.sleep(freq)
         except KeyboardInterrupt:
             try:
@@ -31,3 +61,5 @@ if __name__ == '__main__':
     pid = int(sys.argv[1])
     monitor(pid)
     sys.exit(0)
+
+
