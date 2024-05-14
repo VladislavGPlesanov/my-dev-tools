@@ -10,7 +10,10 @@ namespace tpx3{
     // tpx3 chip-related numbers 
     const int NUM_RX_CHAN = 8;
     const int NUM_DEQUE_TUPLE_ITEMS = 5;
-    
+   
+    // default lists
+    const std::vector<long int> EMPTY_RX_STATUS_VECTOR = {0,0,0,0,0,0,0,0};
+ 
     // register names
     const std::string DATA_DELAY = "DATA_DELAY";
     const std::string FIFO = "FIFO";

@@ -31,21 +31,20 @@ def monitor(pid, freq=0.5):
                 #mem = proc.memory_info().rss / 1e6
                 mem = psutil.Process(proc).memory_info().rss / 1e6
                 if(prev_mem is None):
-                    #print('{:10.3f} [Mb]'.format(mem))
                     tempstr = "[{}] {:10.3f} [Mb]".format(proc, mem)
                     if(cnt!=0):
                         tempstr = "\t" + tempstr
                     outstr+=tempstr    
                 else:
-                    #print('{:10.3f} [Mb] {:+10.3f}[Mb]'.format(mem, mem - prev_mem))
                     tempstr = "[{}] {:10.3f} [Mb] {:+10.3f}[Mb]".format(proc, mem, mem - prev_mem[cnt])
                     if(cnt!=0):
                         tempstr = "\t" + tempstr
                     outstr+=tempstr    
                 prev_mem[cnt] = mem
                 cnt+=1
-                print(outstr)
 
+            print(outstr)
+            
             time.sleep(freq)
         except KeyboardInterrupt:
             try:

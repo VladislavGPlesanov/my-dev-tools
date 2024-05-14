@@ -136,12 +136,12 @@ def plot_scat_stack(xdata, ydatalist, plotname, lablist, axisnames):
     #ntrials = len(ydatalist[1])/len(nUnique)
 
 
-    have_dec = 0
-    have_disc = 0
-    if("Errors" in plotname):
-        print("SUKA! {}".format(plotname))
-        have_dec = getFirstErrorPos(xdata, ydatalist[0], "dec")
-        have_disc = getFirstErrorPos(xdata, ydatalist[1], "disc")
+    #have_dec = 0
+    #have_disc = 0
+    #if("Errors" in plotname):
+    #    print("SUKA! {}".format(plotname))
+    #    have_dec = getFirstErrorPos(xdata, ydatalist[0], "dec")
+    #    have_disc = getFirstErrorPos(xdata, ydatalist[1], "disc")
            
     if(len(ydatalist)<6):
         fig = plt.figure()
@@ -175,13 +175,13 @@ def plot_scat_stack(xdata, ydatalist, plotname, lablist, axisnames):
         ax1.minorticks_on()
 
         #if(axisnames[1]=="Errors,[N]"):
-        if("Errors" in plotname):
-            plt.axvline(x = xdata[have_disc], 
-                        color='blue',
-                        label="N_discard>100 @ {} DAC".format(xdata[have_disc]))
-            plt.axvline(x = xdata[have_dec], 
-                        color='grey', 
-                        label="N_decode>100 @ {} DAC".format(xdata[have_dec]))
+        #if("Errors" in plotname):
+        #    plt.axvline(x = xdata[have_disc], 
+        #                color='blue',
+        #                label="N_discard>100 @ {} DAC".format(xdata[have_disc]))
+        #    plt.axvline(x = xdata[have_dec], 
+        #                color='grey', 
+        #                label="N_decode>100 @ {} DAC".format(xdata[have_dec]))
         plt.legend(loc='upper left')
         ax1.plot()
         fig.savefig(plotname+'.png', dpi=300)
@@ -293,6 +293,7 @@ with tb.open_file(filename, 'r') as f:
         #ploth2d(arr_dlen,arr_deco, "H2D-"+clean_filename)
         #ploth2d(arr_disc,arr_deco, "H2D-"+clean_filename)
 
+        n_chunks = 0
         for i in range(0,len(mdata)): 
            idx_start.append(mdata[i][0])
            x.append(mdata[i][1])
@@ -305,7 +306,10 @@ with tb.open_file(filename, 'r') as f:
            #tstamp_end.append(np.float64(mdata[i][4])*10e-9)
            tstamp_end.append(np.float64(mdata[i][4]))
            scanid.append(mdata[i][5])
-            
+           n_chunks+=1
+
+        print("Number of chunks => {}".format(n_chunks))
+    
         ##########
         plot_scat_stack(scanid,
                        [dec,dis],
