@@ -269,13 +269,6 @@ with tb.open_file(filename, 'r') as f:
         for i in range(0,9):
            print(mdata[i])
 
-        #scanid = []
-        #idx_start = []
-        #x = []
-        #dec = []
-        #dis = []
-        #datalen = []
-        #tstamp_0 = []       
 
         scanid, idx_start, x, dec, dis, datalen, tstamp_0, tstamp_end = ([] for i in range(8))
 
@@ -290,9 +283,6 @@ with tb.open_file(filename, 'r') as f:
         arr_deco = fillArray(mdata, 6)
         arr_dlen = fillArray(mdata, 2)
 
-        #ploth2d(arr_dlen,arr_deco, "H2D-"+clean_filename)
-        #ploth2d(arr_disc,arr_deco, "H2D-"+clean_filename)
-
         n_chunks = 0
         for i in range(0,len(mdata)): 
            idx_start.append(mdata[i][0])
@@ -300,10 +290,7 @@ with tb.open_file(filename, 'r') as f:
            dec.append(mdata[i][7])
            dis.append(mdata[i][6]*(-1))
            datalen.append(mdata[i][2])
-           #tstamp_0.append(mdata[i][3]*10e-9)
-           #tstamp_0.append(np.float64(mdata[i][3])*10e-9)
            tstamp_0.append(np.float64(mdata[i][3]))
-           #tstamp_end.append(np.float64(mdata[i][4])*10e-9)
            tstamp_end.append(np.float64(mdata[i][4]))
            scanid.append(mdata[i][5])
            n_chunks+=1
@@ -386,5 +373,3 @@ with tb.open_file(filename, 'r') as f:
         print("You either did not give any valid option \n or did not type in anything")
 
 f.close()
-
-#pydoc.writedoc('quickAndDirtyHDF')
