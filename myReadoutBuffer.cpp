@@ -183,59 +183,28 @@ extern "C" {
         }
     };
 
-    void tpxdecoder(std::vector<uint32_t> data){
+    std::string convertToBinaryLittle(uint32_t word){ // LE -Little endian
+
+        std::bitset<32> bits(word);
+        return bits.to_string();
+
+    };
+
+    uint32_t bytesReversed(uint32_t word){
+
+        return ( (word & 0xFF000000)>> 24) | 
+               ( (word & 0x00FF0000)>> 8)  | 
+               ( (word & 0x0000FF00)<< 8)  | 
+               ( (word & 0x000000FF)<<24); 
         
-        std::vector<uint32_t> headless_data;
+    };
 
-        std::copy_if(data.begin(), data.end(), std::back_inserter(headless_data),
-            [](uint32_t part) {
-                return(part & 0xF0000000) != 0b0101;
-        });
-        
-        if(headless_data.size() % 2 != 0 ){
-            std::cout<<"["<<headless_data.size()<<"] - missing a 32-bit word !!!\n"<<std::flush;
-        }else{
-            std::cout<<"["<<headless_data.size()<<"] - got even Nr of 32-bit words\n"<<std::flush;
-        
+    std::string convertToBinaryBig(uint32_t word){ // LE -Little endian
 
-            for(int i=0; i<headless_data.size(); i += 2){
-                //if(i == 2*i-1){//skipping odd nrs
-                //    continue;
-                //}
-                uint32_t d_one = headless_data[i];
-                uint32_t d_two = headless_data[i+1];
-                
-                std::vector<uint8_t> byte_list_one(reinterpret_cast<uint8_t*>(&d_one), 
-                                      reinterpret_cast<uint8_t*>(&d_one) + sizeof(uint32_t));
-                std::vector<uint8_t> byte_list_two(reinterpret_cast<uint8_t*>(&d_one), 
-                                      reinterpret_cast<uint8_t*>(&d_one) + sizeof(uint32_t));
-                if(i<16){
-                    std::cout<<"Size of bytelists - [1]: "
-                             <<byte_list_one.size()<<", [2];"
-                             <<byte_list_two.size()<<"\n"<<std::flush;
-                   for(const auto& byte: byte_list_one){
-                        std::cout<<"{"<<std::hex<<static_cast<int>(byte)<<"}"<<std::flush;
-                   }
-                   for(const auto& byte: byte_list_one){
-                        std::cout<<"{"<<std::bitset<8>(byte)<<"}"<<std::flush;
-                        //std::cout<<"{"<<std::bitset<8>(reverseBitOrder(byte))<<"}"<<std::flush;
-                   }
-                }
-                std::vector<uint8_t> dataByteList; 
-                for(int i=1; i<4; i++){
-                    dataByteList.push_back(byte_list_one[i]);
-                }
-                for(int i=1; i<4; i++){
-                    dataByteList.push_back(byte_list_two[i]);
-                }
-                for(const auto &item: dataByteList){
-                    std::cout<<"48bdata:<"<<std::bitset<8>(item)<<">\n"<<std::flush;
-                }
-                /// continue here....
+        uint32_t reversed_word = bytesReversed(word);
+        std::bitset<32> bits(reversed_word);
 
-            }
-
-        }
+        return bits.to_string();
 
     };
 
@@ -507,11 +476,13 @@ extern "C" {
     void printVectUint(std::vector<uint32_t> vect){    
         //std::cout<<"\nRECDATA:{"<<vect.data()<<"}\n"<<std::flush;
         for(int i = 0; i < vect.size();i++){
-            std::cout<<vect.at(i)<<"|"<<std::flush;
-            if(i !=0 && i % 8 == 0){
-              std::cout<<"\n"<<std::flush;
-              //scream("\n");
-            }
+            //std::cout<<vect.at(i)<<"|"<<std::flush;
+            std::cout<<"|"<<convertToBinaryLittle(vect.at(i))<<"|\n"<<std::flush;
+            //std::cout<<"|"<<convertToBinaryBig(vect.at(i))<<"|\n"<<std::flush;
+            //if(i !=0 && i % 8 == 0){
+            //  std::cout<<"\n"<<std::flush;
+            //  //scream("\n");
+            //}
             if(i==63){
                 break;
             }
@@ -1340,6 +1311,7 @@ std::vector<uint32_t> local_getFifoData(PyObject *chipFifo, float interval){
 
     long int cnt = 0;  
  
+    ///////////////////////////////////////////////////////////////
     auto start_time = std::chrono::high_resolution_clock::now();
     while(time_to_read(start_time) < interval){
         Py_INCREF(chipFifo);
@@ -1908,8 +1880,8 @@ PyObject* dequeDataOut(PyObject *self, float interval){/*works good*/
 //  Substitute for tpx3/fifo_readout/readout function
 //
 //---------------------------------------------------------------------------------
-//PyObject* readoutToDeque(PyObject *self, PyObject *deque, float interval){
-PyObject* readoutToDeque(PyObject *self, PyObject *deque, PyObject *RXLIST, float interval){
+PyObject* readoutToDeque(PyObject *self, PyObject *deque, float interval){
+//PyObject* readoutToDeque(PyObject *self, PyObject *deque, PyObject *RXLIST, float interval){
 
   PyGILState_STATE gstate = PyGILState_Ensure();
   //PyEval_InitThreads(); // releases lock instantly maybe try later
@@ -2002,10 +1974,23 @@ PyObject* readoutToDeque(PyObject *self, PyObject *deque, PyObject *RXLIST, floa
     
     // convertning number of words read in interation to pyobject tto fill deque
     // on the python side for (self.__words_per_read) calculation
-    //
+    long int hits;
+    float hitrate;
+
+    if(n_words % 2 != 0){
+        hits = (n_words-1)/2;
+    }else{
+        hits = n_words/2;
+    }
+  
+    hitrate = ((float)(hits))/(interval*1000);
+  
     PyObject *py_n_words = PyLong_FromLong(n_words);
     std::cout<<"\n"<<ansi_red<<"[DEBUG] got ["
-             <<n_words<<"] words"<<ansi_reset<<"\n"<<std::flush;
+             <<n_words<<"] words --("
+             <<hits<<")-- hits ["
+             <<hitrate<<" Hz]"
+             <<ansi_reset<<"\n"<<std::flush;
     
     // this one puts vector.data() into numpy array
     //
@@ -2036,17 +2021,6 @@ PyObject* readoutToDeque(PyObject *self, PyObject *deque, PyObject *RXLIST, floa
     Py_DECREF(fifo_decerr);
     ///////////////////////////////
     //fprintf(stdout, ">>> [t4]=%.4f\n",timeDiff(iter_start,tick()));
-
-    /////////////////////////////////////////////
-    // code below takes ~3ms to execute
-    // and its "leaky" 
-    //Py_INCREF(RXLIST);
-    //long int n_errdisc = readErrorCounters(RXLIST, tpx3::CNTR_DISCARD_ERR);
-    //Py_DECREF(RXLIST);
-
-    //Py_INCREF(RXLIST);
-    //long int n_errdec = readErrorCounters(RXLIST, tpx3::CNTR_DECODING_ERR);
-    //Py_DECREF(RXLIST);
 
     // update timestamp   
     float t_end = timeDiff(iter_start,tick());//---------------> ~53ms from start
@@ -2219,7 +2193,7 @@ PyObject* readoutToDeque(PyObject *self, PyObject *deque, PyObject *RXLIST, floa
     //TODO: realize this:
     // checking other fifo_readout attributes:
     // [v] self.rx_error_reset
-    // [] self._calculate.clear()
+    // [v] self._calculate.clear()
     // [] self._result.put(sum(self._words_per_read)) // this mf does not have implementation in python side...
     // [] check for n_words==0 && self.stop-readout.is_set() to break sampling loop
     //    check for 
@@ -2265,6 +2239,8 @@ PyObject* readoutToDeque(PyObject *self, PyObject *deque, PyObject *RXLIST, floa
 // filling the pytuple takes several ms
 // AND explodes to O(100ms) after the SHUTTER goes 1->0
 // ???
+// (UPD) reasons are still unknown, but same happens in the original python code!
+//
 ///////////////////////////////////////////////////////////////////////////////////
 //
 //  try caching atributes as:
