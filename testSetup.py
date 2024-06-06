@@ -6,6 +6,7 @@ import pathlib
 from time import time, sleep
 from testClass.test_dataManagement import DataManagement
 from testClass.test_extendedDM import ExtendedDataManagement
+from array import array
 
 if __name__ == "__main__":
   
@@ -16,8 +17,8 @@ if __name__ == "__main__":
     getFifoData = clib.getFifoData
     merge_arrays = clib.mergeArrays
     ##########################
-    fiddle = clib.fiddleWDict
-    fiddle.argtypes = [ctypes.py_object]
+    #fiddle = clib.fiddleWDict
+    #fiddle.argtypes = [ctypes.py_object]
 
     #######################
     #copy_data = clib.fastInput.copyDataArray
@@ -140,34 +141,25 @@ if __name__ == "__main__":
 
 #################################################################
 
-    os.system("lspci | grep RAM")
+    testlist = [1,2,3,4,5,6,7,8,9,10]
+    yoba = testlist[:7] # ---> [1, 2, 3, 4, 5, 6, 7]
+    hoba = testlist[7:] # ---> [8,9,10]
 
-    DM = DataManagement()  
- 
-    #DM.set_data({"key1": "value1", "key2": "value2", "key3": "value3", "key4": "value4", "key5": "value5"})
-    DM.key1 = "huya"
-    DM.key2 = 999   
+    print("testlist slicing: \nbefore={}\nafter1={}\nafter2={}".format(testlist, yoba, hoba))
 
-    print(DM.get_data())
-
-    EM = ExtendedDataManagement()  
-    #EM.yoba = "hooita"
-    #EM.hoba = 1000
-
-    for i in range(0,10):
-        i_key = "yoba"+str(i)
-        EM[i_key] = i*2
-
-    print(EM.get_data())
-
-    for i in range(0,10):
-        EM.update_data("yoba"+str(i),"pizdec"+str(i))
+    huita = array('B',[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16])
+    print("huita={}".format(huita))
+    print("huita[:7]={}".format(huita[:7]))
+    print("huita[7:]={}".format(huita[7:]))
 
 
-    print(EM.get_data())
+    testhex = 0x1cfd
+    length = 16
+    print(f'{testhex:0>{length}b}')
+    print(bin(testhex))
+    print(format(testhex,'#016b'))
 
-    fiddle(EM)
-
+#################################################################
     # Creating a dictionary with 5 arbitrary key/value pairs using ExtendedDataManagement
    # EM = ExtendedDataManagement()  
 

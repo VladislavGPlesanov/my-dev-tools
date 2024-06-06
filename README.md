@@ -8,6 +8,55 @@ currently two relevant files:
 
 compile with `./compileBuffer.sh`
 
+##
+
+To call functions from myReadoutBuffer.cpp one has to describe the functions input an output object typs on the python side. Below
+are listed couple of examples for the contmporary functions:
+
+Firstly, load the c++ library as:
+```python
+import ctypes
+#
+#...
+#
+clib =  ctypes.CDLL("path/to/library/cLibrary.so")
+
+```
+
+The currently working function `readoutToDeque` is defined in `fifo\_readout.py` as:
+```python
+readoutToDeque = clib.readoutToDeque
+
+# expect python tuple object as output of readoutToDeque
+readoutToDeque.restype = ctypes.py_object 
+
+# python objects as function arguments
+readoutToDeque.argtypes = [ctypes.py_object, #class object
+                           ctypes.py_object, #data deque() object
+                           ctypes.c_float]  # readout interval in ms
+```
+General status querry function:
+```python
+getRxStatus = clib.getStatusAllRx
+getRxStatus.restype = ctypes.py_object
+getRxStatus.argtypes = [ctypes.py_object, ctypes.c_char_p]
+
+# used as:
+rx_discard = getRxStatus(self, "get_rx_en_status".encode('utf-8'), 1)
+``` 
+Set RX register example:
+
+```python
+setRegister = clib.setRegister
+setRegister.restype = ctypes.py_object
+setRegister.argtypes = [ctypes.py_object, ctypes.c_char_p, ctypes.c_int]
+
+#used as:
+setReady = setRegister(self, "READY".encode('utf-8'), 1)
+```
+
+
+
 
 ## what else does what
 What present python functions do:

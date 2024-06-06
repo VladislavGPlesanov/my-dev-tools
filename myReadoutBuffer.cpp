@@ -53,7 +53,7 @@ std::string ansi_red = "\u001b[31m";
 std::string ansi_green = "\u001b[32m";
 std::string ansi_orange = "\u001b[33m";
 std::string ansi_reset = "\u001b[0m";
-///////////////////////////////////////////////////////
+///////// global variables ///////////////////////////
 
 signed long int global_words_recorded = 0; 
 
@@ -69,30 +69,31 @@ extern "C" {
 
     ///////////////////////////////////////////////////////////
 
-    struct FIFO_DATA {
+    //struct FIFO_DATA {
+    struct tpx3data {
     
         uint32_t* data;
         std::size_t datasize;
 
         // constructor to init struct
-        FIFO_DATA(uint32_t* data_ptr, std::size_t size) : 
+        tpx3data(uint32_t* data_ptr, std::size_t size) : 
             data(new uint32_t[size]), datasize(size) {
             std::copy(data_ptr, data_ptr+size, data);
         };
         
         //Destructor to release memory:
-        ~FIFO_DATA() {
+        ~tpx3data() {
             delete[] data;
         };
 
         //copy constructor to do deep copy
-        FIFO_DATA(const FIFO_DATA& other) :
+        tpx3data(const tpx3data& other) :
             data(new uint32_t[other.datasize]), datasize(other.datasize){
             std::copy(other.data, other.data + datasize, data);
         }
 
         //Assignment operator to do deep copy
-        FIFO_DATA& operator=(const FIFO_DATA& other) {
+        tpx3data& operator=(const tpx3data& other) {
             if(this != &other){
                //Release old memory
                delete[] data;
@@ -103,24 +104,6 @@ extern "C" {
             }
             return *this;
         }
-
-    };
-
-    struct tpx3data { //testing structure output to py
-
-        uint32_t* data;
-        std::size_t dsize;
-        //const double tstart;
-        //const double tend;
-        //long* discerr[8];
-        //long* decerr[8];
-
-       // const uint32_t* data;
-       // std::size_t dsize;
-       // //const double tstart;
-       // //const double tend;
-       // const long* discerr[8];
-       // const long* decerr[8];
 
     };
 
@@ -166,13 +149,6 @@ extern "C" {
 
     void scream(std::string msg){
         std::cout<<msg<<"\n"<<std::flush;
-    };
-
-    uint8_t reverseBitOrder(uint8_t byte){
-        byte = (byte & 0xF0) >> 4 | (0x0F) << 4;
-        byte = (byte & 0xCC) >> 2 | (0x33) << 2;
-        byte = (byte & 0xAA) >> 1 | (0x55) << 1;
-        return byte;
     };
 
     void dumpVector(std::vector<int> vect){
@@ -1253,6 +1229,8 @@ PyObject* getFifoData(PyObject *chipFifo, float t_interval){
     std::vector<uint32_t> temp;
     std::vector<uint32_t> fifo_data;
 
+    std::vector<long int> recwords;
+    
     long int cnt = 0; 
 
     //auto start_time = std::chrono::high_resolution_clock::now();
@@ -1260,6 +1238,7 @@ PyObject* getFifoData(PyObject *chipFifo, float t_interval){
     Py_INCREF(chipFifo);
     while(time_to_read(start_time) < t_interval){
         temp = localQuerryFifo(chipFifo);
+        recwords.push_back(temp.size());
         if(temp.size()!=0){
             fifo_data.insert(fifo_data.end(),
                              temp.begin(),
@@ -1272,9 +1251,15 @@ PyObject* getFifoData(PyObject *chipFifo, float t_interval){
     auto end_time = tick();
 
     float tdiff = timeDiff(start_time,end_time);
-    
+
+    float avg_words_per_read = 
+            std::accumulate(recwords.begin(),recwords.end(),0.0)/recwords.size();
+
     std::cout<<"read="<<cnt<<"times\n"<<std::flush;
+    std::cout<<"avg WPR ="<<avg_words_per_read<<"\n"<<std::flush;
     std::cout<<"loop time="<<tdiff<<"[ms]\n"<<std::flush;
+
+    recwords.clear();
 
     //////test below//////////
     //
@@ -1308,7 +1293,7 @@ std::vector<uint32_t> local_getFifoData(PyObject *chipFifo, float interval){
 
     std::vector<uint32_t> temp;
     std::vector<uint32_t> fifo_data;
-
+    
     long int cnt = 0;  
  
     ///////////////////////////////////////////////////////////////
@@ -1320,9 +1305,8 @@ std::vector<uint32_t> local_getFifoData(PyObject *chipFifo, float interval){
         if(temp.size()>0){
             fifo_data.insert(fifo_data.end(),
                              temp.begin(),
-                             temp.end());
+                             temp.end());// should use temp vector here
         }
-        temp.clear();
         cnt++;
     }
     temp.clear();
@@ -1330,16 +1314,17 @@ std::vector<uint32_t> local_getFifoData(PyObject *chipFifo, float interval){
     auto end_time = tick();
 
     float tdiff = timeDiff(start_time,end_time);
-    
+ 
     std::cout<<"tried="<<cnt<<"times, redorded "<<fifo_data.size()<<" events\n"<<std::flush;
+    std::cout<<"avg WPR ="<<fifo_data.size()/cnt<<"\n"<<std::flush;
     std::cout<<"loop time="<<tdiff<<"[ms]\n"<<std::flush;
    
-    if(fifo_data.size()>0){ 
-      scream("first 64 words of data in \"local_getFifoData\":");
-      printVectUint(fifo_data);
-      scream("last 64 words of data in \"local_getFifoData\":");
-      printReverseVectUint(fifo_data);
-    }
+    //if(fifo_data.size()>0){ 
+    //  scream("first 64 words of data in \"local_getFifoData\":");
+    //  printVectUint(fifo_data);
+    //  scream("last 64 words of data in \"local_getFifoData\":");
+    //  printReverseVectUint(fifo_data);
+    //}
 
     PyGILState_Release(gstate);  //REENABLE THIS LATER!
     return fifo_data;
@@ -1722,10 +1707,11 @@ PyObject *setRegister(PyObject *self, const char* SETTING, int value){
 
 };
 
+
 ////////////////////////////////////////
 // could work with the struct but need fine tuning
 //
-FIFO_DATA dequeDataOutNoErr(PyObject *self, float interval){/*works ok.. but segfaults*/
+tpx3data dequeDataOutNoErr(PyObject *self, float interval){/*works ok.. but segfaults*/
 
   PyGILState_STATE gstate = PyGILState_Ensure(); 
   // 2 lines below should be used in "main" function only, others 
@@ -1763,19 +1749,18 @@ FIFO_DATA dequeDataOutNoErr(PyObject *self, float interval){/*works ok.. but seg
   Py_DECREF(self); 
   PyGILState_Release(gstate);   
   //return {data.data(), data.size()};
-  //return FIFO_DATA(const_cast<uint32_t*>(data.data()), data.size());
+  //return tpx3data(const_cast<uint32_t*>(data.data()), data.size());
   if(data.empty()){
-      return FIFO_DATA(nullptr, 0);
+      return tpx3data(nullptr, 0);
   }
 
-  return FIFO_DATA(data.data(), data.size());
+  return tpx3data(data.data(), data.size());
   //return {&data[0], data.size()};
-  //return FIFO_DATA;
+  //return tpx3data;
 
 };
 
 PyObject* dequeDataOut(PyObject *self, float interval){/*works good*/
-//tpx3data dequeDataOut(PyObject *self, float interval){/*works good*/
 
   PyGILState_STATE gstate = PyGILState_Ensure(); 
   // 2 lines below should be used in "main" function only, others 
@@ -1930,6 +1915,7 @@ PyObject* readoutToDeque(PyObject *self, PyObject *deque, float interval){
   std::cout<<"[debug] is \"calculate\" set? = "
            <<ansi_orange<<"["<<eba<<"]"<<ansi_reset<<"\n"<<std::flush;  
 
+  //std::this_thread::sleep_for(std::chrono::seconds(1));
   scream("\n_______________________STARTIN'_WHILE_LOOP___________________________\n");
   while (true){/*just use inf loop that breaks by first signal of shutter being closed*/
 
@@ -1940,7 +1926,7 @@ PyObject* readoutToDeque(PyObject *self, PyObject *deque, float interval){
     int shutter_now = checkSHUTTER(self); // ~6 us
     Py_DECREF(self);
 
-    //fprintf(stdout, ">>> [t1]=%.4f\n",timeDiff(iter_start,tick()));
+   //fprintf(stdout, ">>> [t1]=%.4f\n",timeDiff(iter_start,tick()));
 
     std::cout<<ansi_green<<"[DEBUG] (while) iteration starts"<<ansi_reset<<"\n"<<std::flush;
     // Allocating memory for output tuple
@@ -1971,9 +1957,9 @@ PyObject* readoutToDeque(PyObject *self, PyObject *deque, float interval){
     // recording number of recorded words
     //
     global_words_recorded += n_words;
-    
-    // convertning number of words read in interation to pyobject tto fill deque
-    // on the python side for (self.__words_per_read) calculation
+   
+    // calc. rates
+    //
     long int hits;
     float hitrate;
 
@@ -1983,13 +1969,15 @@ PyObject* readoutToDeque(PyObject *self, PyObject *deque, float interval){
         hits = n_words/2;
     }
   
-    hitrate = ((float)(hits))/(interval*1000);
+    hitrate = (static_cast<float>(hits))/(interval/1000)/1000; //kHz//rewise this....!
   
+    // convertning number of words read in interation to pyobject tto fill deque
+    // on the python side for (self.__words_per_read) calculation
     PyObject *py_n_words = PyLong_FromLong(n_words);
     std::cout<<"\n"<<ansi_red<<"[DEBUG] got ["
              <<n_words<<"] words --("
              <<hits<<")-- hits ["
-             <<hitrate<<" Hz]"
+             <<hitrate<<" kHz]"
              <<ansi_reset<<"\n"<<std::flush;
     
     // this one puts vector.data() into numpy array
@@ -2138,7 +2126,6 @@ PyObject* readoutToDeque(PyObject *self, PyObject *deque, float interval){
     scream("[DEBUG] iteration end"); 
 
   };// end the while(true) loop
-
     
   Py_INCREF(self);
   setSelfRecordCount(self);

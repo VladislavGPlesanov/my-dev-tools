@@ -314,3 +314,99 @@ PyObject* devRecordFifoData(PyObject *chip, float t_interval){
 
 
 
+//       some python stuff below
+//#                ################ GONA TRY status readout here #################        
+//#                #rx_discerr = fifoStatus(self, constCharString("get_rx_fifo_discard_count"))
+//#                huli = getFifoSize(self) 
+//#                #thisFifoSize = getFifoSize(self) 
+//#                if(huli is None):
+//#                    print("huli is NONE",flush=True)
+//#                    huli = 0
+//#                print("\nc-func fifo_size:[{}]\n".format(huli),flush=True)
+//#                #cur_fifosize = self.chip['FIFO']['FIFO_SIZE']
+//#                #print("\nnative fifo_size:[{}]\n".format(cur_fifosize),flush=True)  
+//
+//
+//
+//#                ####### tryna' get cpp "struct {const uint32_t*, std::size_t}" ##################
+//#                interval_ms = round(self.readout_interval*1000)
+//#                print("SHO")
+//#                temp = dequeDataNE(self, interval_ms)
+//#                if(temp.data is None):
+//#                    data = np.array([],dtype=np.uint32)
+//#                else:
+//#                    data = np.ctypeslib.as_array(
+//#                        ctypes.cast(temp.data, ctypes.POINTER(ctypes.c_uint32)),
+//#                        shape=(int(temp.datasize),))
+//#                #data = np.ctypeslib.as_array(temp.data, shape=(temp.datasize,))
+//#                #data = np.ctypeslib.as_array(temp.data, shape=(temp.datasize,), dtype=np.uint32) # dtype is unexpected..!
+//#                #data = np.frombuffer(temp.data, dtype=np.uint32) # returns fuck all!
+//#                #data = np.frombuffer(
+//#                #    ctypes.cast(temp.data, ctypes.POINTER(ctypes.c_uint32)),
+//#                #    dtype=np.uint32,
+//#                #    count=temp.datasize*2) # same as above...!
+//#                #if(len(data)==1 and data[0]==-999):
+//#                #    data = np.empty(1,dtype=np.uint32)
+//#    
+//#                print("data_dsize=[{}] at {}\n".format(temp.datasize, data.data),flush=True)
+//#                print("data props: len={}, shape={}\n".format(len(data), data.shape),flush=True)
+//#                if(len(data)>128):
+//#                    print("data_First64=\n{}".format(data[0:63]),flush=True)
+//#                    print("data_Last64=\n{}".format(data[len(data)-63:len(data)]),flush=True)
+//#
+//#                #if(data ==None):
+//#                #    data = np.empty(1,dtype=np.uint32)
+//#                print("TY")
+//#                ####################################################
+//
+//#                ####### tryna' get struct {data, data.size, discerr, decerr} ##################
+//#                interval_ms = round(self.readout_interval*1000)
+//#                print("SHO")
+//#                c_struct = dequeData(self, interval_ms)
+//#                print("TY")
+//#                data = np.ctypeslib.as_array(c_struct.data, shape=(c_struct.dsize,)) 
+//#                #data = np.ctypeslib.as_array(
+//#                #    ctypes.cast( c_struct.data, ctypes.POINTER(ctypes.c_uint32)), shape=(c_struct.dsize,)) 
+//#                if(len(data==1) and data[0]==-999):
+//#                    data = np.empty(1,dtype=np.uint32)
+//#                rx_disc = np.ctypeslib.as_array(c_struct.discerr, shape=(8,)).tolist()
+//#                #rx_disc = np.ctypeslib.as_array(c_struct.discerr, shape=(8,))
+//#                rx_dec = np.ctypeslib.as_array(c_struct.decerr, shape=(8,)).tolist()
+//#                #rx_dec = np.ctypeslib.as_array(c_struct.decerr, shape=(8,))
+//#                print("data_dsize=[{}] at {}\n".format(c_struct.dsize, data.data),flush=True)
+//#                if(len(data)>64):
+//#                    print("data_First32=\n{}".format(data[0:31]),flush=True)
+//#                    print("data_Last32=\n{}".format(data[len(data)-32:len(data)-1]),flush=True)
+//#                #print("received ERRORS: \n DISC:{} \n DEC:{}".format(rx_disc, rx_dec), flush=True)
+//
+//#                ####### tryna' get a data  tuple ##################
+//#                interval_ms = round(self.readout_interval*1000)
+//#                print("SHO")
+//#                datatuple = dequeData(self, interval_ms)
+//#                print("TY")
+//#                data = datatuple[0]
+//#                ############################
+//                #rx_disc = datatuple[1]
+//                #rx_dec = datatuple[2]
+//                #errmsg = "got Error counters:\nDISC={}\nDEC={}".format(rx_disc,rx_dec)
+//                #print(errmsg,flush=True)
+//                ###############################
+//                #if(cur_fifosize!=0):
+//                #    eba = "[DEBUG] data loss={}".format(checkDataLoss(len(data),cur_fifosize))
+//                #    scream(eba,col="red")
+//                
+//                #if(data[0]==data[2]):
+//                #    msg = "FIRST DATA WORD IS __HEADER__={}, last={}".format(data[0],data[len(data)-1])
+//                #    scream(msg, col="blue")
+//
+//                #else:
+//                #    msg = "FIRST DATA WORD IS __DATA__={}, last={}".format(data[0],data[len(data)-1])
+//                #    scream(msg, col="blue")
+//                #
+////
+////
+////
+////
+////
+//
+//
