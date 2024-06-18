@@ -516,6 +516,27 @@ extern "C" {
         //std::cout<<"\t OLO:"<<t_diff<<"\t"<<std::flush;
         t_global = t_global + t_diff;
     };
+ 
+    double get_float_time(){
+
+        auto now = std::chrono::system_clock::now();
+        auto duration = now.time_since_epoch();
+
+        double seconds = std::chrono::duration_cast<std::chrono::seconds>(duration).count();
+        double microseconds = std::chrono::duration_cast<std::chrono::microseconds>(duration).count() % 1000000;
+
+        return seconds + microseconds * 1e-6;
+
+    };
+
+    void upd_time(double &curr_time, double &last_time, double &timestamp){
+
+        curr_time = get_float_time();
+        last_time = timestamp;
+        timestamp = curr_time;
+
+    };
+
 
     void updateTimes(float &t_global, float t_end){
         t_global = t_global + t_end;
@@ -828,34 +849,42 @@ long int readErrorCounters(PyObject *rxchannels, const char* option){
     std::string this_option;
     
     scream("[DEBUG] readErrorCounters-> IN");
-    if(option==tpx3::CNTR_DISCARD_ERR){
-        this_option = "DECODER_ERROR_COUNTER";
-    }
-    if(option==tpx3::CNTR_DECODING_ERR){
-        this_option = "LOST_DATA_COUNTER";
-    }
-    if(option !=tpx3::CNTR_DECODING_ERR && option != tpx3::CNTR_DISCARD_ERR){
-        scream("Invalid option, use DECODING or DISCARD string attributes");
-        return -1;
-    }
+
+    //if(option==tpx3::CNTR_DISCARD_ERR){
+    //    this_option = "DECODER_ERROR_COUNTER";
+    //}
+    //if(option==tpx3::CNTR_DECODING_ERR){
+    //    this_option = "LOST_DATA_COUNTER";
+    //}
+    //if(option !=tpx3::CNTR_DECODING_ERR && option != tpx3::CNTR_DISCARD_ERR){
+    //    scream("Invalid option, use DECODING or DISCARD string attributes");
+    //    return -1;
+    //}
     
     if(rxchannels!=NULL){
-       
+        scream("[DEBUG] readErrorCounters-> A!");
+        PyObject_Print(rxchannels,stdout, 0);
         Py_ssize_t nrx = PyObject_Size(rxchannels);
+        std::cout<<"rxlist has ["<<nrx<<"] items\n"<<std::flush;
         for(Py_ssize_t i = 0; i < nrx; ++i){
+            scream("[DEBUG] readErrorCounters-> AA!");
             PyObject *ithRX = PyList_GetItem(rxchannels, i);
+            PyObject_Print(ithRX,stdout, 0);
+            scream("[DEBUG] readErrorCounters-> AAA!");
             Py_INCREF(ithRX);
+            scream("[DEBUG] readErrorCounters-> AAAA!");
             PyObject *errcnt = PyObject_GetItem(
                     ithRX, PyUnicode_FromString(this_option.c_str()));
+            PyObject_Print(errcnt, stdout, 0);
+            scream("[DEBUG] readErrorCounters-> AAAAA!");
             n_err += PyLong_AsLong(errcnt);
             //n_err+=cntr;
-            //std::cout<<"N_Err="<<n_err<<"\n"<<std::flush;
+            std::cout<<"N_Err="<<n_err<<"\n"<<std::flush;
             Py_DECREF(errcnt);
             Py_DECREF(ithRX);
-            errcnt=NULL;
-            ithRX=NULL;
+            //errcnt=NULL;
+            //ithRX=NULL;
         }   
-
     }else{
         scream("[ERROR] can not access TPX3_RX channels!\n");
         n_err = -1;
@@ -865,6 +894,34 @@ long int readErrorCounters(PyObject *rxchannels, const char* option){
     PyGILState_Release(gstate);
 
     return n_err;
+
+};
+
+
+long int get_rx_fifo_size(PyObject *chip){
+
+    long int total_fifo_size = 0;
+
+    for(int i=0; i<8; i++){
+
+        std::string rxname = "RX"+std::to_string(i);
+
+        Py_INCREF(chip);
+        PyObject *rx = PyObject_GetItem(chip, PyUnicode_FromString(rxname.c_str()));
+        //std::cout<<"Got "<<rxname<<"->"<<PyObject_Print(rx,stdout,0)<<"\n"<<std::flush;
+        Py_INCREF(rx);
+        PyObject *fifosize = PyObject_GetItem(rx,PyUnicode_FromString("FIFO_SIZE"));
+        //std::cout<<"chip[channel].FIFO_SIZE="<<PyObject_Print(fifosize,stdout,0)<<"\n"<<std::flush;
+        long int ith_fifo_size = PyLong_AsLong(fifosize);
+        total_fifo_size += ith_fifo_size;
+    
+        Py_DECREF(fifosize);
+        Py_DECREF(rx);
+        rx=NULL;
+        fifosize=NULL;
+        Py_DECREF(chip);
+    }
+    return total_fifo_size;
 
 }
 
@@ -1866,7 +1923,7 @@ PyObject* dequeDataOut(PyObject *self, float interval){/*works good*/
 //
 //---------------------------------------------------------------------------------
 PyObject* readoutToDeque(PyObject *self, PyObject *deque, float interval){
-//PyObject* readoutToDeque(PyObject *self, PyObject *deque, PyObject *RXLIST, float interval){
+///PyObject* readoutToDeque(PyObject *self, PyObject *deque, PyObject *RXLIST, float interval){
 
   PyGILState_STATE gstate = PyGILState_Ensure();
   //PyEval_InitThreads(); // releases lock instantly maybe try later
@@ -1884,7 +1941,9 @@ PyObject* readoutToDeque(PyObject *self, PyObject *deque, float interval){
     l_global_start_time == tick();
   }
   // last chunk read time, current time, time to wait (not implemented yet)
-  float last_read = 0.0, curr_time = 0.0, time_wait = 0.0;
+  //float last_read = 0.0, curr_time = 0.0, time_wait = 0.0;
+  double last_time = 0.0, curr_time = 0.0, timestamp = 0.0; 
+  float time_wait = 0.0;
 
   // for now, waiting only for a stop signal from user input
   // for some fuck-reasons PyObject_IsTrue evaluates "unset" state to logic 1...
@@ -1915,6 +1974,8 @@ PyObject* readoutToDeque(PyObject *self, PyObject *deque, float interval){
   std::cout<<"[debug] is \"calculate\" set? = "
            <<ansi_orange<<"["<<eba<<"]"<<ansi_reset<<"\n"<<std::flush;  
 
+  curr_time = get_float_time();
+
   //std::this_thread::sleep_for(std::chrono::seconds(1));
   scream("\n_______________________STARTIN'_WHILE_LOOP___________________________\n");
   while (true){/*just use inf loop that breaks by first signal of shutter being closed*/
@@ -1931,7 +1992,7 @@ PyObject* readoutToDeque(PyObject *self, PyObject *deque, float interval){
     std::cout<<ansi_green<<"[DEBUG] (while) iteration starts"<<ansi_reset<<"\n"<<std::flush;
     // Allocating memory for output tuple
     // add a check if *tuple is NULL! release GIL if yes
-    PyObject *tuple = PyTuple_New(tpx3::NUM_DEQUE_TUPLE_ITEMS);
+    PyObject *tuple = PyTuple_New(tpx3::NUM_DEQUE_TUPLE_ITEMS+1);
     if(tuple==NULL){
         scream("Could not instantiate data tuple");
         PyGILState_Release(gstate); 
@@ -1951,6 +2012,15 @@ PyObject* readoutToDeque(PyObject *self, PyObject *deque, float interval){
 
     Py_DECREF(fifo);
     //fprintf(stdout, ">>> [t2]=%.4f\n",timeDiff(iter_start,tick()));
+
+    long int rx_fifo_size = 0;
+        
+    Py_INCREF(chip);
+    rx_fifo_size = get_rx_fifo_size(chip);
+    Py_DECREF(chip);
+
+
+    std::cout<<"RX fifo size = "<<ansi_red<<rx_fifo_size<<ansi_reset<<"\n"<<std::flush;
 
     long int n_words = data.size();
 
@@ -1976,7 +2046,7 @@ PyObject* readoutToDeque(PyObject *self, PyObject *deque, float interval){
     PyObject *py_n_words = PyLong_FromLong(n_words);
     std::cout<<"\n"<<ansi_red<<"[DEBUG] got ["
              <<n_words<<"] words --("
-             <<hits<<")-- hits ["
+             <<hits<<")-- hits @ ["
              <<hitrate<<" kHz]"
              <<ansi_reset<<"\n"<<std::flush;
     
@@ -2013,20 +2083,19 @@ PyObject* readoutToDeque(PyObject *self, PyObject *deque, float interval){
     // update timestamp   
     float t_end = timeDiff(iter_start,tick());//---------------> ~53ms from start
 
-    curr_time = last_read + t_end;
     scream("[DEBUG] got timestamps"); 
+    upd_time(curr_time, last_time, timestamp);
+    fprintf(stdout, "[DEBUG]\nlast_time=%.4f,\ncurr_time=%.4f,\ntimestamp=%.4f\n", curr_time, last_time, timestamp);
 
     //fprintf(stdout, ">>> [t5]=%.4f\n",timeDiff(iter_start,tick()));
     // assemble python tuple that will sent to fifo_readout::worker function
     //
     PyTuple_SetItem(tuple, 0, fifoData);
-    PyTuple_SetItem(tuple, 1, PyFloat_FromDouble((double)last_read));
-    PyTuple_SetItem(tuple, 2, PyFloat_FromDouble((double)curr_time)); 
+    PyTuple_SetItem(tuple, 1, PyFloat_FromDouble(last_time));
+    PyTuple_SetItem(tuple, 2, PyFloat_FromDouble(curr_time)); 
     PyTuple_SetItem(tuple, 3, PyLong_FromLong(n_errdisc));
     PyTuple_SetItem(tuple, 4, PyLong_FromLong(n_errdec));
-
-    //make the current time -> last_read time
-    last_read = curr_time;
+    PyTuple_SetItem(tuple, 5, PyLong_FromLong(rx_fifo_size));//temp addition
 
     scream("[DEBUG] Assembled the tuple"); 
     // Add python tuple to deque:

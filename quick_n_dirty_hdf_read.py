@@ -10,6 +10,7 @@ import tables as tb
 #matplotlib.rcParams['text.usetex'] = True
 import matplotlib.pyplot as plt 
 from collections import Counter
+import statistics as stat
 
 
 """
@@ -94,6 +95,46 @@ def getFirstErrorPos(scanIDList, discList, option):
 
     return thispos
 
+def getUniqueList(inputlist):
+    unique = list(set(inputlist))
+    return sorted(unique)
+
+
+def getAvgList(unique_list, data_list):
+
+    # data_list  must be at list of lists, with len(val) >= 2  
+    # where val[0] is data to sort and val[1] the unique ids
+
+    avg_list = []
+    accum = 0
+    nentries = 0
+   
+    cntr = 0  
+    for unq in unique_list:
+        for val in data_list:
+            cntr+=1
+            #if(val[0]!=0 and cntr % 100==0):            
+            #    print("val[0]={}, unq={}".format(val[0],unq),flush=True)
+            if(val[1] == unq and val[0]>0):            
+               accum += val[0] 
+               nentries += 1
+            else:
+               continue
+        avg = 0
+        try:
+            avg = float(accum)/float(nentries)
+        except ZeroDivisionError:
+            print("[ERROR] tried to divide {} by {} for {}".format(accum, nentries, unq))
+            avg = 0
+
+        print("avg = {}, accum = {}, nentries = {}".format(avg, accum, nentries))
+        avg_list.append(avg)
+
+        nentries = 0
+        accum = 0
+
+    return avg_list
+
 
 def fillArray(inputData, data_index):
 
@@ -113,18 +154,54 @@ def fillArray(inputData, data_index):
     numArray = np.asarray(dataList)
     return numArray
 
-def plot_scat(xdata, ydata, plotname, label, axisnames):
-   
+def plot_scat(xdata, ydata, title, plotname, label, axisnames):
+ 
+    print("assemblying plot for - [{}]".format(title)) 
+ 
     fig = plt.figure()
     ax1 = fig.add_subplot(111)
     ax1.scatter(xdata,ydata, s=10,c='b',marker="s",label=label)
-    plt.legend(loc='upper center')
+    #plt.legend(loc='upper center')
+    plt.legend()
     if(max(ydata)>5000):
        ax1.set_yscale("log")
     if max(xdata) > 5000:
        ax1.set_xscale("log")
+    fig.suptitle(title)
     ax1.set_xlabel(axisnames[0])
     ax1.set_ylabel(axisnames[1])
+    if("Data Length"in title):
+       ax1.set_ylim(min(ydata)*0.9,max(ydata)*1.1)
+    elif("timestamp" in title and "iteration" not in title):
+       ax1.set_xlim(min(xdata[1:len(xdata)]),max(xdata))
+    elif("iteration" and "timestamp" in title):
+       avgy = sum(ydata)/len(ydata)
+       #ax1.set_ylim(min(ydata[1:len(ydata)])-stat.stdev(ydata,avgy),max(ydata[1:len(ydata)])+stat.stdev(ydata,avgy))
+       ax1.set_ylim(min(ydata[1:len(ydata)])*0.999,max(ydata)*1.001)
+
+       #print(len(xdata))
+       #print(xdata[1])
+       #print(xdata[0:32])
+       #print(xdata[1:33])
+    
+       #print(sum(xdata))
+       #print(len(xdata))
+       #print(sum(xdata)/len(xdata))
+       #
+
+       #list_xstdev = stat.stdev(xdata,sum(xdata)/len(xdata))
+       #list_ystdev = stat.stdev(ydata,sum(ydata)/len(ydata))        
+       #if(list_ystdev>0):
+       #    print("stdev(y)={}".format(list_xstdev))
+       #    ax1.set_ylim(min(ydata[1:len(ydata)])-list_ystdev,max(ydata)+list_ystdev)
+       #if(list_xstdev>0):
+       #    print("stdev(x)={}".format(list_ystdev))
+       #    ax1.set_xlim(min(ydata[1:len(xdata)])-list_xstdev,max(xdata)+list_xstdev)
+       ax1.set_yscale('linear')
+       ax1.set_xscale('linear')
+    else: 
+       ax1.set_ylim(min(ydata),max(ydata))
+    ax1.grid(True)
     ax1.plot()
     fig.savefig(plotname+'.png')
 
@@ -219,6 +296,19 @@ def findNoisyPixels(nuArray, threshold):
 
     return badPixels
 
+def plotHist(xlist, nbins, minrange, maxrange, transparency, label, title, axislabel, plotname):
+    plt.figure(2,figsize=(10,10))
+
+    counts, edges, bars = plt. hist(xlist, 
+                                    bins=nbins, 
+                                    range=(minrange,maxrange),
+                                    alpha=transparency,
+                                    label=label)
+    plt.title(title)
+    plt.xlabel(axislabel[0])
+    plt.ylabel(axislabel[1])
+    plt.grid(True)
+    plt.savefig(plotname+"-hist.png")
  
 
 ######### funcs end here! ###########
@@ -270,7 +360,10 @@ with tb.open_file(filename, 'r') as f:
            print(mdata[i])
 
 
-        scanid, idx_start, x, dec, dis, datalen, tstamp_0, tstamp_end = ([] for i in range(8))
+        scanid, idx_start, x, dec, dis, datalen, tstamp_0, tstamp_end, rx_fifo = ([] for i in range(9))
+
+        dac_n_fifo_comb = []
+        dac_n_hits = []
 
         testcnt = 0
 
@@ -284,65 +377,153 @@ with tb.open_file(filename, 'r') as f:
         arr_dlen = fillArray(mdata, 2)
 
         n_chunks = 0
+
+        t_interval = 0.05 #s
+
         for i in range(0,len(mdata)): 
            idx_start.append(mdata[i][0])
            x.append(mdata[i][1])
            dec.append(mdata[i][7])
-           dis.append(mdata[i][6]*(-1))
-           datalen.append(mdata[i][2])
-           tstamp_0.append(np.float64(mdata[i][3]))
-           tstamp_end.append(np.float64(mdata[i][4]))
+           if("DataTake" in filename):
+               dis.append(mdata[i][6])
+           else:
+               dis.append(mdata[i][6]*(-1))
+           if("DataTake" in filename):
+               datalen.append(mdata[i][2]/2/t_interval)
+           else:
+               datalen.append(mdata[i][2])
+           #n_hits.append(float(mdata[i][2])/2/t_interval)
+           if("DataTake" in filename):
+               time_s = np.float64(mdata[i][3])
+               time_e = np.float64(mdata[i][4])
+               tstamp_0.append(time_s/1e9)
+               tstamp_end.append(time_e/1e9)
+           else:
+               tstamp_0.append(np.float64(mdata[i][3]))
+               tstamp_end.append(np.float64(mdata[i][4]))
            scanid.append(mdata[i][5])
+           rx_fifo.append(mdata[i][9])
+
+           dac_n_fifo_comb.append([mdata[i][9], mdata[i][5]])
+           dac_n_hits.append([mdata[i][2]/2/t_interval, mdata[i][5]])
+
            n_chunks+=1
-
-        print("Number of chunks => {}".format(n_chunks))
+           #############################
     
+        unq_dac = []
+        avg_fifo = None
+        avg_hits = None
+
+        if("DataTake" not in filename):
+            unq_dac = getUniqueList(scanid)
+            print(len(unq_dac)) 
+            avg_fifo = getAvgList(unq_dac, dac_n_fifo_comb)
+            print(len(avg_fifo))
+
+            avg_hits = getAvgList(unq_dac, dac_n_hits)
+
+            print(unq_dac[:10])
+            print(dac_n_fifo_comb[:10])
+            print(avg_fifo[:10])
+
+            print("Number of chunks => {}".format(n_chunks))
+
         ##########
-        plot_scat_stack(scanid,
-                       [dec,dis],
-                       clean_filename+"_DecDiscErrors",
-                       ["decoding","discard"],
-                       ["scan parameter ID","Errors,[N]"])
-        #########
+            plot_scat_stack(scanid,
+                           [dec,dis],
+                           clean_filename+"_DecDiscErrors",
+                           ["decoding","discard"],
+                           ["scan parameter ID","Errors,[N]"])
+            #########
+   
+            #ploth2d(np.asarray(scanid), np.asarray(rx_fifo),clean_filename+"-fifo-size") 
+            #plotHist(rx_fifo, 
+            #         41, 
+            #         1040, 
+            #         1080,
+            #         1,
+            #         "RX_fifo_size", 
+            #         "RX FIFO SIZE", 
+            #         ["DAC", "Nentries"],
+            #         clean_filename+"-fifo-size")        
 
-        plot_scat(scanid,
-                  datalen,
-                  clean_filename+"_DataLength-vs-DAC",
-                  "Data length",
-                  ["scan parmeter ID","Data length"])
+            plot_scat(unq_dac,
+                          avg_fifo,
+                          "TPX3 RX FIFO Size vs Threshold DAC",
+                          clean_filename+"_DAC_vs_rx_fifo_size",
+                          "average fifo size",
+                          ["DAC","TPX3 RX fifo size"])
+    
+            plot_scat(unq_dac,
+                          avg_hits,
+                          "Avg. Hitrate vs Threshold DAC",
+                          clean_filename+"_DAC_vs_hitrate",
+                          "average hitrate Hz",
+                          ["DAC","len(data)/2/t_readout"])
 
-        print(len(tstamp_0))
-        print(len(tstamp_end))
-        print(len(scanid))
+            plot_scat(scanid,
+                      datalen,
+                      "Data Length vs Threshold DAC",
+                      clean_filename+"_DataLength-vs-DAC",
+                      "Data length",
+                      ["scan parmeter ID","Data length"])
 
-        plot_scat_stack(scanid,
-                        [tstamp_0,tstamp_end],
-                        clean_filename+"_timestamps",
-                        ["stamp_start","stamp_end"],
-                        ["scanid","t_stamps"])
+            print(len(tstamp_0))
+            print(len(tstamp_end))
+            print(len(scanid))
 
-        if("DataTake" in filename):
+            plot_scat_stack(scanid,
+                            [tstamp_0,tstamp_end],
+                            clean_filename+"_timestamps",
+                            ["stamp_start","stamp_end"],
+                            ["scanid","t_stamps"])
+
+        else:
             #plot_scat(idx_start,
             #plot_scat(x,#tstamp_0,
             plot_scat(tstamp_0,
+                      rx_fifo,
+                      "timestamp vs RX fifo size",
+                      clean_filename+"_tstamp_vs_rx_fifo_size",
+                      "RX FIFO size",
+                      ["timestamp","RX fifo size"])
+
+            plot_scat(tstamp_0,
                       datalen,
+                      "timestamp vs data length",
                       clean_filename+"_DataLength-vs-iterationIndex",
-                      "len(Data)",
-                      ["Start Index","Data length"])
+                      "rate [Hz]",
+                      ["timestamp","Hits per second"])
+
+            #plot_scat(tstamp_0,
+           #           avg_hits,
+           #           "Avg. Hitrate vs Timestamp",
+           #           clean_filename+"_hitrate",
+           #           "average hitrate Hz",
+           #           ["timestamp","len(data)/2/t_readout"])
 
             #plot_scat(idx_start,
             #plot_scat(x,#tstamp_0,
             plot_scat(tstamp_0,
                       dec,
+                      "decoding errors vs timestamp",
                       clean_filename+"_DecodingErr-vs-Timestamp",
                       "Decoding Err.",
-                      ["Start Index","Decoding Errors [N]"])
+                      ["timestamp","Decoding Errors [N]"])
 
             plot_scat(tstamp_0,
                       dis,
+                      "discard errors vs timestamp",
                       clean_filename+"_DiscardErr-vs-Timestamp",
                       "Discard Err.",
-                      ["Start Index","Discard Errors [N]"])
+                      ["timestamp","Discard Errors [N]"])
+
+            plot_scat(idx_start,
+                      tstamp_0,
+                      "iteration vs timestamp",
+                      clean_filename+"_idx_vs_tstamp",
+                      "timestamp",
+                      ["Start Index","timestamp"])
 
 
      elif(option=="rdata"):
