@@ -6,6 +6,7 @@ import h5py
 import numpy as np
 #import pandas as pd
 import tables as tb
+from time import sleep
 #import matplotlib
 #matplotlib.rcParams['text.usetex'] = True
 import matplotlib.pyplot as plt 
@@ -106,6 +107,7 @@ def getAvgList(unique_list, data_list):
     # where val[0] is data to sort and val[1] the unique ids
 
     avg_list = []
+    total_list = []
     accum = 0
     nentries = 0
    
@@ -121,19 +123,21 @@ def getAvgList(unique_list, data_list):
             else:
                continue
         avg = 0
+        total_list.append(accum)
         try:
             avg = float(accum)/float(nentries)
+            
         except ZeroDivisionError:
-            print("[ERROR] tried to divide {} by {} for {}".format(accum, nentries, unq))
+            print("[ERROR] tried to divide {} by {} for id={}".format(accum, nentries, unq))
             avg = 0
 
-        print("avg = {}, accum = {}, nentries = {}".format(avg, accum, nentries))
+        #print("avg = {}, accum = {}, nentries = {}".format(avg, accum, nentries))
         avg_list.append(avg)
 
         nentries = 0
         accum = 0
 
-    return avg_list
+    return avg_list, total_list
 
 
 def fillArray(inputData, data_index):
@@ -144,11 +148,8 @@ def fillArray(inputData, data_index):
     for i in range(0,len(inputData)):
        for j in range(len(inputData[i])):
            if(j == data_index):
-              #np.put(dataArray, inputData[i][j], pos)
               dataList.append(inputData[i][j])
               pos+=1
-              #if(i<15):
-              #    print("put {} from {}".format(inputData[i][j],inputData[i]))
            else:
               continue
     numArray = np.asarray(dataList)
@@ -161,7 +162,6 @@ def plot_scat(xdata, ydata, title, plotname, label, axisnames):
     fig = plt.figure()
     ax1 = fig.add_subplot(111)
     ax1.scatter(xdata,ydata, s=10,c='b',marker="s",label=label)
-    #plt.legend(loc='upper center')
     plt.legend()
     if(max(ydata)>5000):
        ax1.set_yscale("log")
@@ -176,27 +176,7 @@ def plot_scat(xdata, ydata, title, plotname, label, axisnames):
        ax1.set_xlim(min(xdata[1:len(xdata)]),max(xdata))
     elif("iteration" and "timestamp" in title):
        avgy = sum(ydata)/len(ydata)
-       #ax1.set_ylim(min(ydata[1:len(ydata)])-stat.stdev(ydata,avgy),max(ydata[1:len(ydata)])+stat.stdev(ydata,avgy))
        ax1.set_ylim(min(ydata[1:len(ydata)])*0.999,max(ydata)*1.001)
-
-       #print(len(xdata))
-       #print(xdata[1])
-       #print(xdata[0:32])
-       #print(xdata[1:33])
-    
-       #print(sum(xdata))
-       #print(len(xdata))
-       #print(sum(xdata)/len(xdata))
-       #
-
-       #list_xstdev = stat.stdev(xdata,sum(xdata)/len(xdata))
-       #list_ystdev = stat.stdev(ydata,sum(ydata)/len(ydata))        
-       #if(list_ystdev>0):
-       #    print("stdev(y)={}".format(list_xstdev))
-       #    ax1.set_ylim(min(ydata[1:len(ydata)])-list_ystdev,max(ydata)+list_ystdev)
-       #if(list_xstdev>0):
-       #    print("stdev(x)={}".format(list_ystdev))
-       #    ax1.set_xlim(min(ydata[1:len(xdata)])-list_xstdev,max(xdata)+list_xstdev)
        ax1.set_yscale('linear')
        ax1.set_xscale('linear')
     else: 
@@ -208,27 +188,14 @@ def plot_scat(xdata, ydata, title, plotname, label, axisnames):
 def plot_scat_stack(xdata, ydatalist, plotname, lablist, axisnames):
 
     nUniqueDACs = set(xdata)
-    #print("OLO:{}".format(nUnique))
-    #print("OLO:{}".format(len(nUnique)))
-    #ntrials = len(ydatalist[1])/len(nUnique)
-
-
-    #have_dec = 0
-    #have_disc = 0
-    #if("Errors" in plotname):
-    #    print("SUKA! {}".format(plotname))
-    #    have_dec = getFirstErrorPos(xdata, ydatalist[0], "dec")
-    #    have_disc = getFirstErrorPos(xdata, ydatalist[1], "disc")
            
     if(len(ydatalist)<6):
         fig = plt.figure()
-        #plt.rcParams.update({"text.usetex":True})
         ax1 = fig.add_subplot(111)
         cnt = 0
         clist = ['r','g','b','y','m']
         markList = ['+','x','o','v','D']
         for ydata in ydatalist:
-           #ax1.scatter(xdata,ydata, s=10, c=clist[cnt],marker='.',label=lablist[cnt])
            ax1.scatter(xdata,ydata, s=10, c=clist[cnt],marker=markList[cnt],label=lablist[cnt])
            cnt+=1
         if max(ydatalist[0]) > 5000:
@@ -237,28 +204,10 @@ def plot_scat_stack(xdata, ydatalist, plotname, lablist, axisnames):
             ax1.set_xscale("log")
         ax1.set_xlabel(axisnames[0])
         ax1.set_ylabel(axisnames[1])
-        #ax1.set_ylim(-1000,2100)
-        #if("timestamps" in plotname):
-        #    ax1.set_ylim([0,20])
-
-        #ax1.text(0.1,0.8,'YIPEEKAYEY \nfornicator of \nthy motherhood!',transform=ax1.transAxes)
-        #ax1.axvline(x = 1275, 
-        #           ymin = -250,
-        #           ymax = 250) 
-        #           #colors = 'magenta', 
-        #           #label = 'more than 1RX is full')
         ax1.grid(which='major', color='grey', linestyle='-', linewidth=0.5)
         ax1.grid(which='minor', color='grey', linestyle='-', linewidth=0.125)
         ax1.minorticks_on()
 
-        #if(axisnames[1]=="Errors,[N]"):
-        #if("Errors" in plotname):
-        #    plt.axvline(x = xdata[have_disc], 
-        #                color='blue',
-        #                label="N_discard>100 @ {} DAC".format(xdata[have_disc]))
-        #    plt.axvline(x = xdata[have_dec], 
-        #                color='grey', 
-        #                label="N_decode>100 @ {} DAC".format(xdata[have_dec]))
         plt.legend(loc='upper left')
         ax1.plot()
         fig.savefig(plotname+'.png', dpi=300)
@@ -313,15 +262,10 @@ def plotHist(xlist, nbins, minrange, maxrange, transparency, label, title, axisl
 
 ######### funcs end here! ###########
 
-#parser = argparse.ArgumentParser(description="argument parser")
-
 filename = str(sys.argv[1])
 option = str(sys.argv[2])
 
 clean_filename = removePath(filename)
-
-
-#runtype = getRunType(filename)
 
 with tb.open_file(filename, 'r') as f:
 
@@ -355,12 +299,18 @@ with tb.open_file(filename, 'r') as f:
            print(dacs[i])
      elif(option=="mdata"):
         mdata = f.root.meta_data[:].T 
+        scurves = None
+        if("ThresholdScan" in filename):
+            scurves = f.root.interpreted.HistSCurve[:].T
+            print("found scurve data - {}, {}".format(type(scurves), scurves.shape))
+            print(scurves.shape[1])
+            #sleep(2)
         print(len(mdata))
         for i in range(0,9):
            print(mdata[i])
 
 
-        scanid, idx_start, x, dec, dis, datalen, tstamp_0, tstamp_end, rx_fifo = ([] for i in range(9))
+        scanid, idx_start, idx_stop, dec, dis, datalen, tstamp_0, tstamp_end, rx_fifo = ([] for i in range(9))
 
         dac_n_fifo_comb = []
         dac_n_hits = []
@@ -378,11 +328,20 @@ with tb.open_file(filename, 'r') as f:
 
         n_chunks = 0
 
-        t_interval = 0.05 #s
+        #t_interval = 0.05 #s
+        t_interval = 2 #s
 
-        for i in range(0,len(mdata)): 
+        scurvex = []
+        scurvey = []
+
+        if(scurves is not None):
+            for i in range(0,10):
+                print(scurves[i][1])
+        
+        #sleep(2)
+        for i in range(0,len(mdata)):
            idx_start.append(mdata[i][0])
-           x.append(mdata[i][1])
+           idx_stop.append(mdata[i][1])
            dec.append(mdata[i][7])
            if("DataTake" in filename):
                dis.append(mdata[i][6])
@@ -406,25 +365,50 @@ with tb.open_file(filename, 'r') as f:
 
            dac_n_fifo_comb.append([mdata[i][9], mdata[i][5]])
            dac_n_hits.append([mdata[i][2]/2/t_interval, mdata[i][5]])
-
+           #if(i==0):
+           #  t_interval = mdata[i][10]/1000
+           #  print("Found data interval to be : {} [s]".format(t_interval),flush=True)
            n_chunks+=1
            #############################
     
         unq_dac = []
         avg_fifo = None
         avg_hits = None
+        tot_unq_hits = None
 
         if("DataTake" not in filename):
-            unq_dac = getUniqueList(scanid)
-            print(len(unq_dac)) 
-            avg_fifo = getAvgList(unq_dac, dac_n_fifo_comb)
-            print(len(avg_fifo))
+    
+            if("NoiseScan" in filename):
+                unq_dac = getUniqueList(scanid)
+                print(len(unq_dac)) 
+                avg_fifo, _ = getAvgList(unq_dac, dac_n_fifo_comb)
+                print(len(avg_fifo))
 
-            avg_hits = getAvgList(unq_dac, dac_n_hits)
+                avg_hits, tot_unq_hits = getAvgList(unq_dac, dac_n_hits)
 
-            print(unq_dac[:10])
-            print(dac_n_fifo_comb[:10])
-            print(avg_fifo[:10])
+                print(unq_dac[:10])
+                print(dac_n_fifo_comb[:10])
+                print(avg_fifo[:10])
+
+                plot_scat(unq_dac, tot_unq_hits, "total hits per DAC",
+                            clean_filename+"-tothits-vs-DAC",
+                            "total hits",
+                            ["DAC","total hits"])
+
+                plot_scat(unq_dac,
+                          avg_fifo,
+                          "TPX3 RX FIFO Size vs Threshold DAC",
+                          clean_filename+"_DAC_vs_rx_fifo_size",
+                          "average fifo size",
+                          ["DAC","TPX3 RX fifo size"])
+    
+                plot_scat(unq_dac,
+                          avg_hits,
+                          "Avg. Hitrate vs Threshold DAC",
+                          clean_filename+"_DAC_vs_hitrate",
+                          "average hitrate Hz",
+                          ["DAC","len(data)/2/t_readout"])
+
 
             print("Number of chunks => {}".format(n_chunks))
 
@@ -435,6 +419,13 @@ with tb.open_file(filename, 'r') as f:
                            ["decoding","discard"],
                            ["scan parameter ID","Errors,[N]"])
             #########
+
+            plot_scat(scanid,
+                      idx_stop,
+                      "Total words recorded vs scan ID",
+                       clean_filename+"recordedData_vs_scanId",
+                       "total words recorded = {}".format(max(idx_stop)),
+                       ["scanID, [DAC]","scan_bas::handle_data::total_words, [N]"])
    
             #ploth2d(np.asarray(scanid), np.asarray(rx_fifo),clean_filename+"-fifo-size") 
             #plotHist(rx_fifo, 
@@ -446,21 +437,7 @@ with tb.open_file(filename, 'r') as f:
             #         "RX FIFO SIZE", 
             #         ["DAC", "Nentries"],
             #         clean_filename+"-fifo-size")        
-
-            plot_scat(unq_dac,
-                          avg_fifo,
-                          "TPX3 RX FIFO Size vs Threshold DAC",
-                          clean_filename+"_DAC_vs_rx_fifo_size",
-                          "average fifo size",
-                          ["DAC","TPX3 RX fifo size"])
-    
-            plot_scat(unq_dac,
-                          avg_hits,
-                          "Avg. Hitrate vs Threshold DAC",
-                          clean_filename+"_DAC_vs_hitrate",
-                          "average hitrate Hz",
-                          ["DAC","len(data)/2/t_readout"])
-
+            
             plot_scat(scanid,
                       datalen,
                       "Data Length vs Threshold DAC",

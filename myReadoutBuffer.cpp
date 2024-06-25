@@ -705,9 +705,9 @@ PyObject* fillPyArray(std::vector<uint32_t> &data){// works perfectly fine
     uint32_t* thisData = reinterpret_cast<uint32_t*>(
             PyArray_DATA(reinterpret_cast<PyArrayObject*>(pyarray)));
 
-    //std::copy(data.begin(),data.end(),thisData); 
+    std::copy(data.begin(),data.end(),thisData); 
     // to try:
-    memcpy(thisData, &data[0], datasize*sizeof(uint32_t)); // this is actually faster..
+    //memcpy(thisData, &data[0], datasize*sizeof(uint32_t)); // this is actually faster..
                                                            // but not sure why reads less...
     return pyarray;
 
@@ -745,6 +745,60 @@ PyObject* fillPyList(std::vector<long int> &stats){// maybe works
 //////////////////////////////////////////////////////////////////////////
 ///---------- working numpy C-API functions --------------------------
 //////////////////////////////////////////////////////////////////////////
+
+PyObject *get_interface(PyObject *fifo){
+
+   PyObject *intf = PyObject_GetAttrString(fifo, "_intf");
+   if(intf!=NULL){
+      scream("Got instance of <basil.TL.SiTcp._intf>");
+      //Py_DECREF(intf);
+   }else{
+      scream("[ERROR] get_interface -> intf is NULL!");
+   }
+   Py_DECREF(fifo);
+
+   return intf;
+
+}
+
+void checkTcpReadoutInt(PyObject *intf){
+
+    if(intf != NULL){  
+      PyObject *tcp_readout_interval = PyObject_GetAttrString(intf, "_tcp_readout_interval");
+      if(tcp_readout_interval!=NULL){
+        scream("Got instance of tcp readout interval");
+        //PyObject_Print(tcp_readout_interval, stdout,0);
+        std::cout<<"basil tcp readout interval is ["
+                <<PyObject_Print(tcp_readout_interval,stdout,0)<<"] s"<<std::flush;
+        Py_DECREF(tcp_readout_interval);
+      }else{
+        scream("Can not access: tcp readout interval");
+        Py_DECREF(tcp_readout_interval);
+      }
+
+    }else{
+        scream("Object \"intf\" is NULL!");
+    }
+
+}
+
+
+void set_tcp_interval(PyObject *interface, float time){
+
+    //PyObject *result = PyObject_SetAttrString(interface,
+    PyObject_SetAttrString(interface,
+                           "_tcp_readout_interval", 
+                           PyFloat_FromDouble((double)time));
+                                        //PyLong_FromLong(time));
+                                        //static_cast<PyFloatObject>(time));
+    //if(result!=NULL){
+    //  std::cout<<"[DEBUG] Setting \"_tcp_readout_interval\" to ["<<time<<" s]\n"<<std::flush;
+    //}else{
+    //  scream("[ERROR] Could not set \"_tcp_readout_interval\"!");
+    //}
+
+}
+
 
 //TODO: make a local version
 std::vector<long> readFifoStatusVector(PyObject *self, const char* option){       
@@ -1923,9 +1977,12 @@ PyObject* dequeDataOut(PyObject *self, float interval){/*works good*/
 //
 //---------------------------------------------------------------------------------
 PyObject* readoutToDeque(PyObject *self, PyObject *deque, float interval){
-///PyObject* readoutToDeque(PyObject *self, PyObject *deque, PyObject *RXLIST, float interval){
+//  PyObject *self -> python object of the fifo_readout class
+//  PyObject *deque -> python object of the fifo_readout._data_deque() 
+//  float interval -> readout interval in [ms]
 
   PyGILState_STATE gstate = PyGILState_Ensure();
+  //
   //PyEval_InitThreads(); // releases lock instantly maybe try later
   // together with PyEval_ReleaseLock() at the end
   // 2 lines below should be used in "main" function only, others 
@@ -1974,6 +2031,21 @@ PyObject* readoutToDeque(PyObject *self, PyObject *deque, float interval){
   std::cout<<"[debug] is \"calculate\" set? = "
            <<ansi_orange<<"["<<eba<<"]"<<ansi_reset<<"\n"<<std::flush;  
 
+  // testing access to basil.TL.SiTcp level
+  //Py_INCREF(fifo);
+  //PyObject *sitcp_intf = get_interface(fifo);
+  //Py_DECREF(fifo);
+
+  //Py_INCREF(sitcp_intf);
+  //checkTcpReadoutInt(sitcp_intf);
+  //Py_DECREF(sitcp_intf);
+
+  //set_tcp_interval(sitcp_intf, interval/1000);
+
+  //Py_INCREF(sitcp_intf);
+  //checkTcpReadoutInt(sitcp_intf);
+  //Py_DECREF(sitcp_intf);
+
   curr_time = get_float_time();
 
   //std::this_thread::sleep_for(std::chrono::seconds(1));
@@ -1992,7 +2064,7 @@ PyObject* readoutToDeque(PyObject *self, PyObject *deque, float interval){
     std::cout<<ansi_green<<"[DEBUG] (while) iteration starts"<<ansi_reset<<"\n"<<std::flush;
     // Allocating memory for output tuple
     // add a check if *tuple is NULL! release GIL if yes
-    PyObject *tuple = PyTuple_New(tpx3::NUM_DEQUE_TUPLE_ITEMS+1);
+    PyObject *tuple = PyTuple_New(tpx3::NUM_DEQUE_TUPLE_ITEMS+2);
     if(tuple==NULL){
         scream("Could not instantiate data tuple");
         PyGILState_Release(gstate); 
@@ -2015,12 +2087,12 @@ PyObject* readoutToDeque(PyObject *self, PyObject *deque, float interval){
 
     long int rx_fifo_size = 0;
         
-    Py_INCREF(chip);
-    rx_fifo_size = get_rx_fifo_size(chip);
-    Py_DECREF(chip);
+    //Py_INCREF(chip);
+    //rx_fifo_size = get_rx_fifo_size(chip);
+    //Py_DECREF(chip);
 
 
-    std::cout<<"RX fifo size = "<<ansi_red<<rx_fifo_size<<ansi_reset<<"\n"<<std::flush;
+    //std::cout<<"RX fifo size = "<<ansi_red<<rx_fifo_size<<ansi_reset<<"\n"<<std::flush;
 
     long int n_words = data.size();
 
@@ -2089,6 +2161,12 @@ PyObject* readoutToDeque(PyObject *self, PyObject *deque, float interval){
 
     //fprintf(stdout, ">>> [t5]=%.4f\n",timeDiff(iter_start,tick()));
     // assemble python tuple that will sent to fifo_readout::worker function
+    double t_readout;
+    if(glob_tries==0){
+       t_readout = interval;
+    }else{
+       t_readout = 0;
+    }
     //
     PyTuple_SetItem(tuple, 0, fifoData);
     PyTuple_SetItem(tuple, 1, PyFloat_FromDouble(last_time));
@@ -2096,6 +2174,7 @@ PyObject* readoutToDeque(PyObject *self, PyObject *deque, float interval){
     PyTuple_SetItem(tuple, 3, PyLong_FromLong(n_errdisc));
     PyTuple_SetItem(tuple, 4, PyLong_FromLong(n_errdec));
     PyTuple_SetItem(tuple, 5, PyLong_FromLong(rx_fifo_size));//temp addition
+    PyTuple_SetItem(tuple, 6, PyLong_FromLong(t_readout));//temp addition
 
     scream("[DEBUG] Assembled the tuple"); 
     // Add python tuple to deque:
@@ -2223,6 +2302,9 @@ PyObject* readoutToDeque(PyObject *self, PyObject *deque, float interval){
   Py_DECREF(lastTuple);
   append = NULL;
   lastTuple=NULL;
+
+  //Py_DECREF(sitcp_intf);
+  //sitcp_intf = NULL;
 
   std::cout<<"N global tries = "<<glob_tries<<"!\n"<<std::flush;
   //scream("[DEBUG] FIFO_SIZE @ END is:");
