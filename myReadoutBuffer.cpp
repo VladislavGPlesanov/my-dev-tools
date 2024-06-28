@@ -450,35 +450,47 @@ extern "C" {
     };
 
     void printVectUint(std::vector<uint32_t> vect){    
+        
+        int vsize = vect.size();
+        int iter_max = 64;
+        if(vsize<iter_max){
+            iter_max = (int)vsize;
+        }
+
         //std::cout<<"\nRECDATA:{"<<vect.data()<<"}\n"<<std::flush;
-        for(int i = 0; i < vect.size();i++){
-            //std::cout<<vect.at(i)<<"|"<<std::flush;
-            std::cout<<"|"<<convertToBinaryLittle(vect.at(i))<<"|\n"<<std::flush;
+        for(int i = 0; i < iter_max; i++){
+            std::cout<<vect.at(i)<<"|"<<std::flush;
+            //std::cout<<"|"<<convertToBinaryLittle(vect.at(i))<<"|\n"<<std::flush;
             //std::cout<<"|"<<convertToBinaryBig(vect.at(i))<<"|\n"<<std::flush;
-            //if(i !=0 && i % 8 == 0){
-            //  std::cout<<"\n"<<std::flush;
-            //  //scream("\n");
-            //}
-            if(i==63){
-                break;
+            if(i !=0 && i % 8 == 0){
+              std::cout<<"\n"<<std::flush;
             }
         }
-        std::cout<<"and "<<vect.size()-64<<" more\n"<<std::flush;
+        int items_left = 0;
+        if(vsize >= iter_max){
+            items_left = vsize - iter_max;
+        }
+        std::cout<<" and "<<items_left<<" more\n"<<std::flush;
     }
 
     void printReverseVectUint(std::vector<uint32_t> vect){    
 
-        //for(int i = vect.size()-1; i > 0; i--){
-        for(int i = vect.size()-64; i<vect.size(); i++){
-            std::cout<<vect.at(i)<<"|"<<std::flush;
-            if(i !=vect.size()-64 && i % 8 == 0){
-              std::cout<<"\n"<<std::flush;
-            }
-            if(i==vect.size()-1){
-                break;
+        int vsize = vect.size();
+        int iter_max = 64;
+
+        if(vsize >= iter_max*2){
+
+            for(int i = vsize-iter_max; i<vsize; i++){
+                std::cout<<vect.at(i)<<"|"<<std::flush;
+                if(i !=vsize-iter_max && i % 8 == 0){
+                  std::cout<<"\n"<<std::flush;
+                }
+                //if(i==vect.size()-1){
+                //    break;
+                //}
             }
         }
-        std::cout<<"and "<<vect.size()-64<<" more\n"<<std::flush;
+        //std::cout<<"and "<<vect.size()-64<<" more\n"<<std::flush;
     }
 
     void checkIfObjNull(PyObject *obj, std::string objname){
@@ -1155,41 +1167,85 @@ float getNoDataTimeout(PyObject *self){
 }
 
 
-bool flagStopReadout(PyObject *self){
-
-    scream("INSIDE [flagStopReadout]");
+bool local_flagStopReadout(PyObject *self) {
+    //scream("INSIDE [flagStopReadout]");
     PyObject *stop_readout = PyObject_GetAttrString(self, "stop_readout");
-    PyObject_Print(stop_readout,stdout,0);
-    std::cout<<"INSIDE, check with PyObjecIsTrue="<<PyObject_IsTrue(stop_readout)<<"\n"<<std::flush;
-    scream("");
-    if(stop_readout!=NULL){
-        scream("[DEBUG] self.stop_readout EXISTS");
-        PyObject *is_set = PyObject_GetAttrString(stop_readout, "is_set");
-        PyObject_Print(is_set,stdout,0);
-        scream("");
-        if(is_set!=NULL){
-            std::cout<<ansi_red<<"\n\t[DEBUG]->[self.stop_readout.is_set()]="
-                     <<PyObject_IsTrue(is_set)<<ansi_reset<<"\n"<<std::flush;
-            if(PyObject_IsTrue(is_set)){
-                scream("is_set=[TRUE]");  
-                return true;
-            }else{
-                scream("is_set=[FALSE]");  
+    PyObject_Print(stop_readout, stdout, 0);
+    //std::cout << "INSIDE, check with PyObjecIsTrue=" << PyObject_IsTrue(stop_readout) << "\n" << std::flush;
+    //scream("");
+    
+    if (stop_readout != NULL) {
+        //scream("[DEBUG] self.stop_readout EXISTS");
+        PyObject *is_set_method = PyObject_GetAttrString(stop_readout, "is_set");
+        if (is_set_method != NULL) {
+            PyObject *is_set_result = PyObject_CallObject(is_set_method, NULL);
+            if (is_set_result != NULL) {
+                //std::cout << ansi_red << "\n\t[DEBUG]->[self.stop_readout.is_set()]=" << PyObject_IsTrue(is_set_result) << ansi_reset << "\n" << std::flush;
+                if (PyObject_IsTrue(is_set_result)) {
+                    scream("self.stop_readout.is_set=[TRUE]");
+                    Py_DECREF(is_set_result);
+                    Py_DECREF(is_set_method);
+                    Py_DECREF(stop_readout);
+                    return true;
+                } else {
+                    scream("self.stop_readout.is_set=[FALSE]");
+                    Py_DECREF(is_set_result);
+                    Py_DECREF(is_set_method);
+                    Py_DECREF(stop_readout);
+                    return false;
+                }
+            } else {
+                scream("[DEBUG] self.stop_readout.is_set() call failed");
+                Py_DECREF(is_set_method);
+                Py_DECREF(stop_readout);
                 return false;
             }
-        }else{
-            scream("[DEBUG] self.stop_readout.is_set IS NULL");
+        } else {
+            scream("[DEBUG] self.stop_readout.is_set method is NULL");
+            Py_DECREF(stop_readout);
             return false;
-        } 
-        Py_DECREF(is_set);
-    }else{
+        }
+    } else {
         scream("[DEBUG] self.stop_readout IS NULL");
         return false;
     }
-    Py_DECREF(stop_readout);
-    return false;
-
 }
+///////////////////////
+//bool flagStopReadout(PyObject *self){
+//
+//    scream("INSIDE [flagStopReadout]");
+//    PyObject *stop_readout = PyObject_GetAttrString(self, "stop_readout");
+//    PyObject_Print(stop_readout,stdout,0);
+//    std::cout<<"INSIDE, check with PyObjecIsTrue="<<PyObject_IsTrue(stop_readout)<<"\n"<<std::flush;
+//    scream("");
+//    if(stop_readout!=NULL){
+//        scream("[DEBUG] self.stop_readout EXISTS");
+//        PyObject *is_set = PyObject_GetAttrString(stop_readout, "is_set");
+//        PyObject_Print(is_set,stdout,0);
+//        scream("");
+//        if(is_set!=NULL){
+//            std::cout<<ansi_red<<"\n\t[DEBUG]->[self.stop_readout.is_set()]="
+//                     <<PyObject_IsTrue(is_set)<<ansi_reset<<"\n"<<std::flush;
+//            if(PyObject_IsTrue(is_set)){
+//                scream("is_set=[TRUE]");  
+//                return true;
+//            }else{
+//                scream("is_set=[FALSE]");  
+//                return false;
+//            }
+//        }else{
+//            scream("[DEBUG] self.stop_readout.is_set IS NULL");
+//            return false;
+//        } 
+//        Py_DECREF(is_set);
+//    }else{
+//        scream("[DEBUG] self.stop_readout IS NULL");
+//        return false;
+//    }
+//    Py_DECREF(stop_readout);
+//    return false;
+//
+//}
 
 void checkStopReadout(PyObject *self){
 
@@ -1430,12 +1486,12 @@ std::vector<uint32_t> local_getFifoData(PyObject *chipFifo, float interval){
     std::cout<<"avg WPR ="<<fifo_data.size()/cnt<<"\n"<<std::flush;
     std::cout<<"loop time="<<tdiff<<"[ms]\n"<<std::flush;
    
-    //if(fifo_data.size()>0){ 
-    //  scream("first 64 words of data in \"local_getFifoData\":");
-    //  printVectUint(fifo_data);
-    //  scream("last 64 words of data in \"local_getFifoData\":");
-    //  printReverseVectUint(fifo_data);
-    //}
+    if(fifo_data.size()>0){ 
+      scream("first 64 words of data in \"local_getFifoData\":");
+      printVectUint(fifo_data);
+      scream("last 64 words of data in \"local_getFifoData\":");
+      printReverseVectUint(fifo_data);
+    }
 
     PyGILState_Release(gstate);  //REENABLE THIS LATER!
     return fifo_data;
@@ -2022,7 +2078,7 @@ PyObject* readoutToDeque(PyObject *self, PyObject *deque, float interval){
   noDataTimeout = getNoDataTimeout(self);
   Py_DECREF(self);
 
-  std::cout<<"IS STOP_READOUT SET = ["<<flagStopReadout<<"]\n"<<std::flush;
+  //std::cout<<"IS STOP_READOUT SET = ["<<flagStopReadout(self)<<"]\n"<<std::flush;
   
   Py_INCREF(self);
   bool eba = checkSelfCalculate(self);
@@ -2255,7 +2311,8 @@ PyObject* readoutToDeque(PyObject *self, PyObject *deque, float interval){
     //
     bool shutterDown = shutter_now==0 && prev_shutter==1 ? 1 : 0;
   
-    if(shutterDown){
+    //if(shutterDown){
+    if(local_flagStopReadout(self)){
        std::string str = "\n\n_________________SHUTTER_DOWN->BREAKING_LOOP_!________________\n\n";
        std::cout<<str<<std::flush;
        data.clear();

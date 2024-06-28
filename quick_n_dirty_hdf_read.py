@@ -52,6 +52,69 @@ def getRunType(string):
     run_file = splitSlash[len(splitSlash)-1].split('_')
     return run_file[0] 
 
+def getDerivativeNonZero(xlist, ylist):
+    if(len(xlist) != len(ylist)):
+        print("x and y lists are different lengths {} and {}".format(len(xlist), len(ylist)))
+        return -1
+
+    posDiscard = True
+    if(max(ylist) == 0 and min(ylist) < 0):
+        posDiscard = False
+        print("discard errors are positive numbers")
+
+    dxdy1, dxdy2, dxdy3 = None, None, None
+    kink = None
+
+    if(posDiscard):
+       for i in range(0,len(xlist)):
+            if(i==0 or i%4==0):
+                dx1 = xlist[i+1] - xlist[i]
+                dx2 = xlist[i+2] - xlist[i+1]
+                dx3 = xlist[i+3] - xlist[i+2]
+                
+                dy1 = ylist[i+1] - ylist[i]
+                dy2 = ylist[i+2] - ylist[i+1]
+                dy3 = ylist[i+3] - ylist[i+2]
+
+                try:    
+                    dxdy1 = dy1/dx1
+                except ZeroDivisionError:
+                    dxdy1 = 0
+                try:
+                    dxdy2 = dy2/dx2
+                except ZeroDivisionError:
+                    dxdy2 = 0
+                try:
+                    dxdy3 = dy3/dx3
+                except ZeroDivisionError:
+                    dxdy3 = 0
+
+
+                print("[{}]=x[{},{},{},{}],y[{},{},{},{}],dxdy[{},{},{}]\n".format(i,
+                                xlist[i],
+                                xlist[i+1],
+                                xlist[i+2],
+                                xlist[i+3],
+                                ylist[i],
+                                ylist[i+1],
+                                ylist[i+2],
+                                ylist[i+3],
+                                dxdy1,
+                                dxdy2,
+                                dxdy3
+                                ),flush=True)
+
+                if(dxdy1 > 0 and dxdy2 > 0 and dxdy3 > 0):
+                    print("found a kink!")
+                    prev_point_dxdy = (xlist[i]-xlist[i-1])/(ylist[i]-ylist[i-1])
+                    if(prev_point_dxdy > 0):
+                        print("dxdy for i-1 is also >0")
+                        kink = i-1
+                    else:
+                        kink = i
+                    break
+    return kink      
+
 
 def getFirstErrorPos(scanIDList, discList, option):
     
@@ -188,20 +251,30 @@ def plot_scat(xdata, ydata, title, plotname, label, axisnames):
 def plot_scat_stack(xdata, ydatalist, plotname, lablist, axisnames):
 
     nUniqueDACs = set(xdata)
-           
+
     if(len(ydatalist)<6):
         fig = plt.figure()
         ax1 = fig.add_subplot(111)
         cnt = 0
         clist = ['r','g','b','y','m']
+        clist_rate = [(0.0,0.0,1.0),(0.12,0.8,0.0)]
         markList = ['+','x','o','v','D']
         for ydata in ydatalist:
-           ax1.scatter(xdata,ydata, s=10, c=clist[cnt],marker=markList[cnt],label=lablist[cnt])
+           if("-rate-vs-discardErr" in plotname):
+               ax1.scatter(xdata,ydata, s=10, c=clist_rate[cnt],marker=markList[cnt],label=lablist[cnt])
+           else:
+               ax1.scatter(xdata,ydata, s=10, c=clist[cnt],marker=markList[cnt],label=lablist[cnt])
+        
            cnt+=1
         if max(ydatalist[0]) > 5000:
             ax1.set_yscale("log")
         if max(xdata) > 5000:
             ax1.set_xscale("log")
+
+        if("-rate-vs-discardErr" in plotname):
+            kink = getDerivativeNonZero(xdata, ydatalist[1])        
+            ax1.axvline(xdata[kink], color='c',linestyle='--')    
+
         ax1.set_xlabel(axisnames[0])
         ax1.set_ylabel(axisnames[1])
         ax1.grid(which='major', color='grey', linestyle='-', linewidth=0.5)
@@ -246,7 +319,8 @@ def findNoisyPixels(nuArray, threshold):
     return badPixels
 
 def plotHist(xlist, nbins, minrange, maxrange, transparency, label, title, axislabel, plotname):
-    plt.figure(2,figsize=(10,10))
+    #plt.figure(2,figsize=(10,10))
+    plt.figure()
 
     counts, edges, bars = plt. hist(xlist, 
                                     bins=nbins, 
@@ -256,6 +330,7 @@ def plotHist(xlist, nbins, minrange, maxrange, transparency, label, title, axisl
     plt.title(title)
     plt.xlabel(axislabel[0])
     plt.ylabel(axislabel[1])
+    plt.yscale("log")
     plt.grid(True)
     plt.savefig(plotname+"-hist.png")
  
@@ -306,14 +381,15 @@ with tb.open_file(filename, 'r') as f:
             print(scurves.shape[1])
             #sleep(2)
         print(len(mdata))
-        for i in range(0,9):
-           print(mdata[i])
+        for i in range(0,20):
+           print("DL={},\tscanParID={}".format(mdata[i][2],mdata[i][5]))
 
 
         scanid, idx_start, idx_stop, dec, dis, datalen, tstamp_0, tstamp_end, rx_fifo = ([] for i in range(9))
 
         dac_n_fifo_comb = []
         dac_n_hits = []
+        dac_n_discard = []
 
         testcnt = 0
 
@@ -363,7 +439,8 @@ with tb.open_file(filename, 'r') as f:
            scanid.append(mdata[i][5])
            rx_fifo.append(mdata[i][9])
 
-           dac_n_fifo_comb.append([mdata[i][9], mdata[i][5]])
+           dac_n_discard.append([mdata[i][6], mdata[i][5]])
+           #dac_n_fifo_comb.append([mdata[i][9], mdata[i][5]])
            dac_n_hits.append([mdata[i][2]/2/t_interval, mdata[i][5]])
            #if(i==0):
            #  t_interval = mdata[i][10]/1000
@@ -372,35 +449,44 @@ with tb.open_file(filename, 'r') as f:
            #############################
     
         unq_dac = []
-        avg_fifo = None
+        #avg_fifo = None
         avg_hits = None
+        avg_discard = None
         tot_unq_hits = None
+
+        mindatalen = min(datalen)
+        maxdatalen = max(datalen)
 
         if("DataTake" not in filename):
     
             if("NoiseScan" in filename):
                 unq_dac = getUniqueList(scanid)
                 print(len(unq_dac)) 
-                avg_fifo, _ = getAvgList(unq_dac, dac_n_fifo_comb)
-                print(len(avg_fifo))
+                #avg_fifo, _ = getAvgList(unq_dac, dac_n_fifo_comb)
+                #print(len(avg_fifo))
 
+                print("Obtaining average n hits")
                 avg_hits, tot_unq_hits = getAvgList(unq_dac, dac_n_hits)
 
-                print(unq_dac[:10])
-                print(dac_n_fifo_comb[:10])
-                print(avg_fifo[:10])
+                print("Obtaining average n discard")
+                avg_discard, _ = getAvgList(unq_dac, dac_n_discard)                
 
+                print(unq_dac[:10])
+                #print(dac_n_fifo_comb[:10])
+                #print(avg_fifo[:10])
+
+                print("Plotting")
                 plot_scat(unq_dac, tot_unq_hits, "total hits per DAC",
                             clean_filename+"-tothits-vs-DAC",
                             "total hits",
                             ["DAC","total hits"])
 
-                plot_scat(unq_dac,
-                          avg_fifo,
-                          "TPX3 RX FIFO Size vs Threshold DAC",
-                          clean_filename+"_DAC_vs_rx_fifo_size",
-                          "average fifo size",
-                          ["DAC","TPX3 RX fifo size"])
+                ##plot_scat(unq_dac,
+                #          avg_fifo,
+                #          "TPX3 RX FIFO Size vs Threshold DAC",
+                #          clean_filename+"_DAC_vs_rx_fifo_size",
+                #          "average fifo size",
+                #          ["DAC","TPX3 RX fifo size"])
     
                 plot_scat(unq_dac,
                           avg_hits,
@@ -409,6 +495,10 @@ with tb.open_file(filename, 'r') as f:
                           "average hitrate Hz",
                           ["DAC","len(data)/2/t_readout"])
 
+                plot_scat_stack(unq_dac,[avg_hits, avg_discard],
+                                clean_filename+"-rate-vs-discardErr",
+                                ["average hits","average discard errors"],
+                                ["DAC", "Average value [N_hits & N_error]"])
 
             print("Number of chunks => {}".format(n_chunks))
 
@@ -418,6 +508,7 @@ with tb.open_file(filename, 'r') as f:
                            clean_filename+"_DecDiscErrors",
                            ["decoding","discard"],
                            ["scan parameter ID","Errors,[N]"])
+
             #########
 
             plot_scat(scanid,
@@ -454,6 +545,17 @@ with tb.open_file(filename, 'r') as f:
                             clean_filename+"_timestamps",
                             ["stamp_start","stamp_end"],
                             ["scanid","t_stamps"])
+
+    
+            plotHist(datalen,
+                     100,
+                     mindatalen,
+                     maxdatalen,
+                     1,
+                     "data length per frame",
+                     "ebala",
+                     ["length","n counts"],
+                     clean_filename+"-hist-datalen")
 
         else:
             #plot_scat(idx_start,
