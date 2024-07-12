@@ -31,7 +31,8 @@ def monitor(pid, freq=0.5):
     while(True):
         try:
             cnt = 0
-            proclist = findProc("tpx3_gui")
+            #proclist = findProc("tpx3_gui")
+            proclist = findProc("tpx3_cli")
             outstr = ""
             filestring = ""
 

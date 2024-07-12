@@ -159,6 +159,22 @@ if __name__ == "__main__":
     print(bin(testhex))
     print(format(testhex,'#016b'))
 
+    myint = 89
+
+    print("myint is {}".format(myint))
+    print("myint div by 8 is {}".format(myint//8))
+    print("myint times divider {}".format((myint//8)*8))
+    print("myint remainder {}".format(myint - (myint//8)*8))
+
+    print("huyase:")
+    shitlist = ['1720100521', 'ESTAB', '', '', '', '', '', '56664', '', '', '0', '', '', '', '', '', '', '192.168.10.1:52464', '', '', '192.168.10.16:24', '', '', '', '', '', '', '', '', '','\n']
+    for item in shitlist:
+        try:
+            print("item={}[{}] > int(item)={}".format(item, type(item), int(item)))
+        except:
+            print("failed to do int({})".format(item))
+            pass
+
 #################################################################
     # Creating a dictionary with 5 arbitrary key/value pairs using ExtendedDataManagement
    # EM = ExtendedDataManagement()  

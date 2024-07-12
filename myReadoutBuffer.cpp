@@ -2097,6 +2097,7 @@ PyObject* readoutToDeque(PyObject *self, PyObject *deque, float interval){
   //Py_DECREF(sitcp_intf);
 
   //set_tcp_interval(sitcp_intf, interval/1000);
+  ////set_tcp_interval(sitcp_intf, 0.);
 
   //Py_INCREF(sitcp_intf);
   //checkTcpReadoutInt(sitcp_intf);
@@ -2143,12 +2144,12 @@ PyObject* readoutToDeque(PyObject *self, PyObject *deque, float interval){
 
     long int rx_fifo_size = 0;
         
-    //Py_INCREF(chip);
-    //rx_fifo_size = get_rx_fifo_size(chip);
-    //Py_DECREF(chip);
+    Py_INCREF(chip);
+    rx_fifo_size = get_rx_fifo_size(chip);
+    Py_DECREF(chip);
 
 
-    //std::cout<<"RX fifo size = "<<ansi_red<<rx_fifo_size<<ansi_reset<<"\n"<<std::flush;
+    std::cout<<"RX fifo size = "<<ansi_red<<rx_fifo_size<<ansi_reset<<"\n"<<std::flush;
 
     long int n_words = data.size();
 

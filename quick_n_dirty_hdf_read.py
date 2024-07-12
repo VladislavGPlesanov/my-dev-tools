@@ -12,7 +12,7 @@ from time import sleep
 import matplotlib.pyplot as plt 
 from collections import Counter
 import statistics as stat
-
+#from scipy import optimize as opt
 
 """
    Code loops through the HDF files in a quick and simple way.
@@ -62,58 +62,39 @@ def getDerivativeNonZero(xlist, ylist):
         posDiscard = False
         print("discard errors are positive numbers")
 
-    dxdy1, dxdy2, dxdy3 = None, None, None
+    plato_high = None
     kink = None
 
+    maxrange = len(xlist)//4*4
+    print("usable range = 0->{}".format(maxrange))
+
     if(posDiscard):
-       for i in range(0,len(xlist)):
-            if(i==0 or i%4==0):
-                dx1 = xlist[i+1] - xlist[i]
-                dx2 = xlist[i+2] - xlist[i+1]
-                dx3 = xlist[i+3] - xlist[i+2]
+        clist = ['r','g','b','y','m']
+        for i in range(0,maxrange):
+            print("y={} @ i=[{}]".format(ylist[i],i))
+            if(ylist[i]>0):
+                print("Found slope at i=[{}]".format(i))
+                kink = i        
+                break
+
+        # looking for high disc err plato
+        print("tryna' find start of plato ") 
+        for i in reversed(range(0,len(ylist))):
+            print("y={} @ i=[{}]".format(ylist[i],i))             
+            if(ylist[i]<2000):
+                print("found plato at i={}".format(plato_high))
+                plato_high = i+1
+                break
                 
-                dy1 = ylist[i+1] - ylist[i]
-                dy2 = ylist[i+2] - ylist[i+1]
-                dy3 = ylist[i+3] - ylist[i+2]
+    if(plato_high == None):
+        print("Could not find the plato")
+        plato_high = 0
 
-                try:    
-                    dxdy1 = dy1/dx1
-                except ZeroDivisionError:
-                    dxdy1 = 0
-                try:
-                    dxdy2 = dy2/dx2
-                except ZeroDivisionError:
-                    dxdy2 = 0
-                try:
-                    dxdy3 = dy3/dx3
-                except ZeroDivisionError:
-                    dxdy3 = 0
+    if(kink == None):
+        print("Could not find the place where parameters deviate")
+        kink = 0
 
-
-                print("[{}]=x[{},{},{},{}],y[{},{},{},{}],dxdy[{},{},{}]\n".format(i,
-                                xlist[i],
-                                xlist[i+1],
-                                xlist[i+2],
-                                xlist[i+3],
-                                ylist[i],
-                                ylist[i+1],
-                                ylist[i+2],
-                                ylist[i+3],
-                                dxdy1,
-                                dxdy2,
-                                dxdy3
-                                ),flush=True)
-
-                if(dxdy1 > 0 and dxdy2 > 0 and dxdy3 > 0):
-                    print("found a kink!")
-                    prev_point_dxdy = (xlist[i]-xlist[i-1])/(ylist[i]-ylist[i-1])
-                    if(prev_point_dxdy > 0):
-                        print("dxdy for i-1 is also >0")
-                        kink = i-1
-                    else:
-                        kink = i
-                    break
-    return kink      
+    return kink, plato_high
 
 
 def getFirstErrorPos(scanIDList, discList, option):
@@ -248,6 +229,15 @@ def plot_scat(xdata, ydata, title, plotname, label, axisnames):
     ax1.plot()
     fig.savefig(plotname+'.png')
 
+def fitPolyFunc(xdata,ydata,power):
+
+    fitfunc = np.poly1d(np.polyfit(xdata, ydata ,power))
+
+    print("Fit returns: {}".format(fitfunc))
+
+    return fitfunc
+
+
 def plot_scat_stack(xdata, ydatalist, plotname, lablist, axisnames):
 
     nUniqueDACs = set(xdata)
@@ -272,8 +262,13 @@ def plot_scat_stack(xdata, ydatalist, plotname, lablist, axisnames):
             ax1.set_xscale("log")
 
         if("-rate-vs-discardErr" in plotname):
-            kink = getDerivativeNonZero(xdata, ydatalist[1])        
-            ax1.axvline(xdata[kink], color='c',linestyle='--')    
+            kink, plato = getDerivativeNonZero(xdata, ydatalist[1])       
+            ax1.axvline(xdata[kink], color='c',linestyle='--')
+            ax1.scatter([],[],marker='',label=f'start @ {xdata[kink]}[DAC]')
+            #ax1.axvline(xdata[plato], color='y',linestyle='--')
+            #fitline = fitPolyFunc(xdata[kink:plato], ydatalist[1][kink:plato],2)
+            #ax1.plot(xdata[kink:plato], fitline(xdata[kink:plato]), color='r')
+
 
         ax1.set_xlabel(axisnames[0])
         ax1.set_ylabel(axisnames[1])
@@ -390,6 +385,7 @@ with tb.open_file(filename, 'r') as f:
         dac_n_fifo_comb = []
         dac_n_hits = []
         dac_n_discard = []
+        dac_n_bitrate = []
 
         testcnt = 0
 
@@ -427,7 +423,6 @@ with tb.open_file(filename, 'r') as f:
                datalen.append(mdata[i][2]/2/t_interval)
            else:
                datalen.append(mdata[i][2])
-           #n_hits.append(float(mdata[i][2])/2/t_interval)
            if("DataTake" in filename):
                time_s = np.float64(mdata[i][3])
                time_e = np.float64(mdata[i][4])
@@ -439,8 +434,11 @@ with tb.open_file(filename, 'r') as f:
            scanid.append(mdata[i][5])
            rx_fifo.append(mdata[i][9])
 
+           bitrate = mdata[i][2]*32/t_interval
+
+           dac_n_bitrate.append([bitrate, mdata[i][5]])
            dac_n_discard.append([mdata[i][6], mdata[i][5]])
-           #dac_n_fifo_comb.append([mdata[i][9], mdata[i][5]])
+           dac_n_fifo_comb.append([mdata[i][9], mdata[i][5]])
            dac_n_hits.append([mdata[i][2]/2/t_interval, mdata[i][5]])
            #if(i==0):
            #  t_interval = mdata[i][10]/1000
@@ -449,7 +447,7 @@ with tb.open_file(filename, 'r') as f:
            #############################
     
         unq_dac = []
-        #avg_fifo = None
+        avg_fifo = None
         avg_hits = None
         avg_discard = None
         tot_unq_hits = None
@@ -462,43 +460,51 @@ with tb.open_file(filename, 'r') as f:
             if("NoiseScan" in filename):
                 unq_dac = getUniqueList(scanid)
                 print(len(unq_dac)) 
-                #avg_fifo, _ = getAvgList(unq_dac, dac_n_fifo_comb)
-                #print(len(avg_fifo))
+                avg_fifo, _ = getAvgList(unq_dac, dac_n_fifo_comb)
+                print(len(avg_fifo))
 
                 print("Obtaining average n hits")
                 avg_hits, tot_unq_hits = getAvgList(unq_dac, dac_n_hits)
+                avg_bitrate, _= getAvgList(unq_dac, dac_n_bitrate)
 
                 print("Obtaining average n discard")
                 avg_discard, _ = getAvgList(unq_dac, dac_n_discard)                
 
                 print(unq_dac[:10])
-                #print(dac_n_fifo_comb[:10])
-                #print(avg_fifo[:10])
+                print(dac_n_fifo_comb[:10])
+                print(avg_fifo[:10])
 
                 print("Plotting")
-                plot_scat(unq_dac, tot_unq_hits, "total hits per DAC",
-                            clean_filename+"-tothits-vs-DAC",
-                            "total hits",
-                            ["DAC","total hits"])
-
-                ##plot_scat(unq_dac,
-                #          avg_fifo,
-                #          "TPX3 RX FIFO Size vs Threshold DAC",
-                #          clean_filename+"_DAC_vs_rx_fifo_size",
-                #          "average fifo size",
-                #          ["DAC","TPX3 RX fifo size"])
-    
-                plot_scat(unq_dac,
-                          avg_hits,
-                          "Avg. Hitrate vs Threshold DAC",
-                          clean_filename+"_DAC_vs_hitrate",
-                          "average hitrate Hz",
-                          ["DAC","len(data)/2/t_readout"])
 
                 plot_scat_stack(unq_dac,[avg_hits, avg_discard],
                                 clean_filename+"-rate-vs-discardErr",
                                 ["average hits","average discard errors"],
                                 ["DAC", "Average value [N_hits & N_error]"])
+
+                plot_scat(unq_dac, avg_bitrate, "Average bitrate vs Threshold DAC",
+                          clean_filename+"avg-bitrate",
+                          "len(datawords)*32bit/t_readout",
+                          ["Threshold DAC [cnt]","Bit rate [bits]"]
+                         )
+
+                plot_scat(unq_dac, tot_unq_hits, "total hits per DAC",
+                            clean_filename+"-tothits-vs-DAC",
+                            "total hits",
+                            ["DAC","total hits"])
+
+                plot_scat(unq_dac,
+                          avg_fifo,
+                          "TPX3 RX FIFO Size vs Threshold DAC",
+                          clean_filename+"_DAC_vs_rx_fifo_size",
+                          "average fifo size",
+                          ["DAC","TPX3 RX fifo size"])
+    
+                plot_scat(unq_dac,
+                          avg_hits,
+                          "Avg. Hitrate vs Threshold DAC",
+                          clean_filename+"_DAC_vs_hitrate",
+                          "average readout rate [bits]",
+                          ["DAC","len(data)\*32(bits)/t_readout"])
 
             print("Number of chunks => {}".format(n_chunks))
 
@@ -519,15 +525,15 @@ with tb.open_file(filename, 'r') as f:
                        ["scanID, [DAC]","scan_bas::handle_data::total_words, [N]"])
    
             #ploth2d(np.asarray(scanid), np.asarray(rx_fifo),clean_filename+"-fifo-size") 
-            #plotHist(rx_fifo, 
-            #         41, 
-            #         1040, 
-            #         1080,
-            #         1,
-            #         "RX_fifo_size", 
-            #         "RX FIFO SIZE", 
-            #         ["DAC", "Nentries"],
-            #         clean_filename+"-fifo-size")        
+            plotHist(rx_fifo, 
+                     41, 
+                     1040, 
+                     1080,
+                     1,
+                     "RX_fifo_size", 
+                     "RX FIFO SIZE", 
+                     ["DAC", "Nentries"],
+                     clean_filename+"-fifo-size")        
             
             plot_scat(scanid,
                       datalen,
