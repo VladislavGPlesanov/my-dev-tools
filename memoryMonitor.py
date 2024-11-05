@@ -19,7 +19,8 @@ def findProc(name):
             
     return pidlist
 
-def monitor(pid, freq=0.5):
+#def monitor(pid, freq=0.5, procname):
+def monitor(procname, freq=0.5):
 
     prev_mem = [0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0]
     date = dt.now()
@@ -32,7 +33,8 @@ def monitor(pid, freq=0.5):
         try:
             cnt = 0
             #proclist = findProc("tpx3_gui")
-            proclist = findProc("tpx3_cli")
+            proclist = findProc(procname)
+            #proclist = findProc("tpx3_cli")
             outstr = ""
             filestring = ""
 
@@ -76,12 +78,15 @@ def monitor(pid, freq=0.5):
                 ofile.close()
                 return
 
+
 if __name__ == '__main__':
     if(len(sys.argv)<2):
         print("usege: python3 <thisexe.py> <PID>")
         sys.exit(1)
-    pid = int(sys.argv[1])
-    monitor(pid)
+    #pid = int(sys.argv[1])
+    procname = sys.argv[1] 
+    monitor(procname)
+    #monitor(pid, procname)
     sys.exit(0)
 
 

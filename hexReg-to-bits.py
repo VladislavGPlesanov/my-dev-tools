@@ -1,4 +1,5 @@
 import sys
+import glob
 
 def hex_to_binary(hex_number):
     try:
@@ -32,6 +33,9 @@ def addSpaces(wordlist, maxlen):
         newlist.append(w+spaces)
     return newlist
 
+def getFilelist(dirpath, extension):
+
+    return glob.glob(str(dirpath)+"*mii-tool*."+str(extension))
 
 def getRegistersFromFile(infile):
     regs = []
@@ -173,16 +177,104 @@ if __name__ == "__main__":
     clgray = "\033[1;37m"
     cend = "\033[0m"
 
-    otype = sys.argv[1]
-    hex_input = sys.argv[2]
+    otype = sys.argv[1] # format of the input "num" => hex number, "file"=>txt file, "compare" = comparing multiple files 
+    #hex_input = sys.argv[2]
     hex_output = []
 
-    hex_input = getRegistersFromFile(sys.argv[2])
-    
-    print("got MII Regs")
-    print("hex_input is {}".format(hex_input))
+    hex_input_list = None
 
-    if(str(otype)=="num" or str(otype)=="file"): 
+    if(str(otype)=="compare"):
+        #flist = list(sys.argv[2:])
+        flist = getFilelist(sys.argv[2],"txt")
+        print(flist)
+        print("reading registers from {} files".format(len(flist)))
+        hex_input_list = []
+        for f in flist:
+            splitname = f.split('/')
+            hex_input_list.append([str(splitname[len(splitname)-1]), getRegistersFromFile(f)])
+        for l in hex_input_list:
+            print("file <<{}>> has registers:\n{}".format(l[0],l[1]))
+
+        status = []  
+        an_partner_ability = []        
+        an_adv = []
+        MS_control = []
+        MS_status = []
+        an_expansion = []
+
+        for file in hex_input_list:
+            for reg in range(0,31):
+                if(reg == 1): # control regs
+                    filename = file[0]
+                    hexnum = file[1][reg]
+                    binvalues = hex_to_binary(hexnum)
+                    status.append([filename,binvalues])
+                if(reg == 5): # link partner ability
+                    filename = file[0]
+                    hexnum = file[1][reg]
+                    binvalues = hex_to_binary(hexnum)
+                    an_partner_ability.append([filename,binvalues])
+                if(reg == 6): # AN extended
+                    filename = file[0]
+                    hexnum = file[1][reg]
+                    binvalues = hex_to_binary(hexnum)
+                    an_expansion.append([filename,binvalues])
+                if(reg == 4): # link AN andvrtisement
+                    filename = file[0]
+                    hexnum = file[1][reg]
+                    binvalues = hex_to_binary(hexnum)
+                    an_adv.append([filename,binvalues])
+                if(reg == 9): # master-slave ctrl
+                    filename = file[0]
+                    hexnum = file[1][reg]
+                    binvalues = hex_to_binary(hexnum)
+                    MS_control.append([filename,binvalues])
+                if(reg == 10): # master-slave stat
+                    filename = file[0]
+                    hexnum = file[1][reg]
+                    binvalues = hex_to_binary(hexnum)
+                    MS_status.append([filename,binvalues])
+
+        reglist = [status,an_adv,an_partner_ability,an_expansion, MS_control, MS_status]
+        namelist = ["status",
+                    "AN advertisement",
+                    "AN link partner abilty",
+                    "AN extension",
+                    "Master-Slave ctrl",
+                    "master-Slave stat"]
+
+        maxlen = 0;
+        for item in hex_input_list:
+            if(len(item[0])>=maxlen):
+                maxlen = len(item[0])
+
+        print("longest name: {}".format(maxlen))
+
+        cnt=0
+        for l in reglist:
+            print("REGISTER [{}]".format(namelist[cnt]))
+            for item in l:
+                plugname = item[0]
+                if(len(plugname)<maxlen):
+                    for i in range(0,maxlen - len(plugname)):
+                        plugname+=" "
+
+                if("glct" in item[0] or "wSFP" in item[0]):
+                    print("{}{}\t\t{}{}".format(cgreen,plugname,item[1],cend))
+                else:
+                    print("{}\t\t{}".format(plugname,item[1]))
+            print("\n")
+            cnt+=1
+        
+
+        del hex_input_list
+
+    elif(str(otype)=="num" or str(otype)=="file"): 
+
+        print("got MII Regs")
+        print("hex_input is {}".format(hex_input))
+        hex_input = getRegistersFromFile(sys.argv[2])
+
         if(str(otype)=="num"):
             binary_output = hex_to_binary(hex_input)
             if binary_output is not None:
@@ -235,92 +327,93 @@ bits_reg5 = ["PHY Link status",
              "Reserved(Always 1)"
             ]
 
-cnt0 = 0;
-baseStr = "[{}]={} : {}"
-tableStr1 = [];
-tableStr2 = [];
-topBit = 15
-
-#########################################
-#print("Control:")
-for i in hex_output[0]:
-    if(i==" "):
-       continue
-    if(cnt0<=11):
-        str1 = baseStr.format(topBit - cnt0, i, bits_reg0[cnt0])
-        tableStr1.append(str1)
-    else:
-        str1 = baseStr.format(topBit - cnt0, i, bits_reg0[len(bits_reg0)-1])
-        tableStr1.append(str1)
-    cnt0+=1
-#########################################
-cnt0=0
-# 0   1:9     10:11 12 13 14 15
-# |    |        |    |  |  |  |
-# 0 000000000  00    0  0  0  1
-#baseStr = "[{}]={} : {}"
-#print("AN Link-Partner base-Page Ability:")
-for i in hex_output[5]:
-    if(i==" "):
-       continue
-    if(cnt0<4):
-        str2 = baseStr.format(topBit - cnt0, i, bits_reg5[cnt0])
-        tableStr2.append(str2)
-    elif(cnt0==4 or cnt0==5):
-        str2 = baseStr.format(topBit - cnt0, i, bits_reg5[4])
-        tableStr2.append(str2)
-    elif(cnt0>=6 and cnt0<=14):
-        str2 = baseStr.format(topBit - cnt0, i, bits_reg5[5])
-        tableStr2.append(str2)
-    elif(cnt0>=15):
-        str2 = baseStr.format(topBit - cnt0, i, bits_reg5[6])
-        tableStr2.append(str2)
-    else:
-        str2 = baseStr.format(topBit - cnt0, i, "dummy")
-        tableStr2.append(str2)
-    cnt0+=1
-#########################################
-# adding spaces for formating
-
-maxwidth = getLongestWord(tableStr1)
-newTableStr1 = addSpaces(tableStr1, maxwidth)
-#print(maxwidth)
-#print("\n")
-#for h in tableStr1:
-#    print(len(h))
-#print("\n")
-#for h in newTableStr1:
-#    print(len(h))
-########################################
-cntr = 0
-print("\nCOMBINED")
-for l in newTableStr1:
-    if(cntr==0):
-        print("CONTROL \t\t\t\t\t AN Link-Partner base-Page Ability\n")
-    out = "{} \t\t\t {}".format(l,tableStr2[cntr])
-    print(out)
-    cntr+=1
-
-
-
-clearRegList = []
-r_cnt = 0
-for reg in hex_output:
-    tmp_reg = []
-    b_cnt = 0
-    for bit in reg:
-        if(bit != " "):
-            tmp_reg.append(bit)
-    clearRegList.append(tmp_reg)
-
-#for rg in clearRegList:
-#    print(rg)
-#
-tx_test_mode = {clearRegList[9][15],clearRegList[9][14]}
-MS_manual_config_fault = clearRegList[10][15] 
-MS_manual_config_resolved = clearRegList[10][14] 
-MS_local_receiver_stat = clearRegList[10][13] 
-MS_remote_receiver_stat = clearRegList[10][12]
+if(str(otype)=="num" or str(otype)=="file"): 
+    cnt0 = 0;
+    baseStr = "[{}]={} : {}"
+    tableStr1 = [];
+    tableStr2 = [];
+    topBit = 15
+    
+    #########################################
+    #print("Control:")
+    for i in hex_output[0]:
+        if(i==" "):
+           continue
+        if(cnt0<=11):
+            str1 = baseStr.format(topBit - cnt0, i, bits_reg0[cnt0])
+            tableStr1.append(str1)
+        else:
+            str1 = baseStr.format(topBit - cnt0, i, bits_reg0[len(bits_reg0)-1])
+            tableStr1.append(str1)
+        cnt0+=1
+    #########################################
+    cnt0=0
+    # 0   1:9     10:11 12 13 14 15
+    # |    |        |    |  |  |  |
+    # 0 000000000  00    0  0  0  1
+    #baseStr = "[{}]={} : {}"
+    #print("AN Link-Partner base-Page Ability:")
+    for i in hex_output[5]:
+        if(i==" "):
+           continue
+        if(cnt0<4):
+            str2 = baseStr.format(topBit - cnt0, i, bits_reg5[cnt0])
+            tableStr2.append(str2)
+        elif(cnt0==4 or cnt0==5):
+            str2 = baseStr.format(topBit - cnt0, i, bits_reg5[4])
+            tableStr2.append(str2)
+        elif(cnt0>=6 and cnt0<=14):
+            str2 = baseStr.format(topBit - cnt0, i, bits_reg5[5])
+            tableStr2.append(str2)
+        elif(cnt0>=15):
+            str2 = baseStr.format(topBit - cnt0, i, bits_reg5[6])
+            tableStr2.append(str2)
+        else:
+            str2 = baseStr.format(topBit - cnt0, i, "dummy")
+            tableStr2.append(str2)
+        cnt0+=1
+    #########################################
+    # adding spaces for formating
+    
+    maxwidth = getLongestWord(tableStr1)
+    newTableStr1 = addSpaces(tableStr1, maxwidth)
+    #print(maxwidth)
+    #print("\n")
+    #for h in tableStr1:
+    #    print(len(h))
+    #print("\n")
+    #for h in newTableStr1:
+    #    print(len(h))
+    ########################################
+    cntr = 0
+    print("\nCOMBINED")
+    for l in newTableStr1:
+        if(cntr==0):
+            print("CONTROL \t\t\t\t\t AN Link-Partner base-Page Ability\n")
+        out = "{} \t\t\t {}".format(l,tableStr2[cntr])
+        print(out)
+        cntr+=1
+    
+    
+    
+    clearRegList = []
+    r_cnt = 0
+    for reg in hex_output:
+        tmp_reg = []
+        b_cnt = 0
+        for bit in reg:
+            if(bit != " "):
+                tmp_reg.append(bit)
+        clearRegList.append(tmp_reg)
+    
+    #for rg in clearRegList:
+    #    print(rg)
+    #
+    tx_test_mode = {clearRegList[9][15],clearRegList[9][14]}
+    MS_manual_config_fault = clearRegList[10][15] 
+    MS_manual_config_resolved = clearRegList[10][14] 
+    MS_local_receiver_stat = clearRegList[10][13] 
+    MS_remote_receiver_stat = clearRegList[10][12]
 
 
    

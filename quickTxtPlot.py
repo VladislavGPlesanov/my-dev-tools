@@ -2,10 +2,10 @@ import numpy as np
 import sys
 import matplotlib.pyplot as plt
 
-
 infile = sys.argv[1]
 columns = sys.argv[2].split(',') #this shluld be comma sep. list
 separator = None
+plottype = None
 
 columns = list(columns)
 print(columns)
@@ -25,6 +25,12 @@ else:
     plotdesc = ["x","y","title"]
 xdata = []
 ll_ydata = [[] for i in range(0,len(columns)-1)]
+
+plottype = sys.argv[5]
+
+if(plottype == None):
+    print("sys.argv[5] has to be eihter 'plot' or 'hist'. Defaulting to 'plot' option")
+    plottype = 'plot'
 
 # TRYNA DETERMINE THE SEPARATOR TYPE
 ###################### 
