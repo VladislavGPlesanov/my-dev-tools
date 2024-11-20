@@ -2144,7 +2144,12 @@ with tb.open_file(filename, 'r') as f:
         for group in f.walk_groups("/"):
             if "interpreted" in str(group):
                print("FOUND INTERPRETED DATA GROUP!")
+            if("reconstruction" in str(group)):
+               print("FOUND RECONSTRUCTION DATA GROUP!")
+               if("Timepix" in str(group)):
+                    print("Found Timepix!")
             print(group)
+            #print(vars(group))
             print("======= Arrays in a group ===========")
             for array in f.list_nodes(group):
                 print(array) 
