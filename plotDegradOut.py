@@ -53,6 +53,8 @@ event_char = [ 0 for i in range(9)]
 print(event_char)
 # -------------------------------
 
+matrix = np.array((256,256), dtype=np.uint16)
+
 cnt = 0
 nEmpty = 0
 for f in file_list:
@@ -60,7 +62,6 @@ for f in file_list:
     fname = MU.removePath(str(f))
 
     evtNr = int(fname[16:21])
-    #print(f"this is event {evtNr}")    
      
     if(os.stat(f).st_size==0):
         l_empty.append(cnt)
@@ -74,10 +75,10 @@ for f in file_list:
 
     header_split = list(map(float, header.split()))
     this_event = header_split[0]
+    if(evtNr==1100):
+        print("EBLO!\n")
     event_char = list(map(add, event_char, header_split[3:]))
 
-    #if(cnt==10):
-    #exit(0)
     # Split the long line into individual numbers
     numbers = list(map(float, long_line.split()))
     
@@ -96,6 +97,10 @@ for f in file_list:
     #print("y={}, last 4={}".format(len(y), y[-4:]))
     #print("z={}, last 4={}".format(len(z), z[-4:]))
     #print("t={}, last 4={}".format(len(t), t[-4:]))
+
+    if(evtNr==14971):
+        for i,j in zip(x,y):
+            matrix[i,j] += 1
 
     #print(f"Event {evtNr} from filename")
 
@@ -152,5 +157,6 @@ mp.simpleHist(y_pe_good, 51, np.nanmin(y_pe_good)*0.9, np.nanmax(y_pe_good)*1.1,
 mp.simpleHist(z_pe_good, 51, np.nanmin(z_pe_good)*0.9, np.nanmax(z_pe_good)*1.1, ["Prim-electron-z","z","N"], f"{prefix}_good-PE-z", ylog=True)
 mp.simpleHist(t_pe_good, 51, np.nanmin(t_pe_good)*0.9, np.nanmax(t_pe_good)*1.1, ["Prim-electron-t","t","N"], f"{prefix}_good-PE-t", ylog=True)
 
+mp.pixelMap(matrix,"Degrad-Event-14971")
 
 

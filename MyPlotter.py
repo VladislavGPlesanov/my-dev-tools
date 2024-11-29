@@ -73,6 +73,65 @@ class myPlotter:
         ax1.plot()
         fig.savefig(plotname+'.png')
 
+
+    def simple2Dhist(self, xdata,ydata, pltorange, plotname):
+
+        fig = plt.figure()
+        ax1 = fig.add_subplot(111)
+        plt.hist2d(xdata, 
+                   ydata, 
+                   range= np.array([plotrange[0],plotrange[1]]),
+                   bins=100)
+                   #cmap="Greens")
+        ax1.plot()
+        fig.savefig(plotname+".png")
+
+
+    def plot_2dim(self, nuarray, parlist, title, axlabels, plotname):
+    
+        x_bins = np.arange(min(parlist) - 1, max(parlist) + 2)
+        parcount = nuarray.shape[0]
+        maxocc = 0
+        
+    
+        for par in range(parcount):
+            this_max = np.max(nuarray[par,:])
+            if(this_max>maxocc):
+                maxocc = this_max
+    
+    
+        fig = plt.figure() 
+    
+        im = plt.imshow(nuarray)
+        cb = fig.colorbar(im, fraction=0.01, pad=0.05)
+        plt.title(title)
+        plt.xlabel(axlabels[0])
+        plt.ylabel(axlabels[1])
+        plt.savefig("2dimshow-{}.png".format(plotname))
+
+    def pixelMap(self, nuArray, plotname):
+    
+        stats = None # list of floats with [mean,median,stdev]
+        pixelmask = None # 2D numpy array later
+        #these = ["occMap-", "checkin-event"]
+        #if(these in plotname):
+        if("occMap-" in plotname):
+            _ , stats = findNoisyPixels(nuArray)       
+         
+        fig, ax = plt.subplots()
+        cax = fig.add_axes([0.86, 0.1, 0.05, 0.8])
+        ms = ax.matshow(nuArray)
+        fig.colorbar(ms, cax=cax, orientation='vertical')
+        if(stats is not None):
+            ax.text(-85,270,r'$occ_{mean}$'+f' = {stats[0]:.2f}',fontsize=10)
+            ax.text(-85,280,r'$occ_{med}$'+f' = {stats[1]:.2f}',fontsize=10)
+            ax.text(-85,290,r'$\sigma_{occ}$'+f' = {stats[2]:.2f}',fontsize=10)
+    
+        plt.plot()
+        fig.savefig("pixelMap-"+plotname+".png")
+
+
+
 class myUtils:
 
     def progress(self, total, n):
