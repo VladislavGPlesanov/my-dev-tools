@@ -10,7 +10,7 @@ import os
 parser = argparse.ArgumentParser()
 #parser.add_argument('--wfoil', action='store_true')
 parser.add_argument('-wf', '--wfoil', type=str, default='home/ebala/')
-parser.add_argument('-f', '--files',nargs='+')
+parser.add_argument('-f', '--files', nargs='+')
 parser.add_argument('-p', '--picname', type=str)
 args = parser.parse_args()
 
@@ -165,19 +165,19 @@ for file in files:
     #
     # for foils and other media
     #
-    if("Fe" in ilegend):
-        plt.scatter(x,y,marker='+',label=ilegend)
-    elif("Al" in ilegend):
-        plt.scatter(x,y,marker='x',label=ilegend)
-    elif("Cu" in ilegend):
-        plt.scatter(x,y,marker='^',label=ilegend)
-    elif("C10" in ilegend):
-        plt.scatter(x,y,marker='v',label=ilegend)
-    elif("Si3N4" in ilegend):
-        plt.scatter(x,y,marker='*',label=ilegend)
-    else:
-        plt.scatter(x,y,marker='s',label=ilegend)
-
+    #if("Fe" in ilegend):
+    #    plt.scatter(x,y,marker='+',label=ilegend)
+    #elif("Al" in ilegend):
+    #    plt.scatter(x,y,marker='x',label=ilegend)
+    #elif("Cu" in ilegend):
+    #    plt.scatter(x,y,marker='^',label=ilegend)
+    #elif("C10" in ilegend):
+    #    plt.scatter(x,y,marker='v',label=ilegend)
+    #elif("Si3N4" in ilegend):
+    #    plt.scatter(x,y,marker='*',label=ilegend)
+    #else:
+    #    plt.scatter(x,y,marker='s',label=ilegend)
+    plt.scatter(x,y,marker='s',label=ilegend)
 
     coeffList.append([ilegend, worst_abs, best_abs])
 

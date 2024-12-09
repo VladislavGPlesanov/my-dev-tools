@@ -20,7 +20,8 @@ from sklearn.cluster import DBSCAN
 
 ##################################################################
 import sys
-sys.path.insert(0,'/home/vlad/readoutSW/tpx3-daq-fifo-readout-cpp')
+#sys.path.insert(0,'/home/vlad/readoutSW/tpx3-daq-fifo-readout-cpp')
+sys.path.insert(0,'/home/vlad/science/tpx3-daq-fifo-readout-cpp')
 import tpx3.analysis as analysis
 
 """
@@ -180,6 +181,42 @@ def countInterpretedBranches(file, branch):
             cnt+=1
 
     return cnt
+
+def getBaseGroupName(f, debug=None):
+
+    groups = f.walk_groups('/')
+    grouplist = []
+    for gr in groups:
+        print(f'found {gr}')
+        grouplist.append(gr)
+    main_group = str(grouplist[len(grouplist)-1])
+    if(debug):
+        print(f"last entry in walk_groups = \n{main_group}")
+
+    grouplist = None 
+
+    basewords = main_group.split('(')
+    if(debug):
+        print(basewords)
+
+    base_group_name = basewords[0][:-1]+'/'
+    #                              ^ removes space at the end of 'run_xxx/chip0 '
+    if(debug):
+        print(f'base group name is : <{base_group_name}>')
+    bgn_split = base_group_name.split('/')
+    if(debug):
+        print(bgn_split)
+    run_name = bgn_split[2]
+    if(debug):
+        print(f"<{run_name}>")
+    run_num = int(run_name[4:])
+    if(debug):
+        print(f'run number is {run_num}')
+
+    basewords = None
+ 
+    return base_group_name, run_name, run_num
+
 
 def removePath(string):
     string_split = string.split('/')
@@ -364,6 +401,25 @@ def simpleHist(data, nbins, minbin, maxbin, labels, picname, ylog):
 
     plt.savefig("simpleHist-"+picname+".png")
 
+
+def simpleHistStack(data, nbins, minbin, maxbin, labels, picname, ylog):
+
+    plt.figure()
+
+    cnt = 0
+    for d in data:
+        plt.hist(d, nbins, range=(minbin,maxbin), histtype='step', label = f"slice-{labels[3][cnt]}")
+        cnt+=1
+
+    plt.title(labels[0])
+    plt.xlabel(labels[1])
+    plt.ylabel(labels[2])
+
+    if(ylog):
+        plt.yscale('log')
+
+    plt.legend()
+    plt.savefig("simpleHistStack-"+picname+".png")
 
 def quickPlot(data, axis, picname):
 
@@ -1279,23 +1335,26 @@ with tb.open_file(filename, 'r') as f:
 
 
      elif(option=="rdata"):
-        rdata = f.root.raw_data[:]
-        print("raw data length:{}".format(len(rdata)))
+        #rdata = f.root.raw_data[:]
+        #print("raw data length:{}".format(len(rdata)))
 
-        print(type(rdata))
-        print(f'data shape: {rdata.shape}')
-        print(f'data type: {rdata.dtype}')
-        
-        mdata = f.root.meta_data[:].T
-        gencfg = f.root.configuration.generalConfig[:]
-        
-        op_mode = [row[1] for row in gencfg if row[0]==b'Op_mode'][0]
-        vco = [row[1] for row in gencfg if row[0]==b'Fast_Io_en'][0]
+        #print(type(rdata))
+        #print(f'data shape: {rdata.shape}')
+        #print(f'data type: {rdata.dtype}')
+        #
+        #mdata = f.root.meta_data[:].T
+        #gencfg = f.root.configuration.generalConfig[:]
+        #
+        #op_mode = [row[1] for row in gencfg if row[0]==b'Op_mode'][0]
+        #vco = [row[1] for row in gencfg if row[0]==b'Fast_Io_en'][0]
  
-        hit_data = analysis.interpret_raw_data(rdata[:500000], op_mode, vco, mdata, progress = None)
-        print(type(hit_data))
+        #hit_data = analysis.interpret_raw_data(rdata[:500000], op_mode, vco, mdata, progress = None)
+        #print(type(hit_data))
 
-        hit_data = hit_data[hit_data['data_header']==1]
+        data = f.root.interpreted.run_0.hit_data[:]
+        data = f.get_node("/interpreted/run_0/hit_data")[:]
+
+        hit_data = data[data['data_header']==1]
 
         print(hit_data.dtype)
 
@@ -1304,9 +1363,9 @@ with tb.open_file(filename, 'r') as f:
 
         hit_data_tot_1d = hit_data_tot.flatten()
 
-        #simpleHist(hit_data_tot_1d, 51, 0, 200, ["TOT", "TOT", "#"], "from_raw_to_intp-TOTplot2" , False) 
-        simpleHist(hit_data_tot_1d*26, 51, 0, 2600, ["TOT", "e-", "#"], "from_raw_to_intp-TOTplot2" , False) 
-        hit_data_tot_1d = None
+        simpleHist(hit_data_tot_1d, 51, 0, 200, ["TOT", "TOT", "#"], "from_raw_to_intp-TOTplot2" , False) 
+        #simpleHist(hit_data_tot_1d*26, 51, 0, 2600, ["TOT", "e-", "#"], "from_raw_to_intp-TOTplot2" , False) 
+        #hit_data_tot_1d = None
 
         # -----------------------------------------
         totVal = []
@@ -1329,15 +1388,24 @@ with tb.open_file(filename, 'r') as f:
         allCombTOA = hit_data['TOA_Combined']
         unq_comTOA = np.unique(allCombTOA)
 
-        TOTeventMatrix = np.zeros((256,256),dtype=np.uint16)
-        TOAeventMatrix = np.zeros((256,256),dtype=np.uint16)
+#`        TOTeventMatrix = np.zeros((256,256),dtype=np.uint16)
+#`        TOAeventMatrix = np.zeros((256,256),dtype=np.uint16)
 
-        these_events = [661786260,736194492,736194495,736194496,736194497, 710270671, 573885847]
+        #these_events = [661786260,736194492,736194495,736194496,736194497, 710270671, 573885847]
+        hitrate = []
+        totalTOT = []
 
         cnt=0
+        n_ctoa = len(unq_comTOA)
+        nslices = 10
+        index_float = np.linspace(0,n_ctoa, nslices)
+        index = [int(np.floor(x)) for x in index_float]
+
+        tmp_list = []    
+
         for ctoa in unq_comTOA:
 
-            print(f"----------- Coombined TOA {ctoa} ------------")
+            #print(f"----------- Coombined TOA {ctoa} ------------")
             mask = (allCombTOA == ctoa)
             #print(f"ctoa = {ctoa}, mask = {mask}")
             x = hit_data['x'][mask]
@@ -1345,166 +1413,185 @@ with tb.open_file(filename, 'r') as f:
             TOA = hit_data['TOA'][mask]
             TOT = hit_data['TOT'][mask]
 
-            TOTfilterSum = np.sum(TOT)
-
-            #if(diff_TOT > 50 and len(np.unique(TOA))>2):
-            #if(diff_x <200 and diff_y < 200 and diff_TOT > 50 and len(np.unique(TOA))>2):
-            #if(len(x)>5 and len(x)<256 and len(np.unique(TOT))>2):
-                #print(f"{len(x)}:x={x}")
-                #print(f"{len(y)}:y={y}")
-                #print(f"{len(TOT)}:tot={TOT}")
-                #print(f"{len(TOA)}:toa={TOA}")
-                #print(f"dTOT={diff_TOT}, dx={diff_x}, dy={diff_y}")
-
-            #if(len(x)>5 and len(x)<256 and len(np.unique(TOT))>2):
-            #if(len(x)>5 and len(x)<4096):
-
-            TOTsmeared = TOT.reshape(64,8,64,8).mean(axis=(1,3))
-            if(TOTfilterSum < 500):
-            #if(ctoa in these_events):
-                # --- tryna do db scan try2 ---
-                nz_points = []
-                i_cnt = 0
-                for i,j in zip(x,y):
-                    if(TOT[i_cnt]>0):
-                        nz_points.append([i,j])
-                    i_cnt+=1
-   
-                nz_points = np.array(nz_points)
-    
-                #print(type(nz_points))
-                #n_holes = 10
-                n_holes = 20
-                min_hits = 10
-                #labels, nclusters_found = None, None
-                labels, nclusters_found = None, -999
-                if(len(nz_points)>0):
-                    db = DBSCAN(eps=n_holes, min_samples=min_hits).fit(nz_points)
-                
-                    labels = db.labels_
-                    nclusters_found = len(set(labels)) - (1 if -1 in labels else 0)
-    
-                TOTeventMatrix[x,y] = TOT
-                TOAeventMatrix[x,y] = TOA
- 
-                #if(ctoa==534986354):
-                if(ctoa in these_events):
-
-                    nonzero = (TOTeventMatrix > 0)
-                    print("---------- pizda! ----------")
-                    print(len(TOT))
-                    simpleHist(np.ravel(TOTeventMatrix[nonzero]), 51, 0, 201, [f"event-{ctoa}-allTOT", "TOT", "#"], f"{ctoa}-TOT", False)
-                    print(len(TOA))
-                    simpleHist(np.ravel(TOAeventMatrix[nonzero]), 51, 0, 16384, [f"event-{ctoa}-allTOA", "TOA", "#"], f"{ctoa}-TOA", False)
-
-                    UniqueTOA = np.unique(np.ravel(TOAeventMatrix))
-                    print(f"found {len(UniqueTOA)} unique TOAs")
-
-                    clustTOA = getToaClusters(UniqueTOA, 50)
-
-                    #cntr = 0
-                    #for ntoa in clustTOA:
-
-                    #    these_hits = hit_data[ctoa]['TOA']
-                    #    local_mask = (these_hits == ntoa[1])
-                    #   
-                    #    iTOA = hit_data['TOA'][local_mask] 
-                    #    ix = hit_data['x'][local_mask]
-                    #    iy = hit_data['y'][local_mask]
-
-                    #    iclust = np.zeros((256,256),dtype=np.uint16)
-                    #    iclust[ix,iy] = iTOA
-
-                    #    pixelMap2d(iclust, f"test-iclust")
-                    #    iclust = np.zeros((256,256),dtype=np.uint16)
-                    #    
-                    #    #print(f"going through TOA cluster {ntoa}")
-                    #    #singleTOACluster = np.zeros((256,256), dtype=np.uint16)
-
-                    #    #print(f"TOA-list={TOA}")
-
-                    #    #cntr2 = 0
-                    #    #for i,j in zip(x,y):
-                    #    #    print(f"check 1[{TOAeventMatrix[x,y]}] 2[{ntoa}]")
-                    #    #    if(TOAeventMatrix[x,y] in ntoa):
-                    #    #        singleTOACluster[i,j] = TOTeventMatrix[x,y]
-                    #    #        print("{} in {} list - adding {} to matrix {}".format(TOA[cntr2], ntoa, TOT[cntr2], np.count_nonzero(singleTOACluster)))
-                    #    #    cntr2+=1    
-
-                    #    #if(cntr//4):
-                    #    #    pixelMap2d(singleTOACluster, f"ctoa-{ctoa}-toa-{ntoa[0]}-TOTcluster")                    
-
-                    #    cntr+=1
-
-                #if((len(TOT)<50 and len(TOT)>5 and np.sum(TOT)>50 and len(unqTOA)>1) or (ctoa in these_events)):
-                #if(ctoa in these_events):
-                #haveClusters = nclusters is not None
-                
-                if(ctoa in these_events or nclusters_found > 1):
-                #if(ctoa in these_events or nclusters_found>1):
-                #if(nclusters_found is not None and nclusters_found > 1):
-    
-                    pixelMap2d(TOTeventMatrix, f"chekin-event-matrix-TOT-comTOA-{ctoa}-{nclusters_found}")
-                    pixelMap2d(TOAeventMatrix, f"chekin-event-matrix-TOA-comTOA-{ctoa}-{nclusters_found}")
-                    # ---------- tryin' smearin' --------------------------------
-                    #lowResMat = TOTeventMatrix.reshape(64,4, 64,4).mean(axis=(1,3))
-                    #pixelMap2d(lowResMat, f"lowRes-TOT-comTOA-{ctoa}-{nclusters_found}")
-                    # -----------------------------------------------
-                    # tryna; DBSCAN
-     
-                    #points = []
-                    #for i in range(256):
-                    #    for j in range(256):
-                    #        if(TOTeventMatrix[i,j]>5):
-                    #            points.append([i,j])
-    
-                    #points = np.array(points)
-    
-                    #n_holes = 10
-                    #min_hits = 5
-                    #db=DBSCAN(eps=n_holes, min_samples=min_hits).fit(points)
-                    #labels = db.labels_
-
-                    diff_x = np.max(x) - np.min(x)
-                    diff_y = np.max(y) - np.min(y)
-                    diff_tot = np.max(TOT) - np.min(TOT)
-                    diff_toa = np.max(TOA) - np.min(TOA)
-                    totSum = np.sum(TOT)
-
-                    n2dtoa = np.count_nonzero(TOAeventMatrix)
-                    print(f'EVENT STATS:')                    
-                    print("##################################################################")
-                        
-                    print(f"DIFFS: dx = {diff_x}, dy = {diff_y}, dtot = {diff_tot}, dtoa = {diff_toa}")
-                    print(f"TOT_SUM={totSum} , len(TOA)={len(TOA)}, n2Dpoints={n2dtoa}, len(nz_points)={len(nz_points)}")
-                    #print(f"")       
-
-                    print("##################################################################")
-
-                    # - plotting this shit
-                    plt.figure(figsize=(8,6))
-                    #plt.scatter(points[:, 0], points[:, 1], c=labels, cmap='plasma', s=10)
-                    plt.scatter(nz_points[:, 0], nz_points[:, 1]*(-1), c=labels, cmap='plasma', s=10) 
-                    plt.title('DBSCAN Clustering of Charge Matrix')
-                    plt.xlabel('X Position')
-                    plt.ylabel('Y Position')
-                    plt.xlim(0,256)
-                    plt.ylim(-256,0)
-                    plt.text(0, 260, f"n hits = {len(x)}")
-                    plt.colorbar(label='Cluster Label')
-                    plt.savefig(f"DBSCAN-ctoa-{ctoa}.png")
-       
-                    # -----------------------------------------------
-                    TOTeventMatrix = np.zeros((256,256),dtype=np.uint16)
-                    TOAeventMatrix = np.zeros((256,256),dtype=np.uint16)
-                    cnt+=1
-    
-    
-                if(cnt==20):
-                    break
+            hitrate.append(len(x))
+            sumTOT = np.sum(TOT)
+            totalTOT.append(sumTOT)
             
-            else:
-                continue
+            tmp_list.append(sumTOT)
+
+            if(cnt in index or cnt == n_ctoa-1):
+                totalTOT.append(tmp_list)
+                tmp_list = []
+
+            cnt+=1
+
+            print('\r progress => {:.2f}%'.format(float(cnt)/float(n_ctoa)*100),end= " ", flush=True)
+        #print
+        plot_scat(unq_comTOA, hitrate, "Hitrate vs combined toa", "hitrate", "", ["combined TOA", "hitrate"])
+        plotHistStack(totalTOT, 51, [0, 30000], ["TOT-slice", "TOT sum", "N"], [ str(i) for i in index], "TOT-over-time", False)
+
+
+            #TOTfilterSum = np.sum(TOT)
+
+            ##if(diff_TOT > 50 and len(np.unique(TOA))>2):
+            ##if(diff_x <200 and diff_y < 200 and diff_TOT > 50 and len(np.unique(TOA))>2):
+            ##if(len(x)>5 and len(x)<256 and len(np.unique(TOT))>2):
+            #    #print(f"{len(x)}:x={x}")
+            #    #print(f"{len(y)}:y={y}")
+            #    #print(f"{len(TOT)}:tot={TOT}")
+            #    #print(f"{len(TOA)}:toa={TOA}")
+            #    #print(f"dTOT={diff_TOT}, dx={diff_x}, dy={diff_y}")
+
+            ##if(len(x)>5 and len(x)<256 and len(np.unique(TOT))>2):
+            ##if(len(x)>5 and len(x)<4096):
+
+            ##TOTsmeared = TOT.reshape(64,8,64,8).mean(axis=(1,3))
+            ##if(TOTfilterSum < 500):
+            ##if(ctoa in these_events):
+            #if(ctoa in these_events):
+            #    # --- tryna do db scan try2 ---
+            #    nz_points = []
+            #    i_cnt = 0
+            #    for i,j in zip(x,y):
+            #        if(TOT[i_cnt]>0):
+            #            nz_points.append([i,j])
+            #        i_cnt+=1
+   
+            #    nz_points = np.array(nz_points)
+    
+            #    #print(type(nz_points))
+            #    #n_holes = 10
+            #    n_holes = 20
+            #    min_hits = 10
+            #    #labels, nclusters_found = None, None
+            #    #labels, nclusters_found = None, -999
+            #    #if(len(nz_points)>0):
+            #    #    db = DBSCAN(eps=n_holes, min_samples=min_hits).fit(nz_points)
+            #    #
+            #    #    labels = db.labels_
+            #    #    nclusters_found = len(set(labels)) - (1 if -1 in labels else 0)
+    
+            #    TOTeventMatrix[x,y] = TOT
+            #    TOAeventMatrix[x,y] = TOA
+ 
+            #    #if(ctoa==534986354):
+            #    if(ctoa in these_events):
+
+            #        nonzero = (TOTeventMatrix > 0)
+            #        print("---------- pizda! ----------")
+            #        print(len(TOT))
+            #        simpleHist(np.ravel(TOTeventMatrix[nonzero]), 51, 0, 201, [f"event-{ctoa}-allTOT", "TOT", "#"], f"{ctoa}-TOT", False)
+            #        print(len(TOA))
+            #        simpleHist(np.ravel(TOAeventMatrix[nonzero]), 51, 0, 16384, [f"event-{ctoa}-allTOA", "TOA", "#"], f"{ctoa}-TOA", False)
+
+            #        UniqueTOA = np.unique(np.ravel(TOAeventMatrix))
+            #        print(f"found {len(UniqueTOA)} unique TOAs")
+
+            #        clustTOA = getToaClusters(UniqueTOA, 50)
+
+            #        #cntr = 0
+            #        #for ntoa in clustTOA:
+
+            #        #    these_hits = hit_data[ctoa]['TOA']
+            #        #    local_mask = (these_hits == ntoa[1])
+            #        #   
+            #        #    iTOA = hit_data['TOA'][local_mask] 
+            #        #    ix = hit_data['x'][local_mask]
+            #        #    iy = hit_data['y'][local_mask]
+
+            #        #    iclust = np.zeros((256,256),dtype=np.uint16)
+            #        #    iclust[ix,iy] = iTOA
+
+            #        #    pixelMap2d(iclust, f"test-iclust")
+            #        #    iclust = np.zeros((256,256),dtype=np.uint16)
+            #        #    
+            #        #    #print(f"going through TOA cluster {ntoa}")
+            #        #    #singleTOACluster = np.zeros((256,256), dtype=np.uint16)
+
+            #        #    #print(f"TOA-list={TOA}")
+
+            #        #    #cntr2 = 0
+            #        #    #for i,j in zip(x,y):
+            #        #    #    print(f"check 1[{TOAeventMatrix[x,y]}] 2[{ntoa}]")
+            #        #    #    if(TOAeventMatrix[x,y] in ntoa):
+            #        #    #        singleTOACluster[i,j] = TOTeventMatrix[x,y]
+            #        #    #        print("{} in {} list - adding {} to matrix {}".format(TOA[cntr2], ntoa, TOT[cntr2], np.count_nonzero(singleTOACluster)))
+            #        #    #    cntr2+=1    
+
+            #        #    #if(cntr//4):
+            #        #    #    pixelMap2d(singleTOACluster, f"ctoa-{ctoa}-toa-{ntoa[0]}-TOTcluster")                    
+
+            #        #    cntr+=1
+
+            #    #if((len(TOT)<50 and len(TOT)>5 and np.sum(TOT)>50 and len(unqTOA)>1) or (ctoa in these_events)):
+            #    #if(ctoa in these_events):
+            #    #haveClusters = nclusters is not None
+            #    
+            #    #if(ctoa in these_events or nclusters_found > 1):
+            #    #if(ctoa in these_events or nclusters_found>1):
+            #    #if(nclusters_found is not None and nclusters_found > 1):
+    
+            #        pixelMap2d(TOTeventMatrix, f"chekin-event-matrix-TOT-comTOA-{ctoa}-{nclusters_found}")
+            #        pixelMap2d(TOAeventMatrix, f"chekin-event-matrix-TOA-comTOA-{ctoa}-{nclusters_found}")
+            #        # ---------- tryin' smearin' --------------------------------
+            #        #lowResMat = TOTeventMatrix.reshape(64,4, 64,4).mean(axis=(1,3))
+            #        #pixelMap2d(lowResMat, f"lowRes-TOT-comTOA-{ctoa}-{nclusters_found}")
+            #        # -----------------------------------------------
+            #        # tryna; DBSCAN
+     
+            #        #points = []
+            #        #for i in range(256):
+            #        #    for j in range(256):
+            #        #        if(TOTeventMatrix[i,j]>5):
+            #        #            points.append([i,j])
+    
+            #        #points = np.array(points)
+    
+            #        #n_holes = 10
+            #        #min_hits = 5
+            #        #db=DBSCAN(eps=n_holes, min_samples=min_hits).fit(points)
+            #        #labels = db.labels_
+
+            #        diff_x = np.max(x) - np.min(x)
+            #        diff_y = np.max(y) - np.min(y)
+            #        diff_tot = np.max(TOT) - np.min(TOT)
+            #        diff_toa = np.max(TOA) - np.min(TOA)
+            #        totSum = np.sum(TOT)
+
+            #        n2dtoa = np.count_nonzero(TOAeventMatrix)
+            #        print(f'EVENT STATS:')                    
+            #        print("##################################################################")
+            #            
+            #        print(f"DIFFS: dx = {diff_x}, dy = {diff_y}, dtot = {diff_tot}, dtoa = {diff_toa}")
+            #        print(f"TOT_SUM={totSum} , len(TOA)={len(TOA)}, n2Dpoints={n2dtoa}, len(nz_points)={len(nz_points)}")
+            #        #print(f"")       
+
+            #        print("##################################################################")
+
+            #        # - plotting this shit
+            #        plt.figure(figsize=(8,6))
+            #        #plt.scatter(points[:, 0], points[:, 1], c=labels, cmap='plasma', s=10)
+            #        plt.scatter(nz_points[:, 0], nz_points[:, 1]*(-1), c=labels, cmap='plasma', s=10) 
+            #        plt.title('DBSCAN Clustering of Charge Matrix')
+            #        plt.xlabel('X Position')
+            #        plt.ylabel('Y Position')
+            #        plt.xlim(0,256)
+            #        plt.ylim(-256,0)
+            #        plt.text(0, 260, f"n hits = {len(x)}")
+            #        plt.colorbar(label='Cluster Label')
+            #        plt.savefig(f"DBSCAN-ctoa-{ctoa}.png")
+       
+            #        # -----------------------------------------------
+            #        TOTeventMatrix = np.zeros((256,256),dtype=np.uint16)
+            #        TOAeventMatrix = np.zeros((256,256),dtype=np.uint16)
+            #        cnt+=1
+    
+    
+            #    if(cnt==20):
+            #        break
+            #
+            #else:
+            #    continue
 
         #print(len(totVal))
         #print(totVal[0])
@@ -1521,7 +1608,69 @@ with tb.open_file(filename, 'r') as f:
 
         totVal = None
         hit_data = None
-        
+
+     ########################################################################   
+     #elif(option=="phys"):
+
+     #    base_group, _, _ = getBaseGroupName(f, False)
+     #    TOT = f.get_node(base_group+"sumTot")
+     #    #TOA = f.get_node(base_group+"raw_toa")
+     #    x = f.get_node(base_group+"x")
+     #    y = f.get_node(base_group+"y")
+     #    #toaCom = f.get_node(base_group+"raw_toa_combined")
+
+     #    nTotElem = len(TOT)
+     #    nParts = 20
+     #    indices = np.linspace(0,nTotElem,nParts)
+     #    tot_list = []
+     #    this_index = []
+
+     #    for i in indices:
+     #       this_index.append(int(i))
+
+     #    for i in range(len(indices)-1):
+     #        start = int(np.floor(this_index[i]))
+     #        stop = int(np.floor(this_index[i+1]))
+     #        totSlice = TOT[start:stop]
+     #        #tot_list.append(totSlice.flatten())
+     #        tot_list.append(totSlice)
+     #    
+     #    cntr = 0
+
+     #    simpleHistStack(tot_list, 51, 0, 1030, [f"TOT-slices","TOT cycles","N", this_index],"TOT-hitdata", False)
+
+     #    #matrix = np.zeros((256,256), dtype=uint16)
+     #    #for 
+
+     #    ###########################################################
+
+     #    #print(type(TOT))
+     #    #print(TOT.shape)
+     #    #print(TOT[0:4])
+     #    #print(TOT[0:4][0])
+ 
+     #    #print(type(TOA))
+     #    #print(TOA.shape)
+     #    #print(type(x))
+     #    #print(x.shape)
+     #    #print(x[0:4])
+     #    #print(x[0:4][0])
+ 
+     #    #print(type(y))
+     #    #print(y.shape)
+     #    #print(y[0:4])
+     #    #print(y[0:4][0])
+
+     #    #print(type(toaCom))
+     #    #print(toaCom.shape)
+     #    #print(toaCom[0:4])
+     #    #print(toaCom[0:4][0])
+
+     #    #for ctoa in toaCom:
+     #       
+     #   # exit(0)
+
+     #   # simpleHist(TOT, 101, 0, 40000, [])
 
      elif(option=="idata"):
         if(testIfHasInterpreted(f)):

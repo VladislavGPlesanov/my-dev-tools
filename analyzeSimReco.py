@@ -84,9 +84,7 @@ def multiHist(nuarray_list, nbins, binbounds, labels, legends, logy ,picname, od
     if(logy):
         plt.yscale('log')
     plt.legend()
-    plt.savefig(f"{odir}/multiHist-{picname}.png")
-
-   
+    plt.savefig(f"{odir}/multiHist-{picname}.png")   
 
 def simpleHist(nuarray, nbins, minbin, maxbin, labels, picname, odir,fit=None):
 
@@ -109,7 +107,8 @@ def simpleHist(nuarray, nbins, minbin, maxbin, labels, picname, odir,fit=None):
         ########################################################
         model = None
         if(fit=="gaus"): 
-            peakbin = getMaxBin(counts)
+            peakbin = getMaxBin(counts[1:])
+            peakbin+=1
 
             print(f"Found maximum bin at {peakbin} = {counts[peakbin]}")
             model = Model(gauss)
@@ -159,7 +158,7 @@ def simpleHist(nuarray, nbins, minbin, maxbin, labels, picname, odir,fit=None):
             #pars['sigma'].max = np.std(counts)*1.2
 
             print("FIT FAILED: restricting fit parameters and re-fitting")
-            result = model.fit(counts[:-1], pars, x=bin_centers[:-1])
+            result = model.fit(counts[:-1], pars, x=bin_centers[:-1] )
             #result = model.fit(counts[peakbin-10:peakbin+10], pars, x=bin_centers[peakbin-10:peakbin+10])
 
             print(result.fit_report()) 
@@ -202,7 +201,7 @@ def simpleHist(nuarray, nbins, minbin, maxbin, labels, picname, odir,fit=None):
     plt.title(labels[0])
     plt.xlabel(labels[1])
     plt.ylabel(labels[2])
-    plt.yscale('log')
+    #plt.yscale('log')
     plt.grid()
     plt.savefig(f"{odir}/1DHist-{picname}.png")
 
@@ -252,17 +251,20 @@ def plot2dEvent(nuarray, info, picname, odir, plotMarker=None):
     fig, ax = plt.subplots()
     cax = fig.add_axes([0.86,0.1,0.05,0.8])
     #ms = ax.matshow(nuarray, cmap='plasma')
-    ms = ax.matshow(nuarray, cmap='hot')
+    ms = None
+    if("total" in picname):
+        ms = ax.matshow(nuarray.T, cmap='hot')
+    else:
+        ms = ax.matshow(nuarray, cmap='hot')
     fig.colorbar(ms,cax=cax,orientation='vertical')
-
     start = 120
     ax.text(-90, start, info, fontsize=10,color='black' )    
-    if(plotMarker is not None):
-        ax.scatter(plotMarker[0],plotMarker[1],c='blue', marker='*')
-        ax.text(-90,200, f"redX={plotMarker[0]}\nredY={plotMarker[1]}", fontsize=10, color='black')
+    #if(plotMarker is not None):
+    #    ax.scatter(plotMarker[0],plotMarker[1],c='blue', marker='*')
+    #    ax.text(-90,200, f"redX={plotMarker[0]}\nredY={plotMarker[1]}", fontsize=10, color='black')
 
-    #plt.xlim(xmin,xmax)
-    #plt.ylim(ymin,ymax)
+    if("total" in picname):
+        ax.invert_yaxis()
 
     plt.plot()
     fig.savefig(f"{odir}/reco-event-{picname}.png")
@@ -325,7 +327,8 @@ tot_list = np.zeros(51, dtype=np.int64)
 tot_edges = np.linspace(0,1000, 51+1)
 
 alt_rotang = []    
-tot_reduced = []    
+tot_reduced = []   
+TOTarray=[]
 
 with tb.open_file(recofile, 'r') as f:
    
@@ -364,23 +367,41 @@ with tb.open_file(recofile, 'r') as f:
     ToT = f.get_node(base_group_name+"ToT")
     print(f"found VLarray TOT of size {type(ToT)}")
     centerX = f.get_node(base_group_name+"centerX")
+    print(f"found centerX {type(centerX)}")
     centerY = f.get_node(base_group_name+"centerY")
+    print(f"found centerY {type(centerY)}")
     hits = f.get_node(base_group_name+"hits")
+    print(f"found hits {type(hits)}")
     excent = f.get_node(base_group_name+"eccentricity")
+    print(f"found excentricity {type(excent)}")
     FIRT = f.get_node(base_group_name+"fractionInTransverseRms")
+    print(f"found FIRT {type(FIRT)}")
     kurtosisL = f.get_node(base_group_name+"kurtosisLongitudinal")
+    print(f"found kurtsisL {type(kurtosisL)}")
     kurtosisT = f.get_node(base_group_name+"kurtosisTransverse")
+    print(f"found kurtosisT {type(kurtosisT)}")
     length = f.get_node(base_group_name+"length")
+    print(f"found length {type(length)}")
     LDRT = f.get_node(base_group_name+"lengthDivRmsTrans")
+    print(f"found LDRT {type(LDRT)}")
     RMS_L = f.get_node(base_group_name+"rmsLongitudinal")
+    print(f"found RMS_L {type(RMS_L)}")
     RMS_T = f.get_node(base_group_name+"rmsTransverse")
+    print(f"found RMS_T {type(RMS_T)}")
     rotAng = f.get_node(base_group_name+"rotationAngle")
+    print(f"found rotAng {type(rotAng)}")
     skewL = f.get_node(base_group_name+"skewnessLongitudinal")
+    print(f"found skewL {type(skewL)}")
     skewT = f.get_node(base_group_name+"skewnessTransverse")
+    print(f"found skewT {type(skewT)}")
     sumTOT = f.get_node(base_group_name+"sumTot")
+    print(f"found sumTOT {type(sumTOT)}")
     width = f.get_node(base_group_name+"width")
+    print(f"found width {type(width)}")
     x = f.get_node(base_group_name+"x")
+    print(f"found x {type(x)}")
     y = f.get_node(base_group_name+"y")
+    print(f"found y {type(y)}")
 
     #print(f"centerX is {type(centerX)}, centerY is {type(centerY)}")    
     #print(f"centerX shape={centerX.shape}")
@@ -392,39 +413,52 @@ with tb.open_file(recofile, 'r') as f:
     #print(f"x is {type(x)}")
     #print(f"y is {type(y)}")
 
+    n_x = len(x)
+    print(f"rate = {n_x/60} per second")
+
     #print("cehcking some variable length arrays:")
     #for i in range(5):
     #    print(f"x={x[i]}, y={y[i]}, TOT={ToT[i]}")
 
     # =========== plottin' shit =================
 
+    print("Printing global variable data sets")
     #simpleSimRecoHist(ToT.reshape(-1), 51, np.nanmin(ToT.reshape(-1)), np.nanmax(ToT.reshape(-1)), ['TOT_Cycles','TOT','N'], plotname+"-TOT", False, outdir)
-    simpleSimRecoHist(centerX, 50, 6, 8, ['centerX','x','cnt'], plotname+"centerX", False, outdir)
-    simpleSimRecoHist(centerY, 50, 6, 8, ['centerY','Y','cnt'], plotname+"centerY", False, outdir)
+    #simpleSimRecoHist(centerX, 50, 6, 8, ['centerX','x','cnt'], plotname+"centerX", False, outdir)
+    #simpleSimRecoHist(centerY, 50, 6, 8, ['centerY','Y','cnt'], plotname+"centerY", False, outdir)
     # - -------------------------------------------------------------------------
-    simpleSimRecoHist(excent, 50, 0.9, 10 , ['Excentricity','','cnt'], plotname+"excent", True, outdir)
-    simpleSimRecoHist(FIRT, 50, np.min(FIRT), np.max(FIRT)+0.5, ['frac_In_rms_T','','cnt'], plotname+"fracInRmsTrans", True, outdir)
-    simpleSimRecoHist(kurtosisL, 50, np.nanmin(kurtosisL), np.nanmax(kurtosisL), ['kurtosisL','','cnt'], plotname+"kurtL", True, outdir)
-    simpleSimRecoHist(kurtosisT, 50, np.nanmin(kurtosisT), np.nanmax(kurtosisT), ['kurtosisT','','cnt'], plotname+"kurtT", True, outdir)
+    #simpleSimRecoHist(excent, 50, 0.9, 10 , ['Excentricity','','cnt'], plotname+"excent", True, outdir)
+    #simpleSimRecoHist(FIRT, 50, np.min(FIRT), np.max(FIRT)+0.5, ['frac_In_rms_T','','cnt'], plotname+"fracInRmsTrans", True, outdir)
+    #simpleSimRecoHist(kurtosisL, 50, np.nanmin(kurtosisL), np.nanmax(kurtosisL), ['kurtosisL','','cnt'], plotname+"kurtL", True, outdir)
+    #simpleSimRecoHist(kurtosisT, 50, np.nanmin(kurtosisT), np.nanmax(kurtosisT), ['kurtosisT','','cnt'], plotname+"kurtT", True, outdir)
     #simpleSimRecoHist(length, 50, np.min(length), np.max(length), ['length','','cnt'], plotname+"length", False, outdir)
-    simpleSimRecoHist(length, 50, np.min(length), 6, ['length','','cnt'], plotname+"length", False, outdir)
+    #simpleSimRecoHist(length, 50, np.min(length), 6, ['length','','cnt'], plotname+"length", False, outdir)
 
-    #simpleSimRecoHist(hits, 50, np.min(hits), np.max(hits), ['hits','','cnt'], plotname+"hits", True, outdir)
-    simpleSimRecoHist(hits, 50, np.min(hits), 500, ['hits','','cnt'], plotname+"hits", True, outdir)
+    simpleSimRecoHist(hits, 100, np.min(hits), np.max(hits), ['hits','','cnt'], plotname+"hits", False, outdir)
+    #simpleSimRecoHist(hits, 50, np.min(hits), 500, ['hits','','cnt'], plotname+"hits", False, outdir)
+    #simpleSimRecoHist(hits, 100, np.min(hits), 200, ['hits','','cnt'], plotname+"hits", False, outdir)
 
-    simpleSimRecoHist(LDRT, 50,0,50, ['lenDivRmsTrans','','cnt'], plotname+"LDRT", True, outdir)
-    simpleSimRecoHist(RMS_L, 50,np.min(RMS_L), 2.0, ['RMS_L','',''], plotname+"RMS_L", False, outdir)
+    #simpleSimRecoHist(LDRT, 50,0,50, ['lenDivRmsTrans','','cnt'], plotname+"LDRT", True, outdir)
 
-    simpleSimRecoHist(RMS_T, 50,np.min(RMS_T), 1.5, ['RMS_T','',''], plotname+"RMS_T", False, outdir)
+    #simpleSimRecoHist(RMS_L, 50,np.min(RMS_L), 2.0, ['RMS_L','',''], plotname+"RMS_L", False, outdir)
+    #simpleSimRecoHist(RMS_T, 50,np.min(RMS_T), 1.5, ['RMS_T','',''], plotname+"RMS_T", False, outdir)
 
     #simpleSimRecoHist(rotAng*180/3.14159, 50,0,360, ['rotAng','',''], plotname+"rotAng", False, outdir)
+
     simpleSimRecoHist(rotAng, 50,np.min(rotAng),np.max(rotAng), ['rotAng','',''], plotname+"rotAng", False, outdir)
-    simpleSimRecoHist(skewL, 50,np.nanmin(skewL),np.nanmax(skewL), ['skewL','',''], plotname+"skewL", True, outdir)
-    simpleSimRecoHist(skewT, 50,np.nanmin(skewT),np.nanmax(skewT), ['skewT','',''], plotname+"skewT", True, outdir)
-    #simpleSimRecoHist(sumTOT, 50,np.min(sumTOT),np.max(sumTOT), ['sumTOT','',''], plotname+"sumTOT", True, outdir)
-    simpleSimRecoHist(sumTOT, 50, 0 ,7000, ['sumTOT','',''], plotname+"sumTOT", False, outdir)
-    simpleSimRecoHist(width, 50,np.min(width), 2, ['width','',''], plotname+"width", False, outdir)
+    #simpleSimRecoHist(skewL, 50,np.nanmin(skewL),np.nanmax(skewL), ['skewL','',''], plotname+"skewL", True, outdir)
+    #simpleSimRecoHist(skewT, 50,np.nanmin(skewT),np.nanmax(skewT), ['skewT','',''], plotname+"skewT", True, outdir)
+    #simpleSimRecoHist(sumTOT, 100 , 0, 6000, ['Total charge per event','TOT, [n cycles]','N'], plotname+"sumTOT", False, outdir)
+    simpleSimRecoHist(sumTOT, 100,np.min(sumTOT),np.max(sumTOT), ['sumTOT','',''], plotname+"sumTOT", False, outdir)
+    #simpleSimRecoHist(sumTOT, 100,np.min(sumTOT),40000, ['Total charge per event','TOT cycles','N'], plotname+"-sumTOT", False, outdir)
+    #simpleSimRecoHist(sumTOT, 50, 0 ,7000, ['sumTOT','',''], plotname+"sumTOT", False, outdir)
+    #simpleSimRecoHist(width, 50,np.min(width), 2, ['width','',''], plotname+"width", False, outdir)
     # -----------------------------------------------------------------------------
+    print("---------- CHINAZES! ------------")
+
+    print(f"\nFile has {len(hits)} clusters\n")
+
+    #exit(0)
 
     mean_glob_x = np.mean(centerX)   
     mean_glob_y = np.mean(centerY)   
@@ -440,10 +474,10 @@ with tb.open_file(recofile, 'r') as f:
     ################################################################
     ################################################################
 
-    if(check_node(base_group_name+"angle_fiststage", f)):
+    if(check_node(base_group_name+"angle_firststage", f)):
         print("Found reconstruction data!")
         
-        firstangles = f.get_node(base_group_name+"angle_fiststage")[:].T
+        firstangles = f.get_node(base_group_name+"angle_firststage")[:].T
         secondangles = f.get_node(base_group_name+"angle_secondstage")[:].T
 
         multiHist([firstangles,secondangles], 
@@ -476,7 +510,6 @@ with tb.open_file(recofile, 'r') as f:
 
         #exit(0)
 
-
     #matrix = np.zeros((256,256),dtype=np.uint16)
     matrixTotal = np.zeros((256,256),dtype=np.uint16)
 
@@ -486,12 +519,11 @@ with tb.open_file(recofile, 'r') as f:
 
     ntotal = ToT.shape[0]
 
-    print(ntotal)
+    print(f"\nTOTAL nr of clusters: {ntotal}\n")
     ievent, npics, mcevents = 0, 0, 0
     n_good = 0
     for event in ToT:
-    
-        matrix = np.zeros((256,256),dtype=np.uint16)
+
         nhits = len(event)
 
         i_bincnt, _ = np.histogram(event, bins=tot_edges)
@@ -500,7 +532,9 @@ with tb.open_file(recofile, 'r') as f:
         #redX = int(Sum_Qx/float(sumTOT[ievent]))
         #redY = int(Sum_Qy/float(sumTOT[ievent]))
 
-        tot_reduced.append(sum(event)/hits[ievent])
+        #tot_reduced.append(sum(event)/hits[ievent])
+        tot_reduced.append(sumTOT[ievent]/hits[ievent])
+        TOTarray.append(sumTOT[ievent])
 
         # tryna' dbscan (fuck it slows down things...)
         #
@@ -521,38 +555,46 @@ with tb.open_file(recofile, 'r') as f:
         characs = f"cX={round(centerX[ievent],2)}\ncY={round(centerY[ievent],2)}\n\u03B5={round(excent[ievent],2)}\nrotAng={rotAngDeg}\nnhits={nhits}\nlen={round(length[ievent],2)}\nwidth={round(width[ievent],2)}\nRMS:\n(T={round(RMS_T[ievent],2)},L={round(RMS_L[ievent],2)})\nFIRT={round(FIRT[ievent],2)}\nkurt:\nT={round(kurtosisT[ievent],2)}\n,L={round(kurtosisL[ievent],2)}\nLDRT={round(LDRT[ievent],2)}"        
 
         #---- working below -------
-        if(LDRT[ievent] > 10 and nhits>10 and FIRT[ievent]>0.01):
+        #if(LDRT[ievent] > 10 and nhits>10 and FIRT[ievent]>0.01):
         #--------------------------
         #if(ievent in prop_ev or ievent in empty_ev):
-            #suffix = None
-            #if(ievent in prop_ev):
-            #    suffix = "PROP"
-            #else:
-            #    suffix = "EMPTY"
-            #good_events.append(ievent)
+        #suffix = None
+        #if(ievent in prop_ev):
+        #    suffix = "PROP"
+        #else:
+        #    suffix = "EMPTY"
+        #good_events.append(ievent)
 
-            #alt_rotang.append(rotAngDeg)
-            alt_rotang.append(rotAng[ievent])
+        #alt_rotang.append(rotAngDeg)
+        alt_rotang.append(rotAng[ievent])
 
+        #n_good+=1
+        #if(length[ievent] < 10):
+        for i in range(nhits):
+           #    matrix[x[ievent][i],y[ievent][i]] = event[i]
+           matrixTotal[x[ievent][i],y[ievent][i]] += 1
+
+        #eventString+=f"{ievent},"
+        #if(npics < 50 and FIRT[ievent] > 0.01):      
+        #if(npics < 50):      
+        if(npics < 50 and ievent%100==0):      
+            matrix = np.zeros((256,256),dtype=np.uint16)
             n_good+=1
             for i in range(nhits):
                 matrix[x[ievent][i],y[ievent][i]] = event[i]
 
-            #eventString+=f"{ievent},"
-            if(npics < 50):         
-
-                Sum_Qx = np.sum(event*x[ievent])
-                Sum_Qy = np.sum(event*y[ievent])
+            Sum_Qx = np.sum(event*x[ievent])
+            Sum_Qy = np.sum(event*y[ievent])
  
-                redX = Sum_Qx/np.sum(event)
-                redY = Sum_Qy/np.sum(event)
+            redX = Sum_Qx/np.sum(event)
+            redY = Sum_Qy/np.sum(event)
        
-                plot2dEvent(matrix, characs, f"cluster-{ievent}-{plotname}", outdir, [redX,redY]) 
-                #plot2dEvent(matrix, characs, f"cluster-{ievent}-{suffix}-{plotname}", outdir) 
-                #other2Dplot(matrix, f"cluster-{ievent}-{plotname}",outdir)
-                #plotDbscan(nz_index, labels, ievent, nfound, outdir)
-                npics+=1
-        matrix = np.zeros((256,256),dtype=np.uint16)
+            plot2dEvent(matrix, characs, f"cluster-{ievent}-{plotname}", outdir, [redX,redY]) 
+            #plot2dEvent(matrix, characs, f"cluster-{ievent}-{suffix}-{plotname}", outdir) 
+            #other2Dplot(matrix, f"cluster-{ievent}-{plotname}",outdir)
+            #plotDbscan(nz_index, labels, ievent, nfound, outdir)
+            npics+=1
+            matrix = np.zeros((256,256),dtype=np.uint16)
         progress(ntotal, ievent)
         ievent+=1
         
@@ -565,12 +607,13 @@ print(f"FOUND <{n_good}> events")
 
 print(f"resudec TOT has <{len(tot_reduced)}> entries")
 
-#plot2dEvent(matrixTotal, "", "total-run",outdir)
+plot2dEvent(matrixTotal, "", "total-run",outdir)
 
 #simpleHist(alt_rotang, 51, 0.0, 180.0, ["Selected Cluster inclination","angle[deg]","N"], "ALT_ROTANG", outdir, fit="cosfunc") 
 simpleHist(alt_rotang, 51, 0.0, 3.15, ["Selected Cluster inclination","angle[radian]","N"], "ALT_ROTANG", outdir, fit="cosfunc") 
 #simpleHist(tot_reduced, 101, 0, 400, ["TOT/nhits","N hits","#"], "TOT_REDUCED", outdir, fit="gaus")
 simpleHist(tot_reduced, 51, np.nanmin(tot_reduced), np.nanmax(tot_reduced), ["TOT/nhits","N hits","#"], "TOT_REDUCED", outdir, fit="gaus")
+simpleHist(TOTarray, 101, 0, np.nanmax(TOTarray), ['Total charge per event', 'TOT cycles','N'], "sumTOT", outdir, fit='gaus')
 
 simpleHist(tot_list, 51, 0, 1000, ["raw TOT","TOT", "N"], "RAW_TOT", outdir)
 #plt.figure()
