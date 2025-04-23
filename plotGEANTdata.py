@@ -1,0 +1,226 @@
+import numpy as np
+import matplotlib.pyplot as plt
+import sys
+
+###############################################################
+def findClosest(number, listA, listB):                                                                                                                                                                  
+      
+     if(number in listA):
+         return listB[listA.index(number)]
+     else:
+       this_num = 0
+       this_i = 0
+       cnt=0
+       for i in range(len(listA)):
+         #print(f"looking if {number} is in between {listA[cnt]} and {listA[cnt+1]}")
+         if(number > listA[i] and number < listA[i+1]):
+             this_num = np.mean([i, listA[cnt+1]])
+             this_i = i
+             #print("yes it is")
+             #print("\n{} {} {} {} {}\n".format(this_num, this_i, this_i+1, len(listA), len(listB)))
+             #print(listA[i])
+             #print(listB[i])
+             return np.mean([ listB[i], listB[i+1]])
+         cnt+=1
+
+
+
+def calcIntensity(I0, att_coeff, distance):                                                                                                                                                             
+
+    return I0*np.exp(-(att_coeff)*distance)
+
+def makeAvgBin(listA):
+
+    tmp = []
+    for i in range(len(listA)):
+        if(i==0):
+            continue
+        tmp.append(np.mean([listA[i],listA[i-1]]))
+    return tmp    
+
+
+###############################################################
+infile = sys.argv[1]
+pb_file = sys.argv[2]
+#################
+nbins = 51
+rng = (0,4.5)
+################
+N_primary = 1.844376e6
+total_proton_flux = 18.5e9
+
+Energies = []
+
+f = open(infile, 'r')
+
+for line in f:
+
+    if('.' not in line):
+        continue
+
+    Energies.append(float(line))
+
+plt.figure(figsize=(8,6))
+
+cts, edges = np.histogram(np.array(Energies), bins=nbins, range=rng)
+
+print(cts)
+print(edges)
+print(edges[:-1])
+
+ratesProduced = cts/N_primary*total_proton_flux
+
+plt.hist(edges[:-1], weights=cts, bins=nbins, range=rng, align='left',histtype='stepfilled', facecolor='red')
+
+plt.xlabel(r'Secondary $\gamma$ energy, [MeV]')
+plt.ylabel('CTS')
+plt.title(r'Secondary $\gamma$ Spectrum')
+plt.grid(which='major', color='grey', linestyle='-', linewidth='0.5')
+plt.grid(which='minor', color='grey', linestyle='--', linewidth='0.25')
+plt.savefig('SecondaryGammas.png')
+
+########## reading gamma attenuation data by lead ################
+
+pbfile = open(pb_file,'r')
+ 
+Energies, muRho = [], []
+
+for line in pbfile:
+    words = line.split(',')
+    iEnergy = float(words[0])
+    iconst = float(words[1])
+    Energies.append(iEnergy)
+    muRho.append(iconst)
+
+pbfile.close()
+
+####################################################################
+# getting mu/rho data for scintillator to get part of radiation caught by scintillators
+
+fxray_sci = open('scintiData/scinti_massAttCoeff_NIST.csv','r')
+
+Exray_sci, murho_sci = [], []
+
+for sciline in fxray_sci:
+    if('#' in sciline):
+        continue
+    words = sciline.split(',')
+    Exray_sci.append(float(words[0]))
+    murho_sci.append(float(words[1]))
+    #murho_sci.append(float(words[2]))
+
+fxray_sci.close()
+
+#############################################################################
+
+CoeffperEnergy = []
+AttenuatedEnergies, fracGammaDet_nopb = [], []
+
+Avg_edges = makeAvgBin(edges)
+
+print("------------ ATTENTION --------------------\n")
+for ibin, iedge in zip(ratesProduced,Avg_edges):
+    #print(ibin, iedge)
+    if(iedge == 0):
+        #AttenuatedEnergies.append(0)
+        continue
+    attCoef = findClosest(iedge, Energies, muRho)
+    att = calcIntensity(1, attCoef, 15) # using Pb thickness of 15 cm
+    CoeffperEnergy.append(att)
+    AttenuatedEnergies.append(ibin*att)
+    print(f"Coefficient is ={round(att,2)}, hence BIN={round(ibin)} is attenuated to {round(ibin*att)}")
+
+print("----------- --------------------")
+################################################################
+# checkin n photons stopped in scinti in the absence of lead
+for ibin, iedge in zip(ratesProduced,Avg_edges):
+    #print(ibin, iedge)
+    if(iedge == 0):
+        #AttenuatedEnergies.append(0)
+        continue
+    attCoef = findClosest(iedge, Exray_sci, murho_sci)
+    att = calcIntensity(1, attCoef, 1) # using Pb thickness of 15 cm
+    fracGammaDet_nopb.append(ibin*(1-att))
+    #print(f"Coefficient is ={round(att,2)}, hence BIN={round(ibin)} is attenuated to {round(ibin*att)}")
+    
+sum_detected_gamma = round(sum(fracGammaDet_nopb))
+print(f"\nWithout shielding scintillators sees <{sum_detected_gamma}> photon events\n")
+
+################################################################
+plt.figure(figsize=(8,6))
+
+print(AttenuatedEnergies)
+
+s_initial_rates = np.array(ratesProduced)/1000
+s_attenuated_rates = np.array(AttenuatedEnergies)/1000
+
+plt.hist(edges[:-1], weights=s_initial_rates, bins=nbins, range=rng, align='left',histtype='stepfilled', edgecolor='black', facecolor='red', alpha=0.5, label=r"$\Phi_{\gamma}$ generated by Al")
+plt.hist(edges[:-1], weights=s_attenuated_rates, bins=nbins, range=rng, align='left',histtype='stepfilled', edgecolor='black', facecolor='green', alpha=0.5, label=r"$\Phi_{\gamma}$ after Pb shielding")
+
+##### adding scintillator attenuation ##########
+
+cts_on_scinti = []
+
+for irate, edge in zip(s_attenuated_rates, Avg_edges):
+    if(edge==0):
+        continue
+    acoeff = findClosest(edge,Exray_sci, murho_sci)
+    att = calcIntensity(1, acoeff, 1)# assuming 1cm of scintillator thickness
+    frac_detected = 1-att
+    cts_on_scinti.append(irate*frac_detected)
+
+s_cts_on_scinti = np.array(cts_on_scinti)/1000
+s_fracGammaDet = np.array(fracGammaDet_nopb)/1000
+
+plt.hist(edges[:-1], weights=np.array(fracGammaDet_nopb)/1000, bins=nbins, range=rng, align='left',histtype='stepfilled', edgecolor='black', facecolor='blue', alpha=0.5, label=r"$\Phi_{\gamma}$ stopped in 1cm plastic (no Pb)")
+plt.hist(edges[:-1], weights=s_cts_on_scinti, bins=nbins, range=rng, align='left',histtype='stepfilled', edgecolor='black', facecolor='yellow', alpha=0.5, label=r"$\Phi_{\gamma}$ stopped in 1cm plastic")
+
+print(s_cts_on_scinti)
+
+plt.xlabel(r'Attenuated Secondary $\gamma$ energy, [MeV]')
+plt.ylabel('rate, [kHz]')
+plt.title(r'Secondary $\gamma$ Spectrum')
+xstart = 380
+plt.text(2.5,xstart, r"$\Sigma N_{cts, TOTAL}$"+f"={round(sum(ratesProduced))}")
+plt.text(2.5,xstart-20, r"$\Sigma N_{cts, ATT}$ "+f"={round(sum(AttenuatedEnergies))}")
+redFact = round(sum(ratesProduced)/sum(AttenuatedEnergies),2)
+plt.text(2.5,xstart-40, f"total reduction of bgr by x{redFact}")
+plt.text(2.5,xstart-60, r"$N_{\gamma}$"+f"={round(sum(fracGammaDet_nopb))} stopped by scinti (no Pb)")
+plt.text(2.5,xstart-80, r"$N_{\gamma}$"+f"={round(sum(cts_on_scinti))} stopped by scinti (after Pb)")
+plt.grid(which='major', color='grey', linestyle='-', linewidth='0.5')
+plt.grid(which='minor', color='grey', linestyle='--', linewidth='0.25')
+#plt.yscale('log')
+plt.legend()
+plt.grid(which='major', color='grey', linestyle='-', linewidth='0.5')
+plt.grid(which='minor', color='grey', linestyle='--', linewidth='0.25')
+plt.savefig('SecondaryGammas-Att.png')
+
+#plt.figure()
+#plt.hist(Avg_edges, weights=CoeffperEnergy, bins=nbins, range=rng, align='left',histtype='stepfilled', facecolor='red', alpha=0.5)
+#plt.savefig("huyase-attenuatiuon.png")
+
+plt.figure()
+#plt.hist(edges[:-1], weights=s_attenuated_rates*1000, bins=nbins, range=rng, align='left',histtype='stepfilled', edgecolor='black', facecolor='green', alpha=0.5, label=r"$\Phi_{\gamma}$ after Pb shielding")
+plt.hist(edges[:-1], weights=s_cts_on_scinti*1000, bins=nbins, range=rng, align='left',histtype='stepfilled', edgecolor='black', facecolor='yellow', alpha=0.5, label=r"$\Phi_{\gamma}$ after Pb shielding")
+#plt.hist(edges[:-1], weights=s_cts_on_scinti, bins=nbins, range=rng, align='left',histtype='stepfilled', edgecolor='black', facecolor='blue', alpha=0.5, label=r"$\Phi_{\gamma}$ after Pb shielding")
+plt.text(3.5,2.0,r"$\Sigma$"+f"={round(sum(s_cts_on_scinti*1000))} photons")
+plt.xlabel(r"Secondary $\gamma$ Energy, [MeV]")
+plt.ylabel("Rate, [Hz]")
+plt.grid(True)
+#plt.yscale('log')
+plt.savefig("huya.png")
+
+plt.figure()
+plt.hist(edges[:-1], weights=fracGammaDet_nopb, bins=nbins, range=rng, align='left',histtype='stepfilled', edgecolor='black', facecolor='blue', alpha=0.5, label=r"$\Phi_{\gamma}$ after Pb shielding")
+plt.text(3.5,2.0,r"$\Sigma$"+f"={round(sum(fracGammaDet_nopb))} photons")
+#plt.yscale('log')
+plt.savefig("huya-noPb.png")
+
+
+
+
+
+
+
+
+

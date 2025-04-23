@@ -148,21 +148,16 @@ peak_sigma = []
 peak_sigma_err = []
 positions = []
 
-run_grid = np.zeros((3,3))
-
-totHistList = []
-Vgrid_list = []
-
 fcnt = 0
 
-matOfMatices=[]
+totHistList = [ [] for i in range(6)]
 
 for file in inputlist:
 
     x, y = None, None
     TOT = []
-    #position = None
-    matrix = np.zeros((256,256), dtype=np.uint16)
+
+    #matrix = np.zeros((256,256), dtype=np.uint16)
     with tb.open_file(file) as f:
 
         print(f"Reading {f}")
@@ -188,32 +183,6 @@ for file in inputlist:
         run_num = int(run_name[4:])
         print(f'run number is {run_num}')
         basewords = None
-        ###############################################
-
-        fname = str(inputlist[fcnt])
-        words = fname.split("-")
-        #print(words)
-        row = words[len(words)-2]
-        column = words[len(words)-1][:-3]# removin .h5 from column name
-        if(column == "left"):
-            x = 0
-        elif(column=="center"):
-            x = 1
-        elif(column=="right"):
-            x = 2
-    
-        if(row=="bottom"):
-            y = 0
-        elif(row=="center"):
-            y = 1
-        elif(row=="top"):
-            y = 2
-
-        print(row)
-        print(column)
-        positions.append(row+"-"+column)
-
-        #exit(0)
 
         ###############################################
         sumTOT = f.get_node(base_group_name+"sumTot")
@@ -226,41 +195,23 @@ for file in inputlist:
         print(f"Contains {len(cluster_y)} events/hits")
         print(f"Contains {len(ToT)} events/hits")
 
-        for totsum in sumTOT:
-            TOT.append(totsum)
-
-        #print(cluster_x.shape)
-        #print(type(cluster_x))
-        #print(cluster_x[:10])
-        #print(sumTOT.shape)
-        #print(type(sumTOT))
-        #print(sumTOT[:10])
-
         iclus = 0
         #for xpos, ypos in zip(cluster_x, cluster_y):
         #for xpos, ypos, tot in zip(cluster_x, cluster_y, ToT):
         for xpos, ypos in zip(cluster_x, cluster_y):
 
-            #print(xpos)
-            #print(len(xpos))
-            #print(type(xpos[0]))
-            #print(ypos)
-            #print(len(ypos))
-            #print(type(ypos[0]))
-            #print(tot)
-            #print(len(tot))
-            #print(type(tot[0]))
+            #np.add.at(matrix, (xpos, ypos), 1)
+            if(xpos <= 95 and xpos >= 85):
+                if(ypos>=95 and ypos<=105):
 
-            #for i,j,t in zip(xpos,ypos,tot):
-            #    print(f"x={i} y={j} => tot={t}")
-            #    matrix[i,j] += t
+                elif(ypos>= 150 and ypos<=160):
 
-            ##exit(0)
-            #try:
-            #    assert len(xpos) == len(ypos) == len(tot), "xpos, ypos, and tot arrays must have the same length."
-            #except:
-            #    print("Error SUKA!")
-            np.add.at(matrix, (xpos, ypos), 1)
+                else:
+                    continue
+
+            elif(xpos <= 135 and xpos >= 145):
+
+            elif(xpos <= 165 and xpos >= 175):
 
             iclus+=1
 

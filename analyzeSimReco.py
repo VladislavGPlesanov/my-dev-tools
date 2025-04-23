@@ -69,6 +69,21 @@ def progress(ntotal, ith):
     finally:
         print(f"\r{perc}% done", end="",flush=True)
 
+def getClusterCenter(matrix):
+
+    x,y = np.meshgrid(np.arange(matrix.shape[0]), np.arange(matrix.shape[1]), indexing='ij')
+    
+    norm_factor = matrix.sum()
+
+    mean_x = (matrix * x).sum() / norm_factor
+    mean_y = (matrix * y).sum() / norm_factor
+
+    std_x = np.sqrt( (matrix * (x - mean_x)**2).sum() / norm_factor)
+    std_y = np.sqrt( (matrix * (y - mean_y)**2).sum() / norm_factor)
+
+    return mean_x, mean_y, std_x, std_y
+
+
 def multiHist(nuarray_list, nbins, binbounds, labels, legends, logy ,picname, odir):
 
     plt.figure()
@@ -174,10 +189,10 @@ def simpleHist(nuarray, nbins, minbin, maxbin, labels, picname, odir,fit=None):
             fitlab+=f"Ap={round(Ap,2)}, Bp={round(Bp,2)}, {G_phi}={round(phi,2)}"
             plt.plot(bin_centers[:-1], result.best_fit, '--r')
             #plt.plot(bin_edges[:-1], result.best_fit, '--r')
-            plt.hlines(Ap, -0.1, 3.15, colors='g', label=f"Ap={round(Ap,2)}")
-            plt.hlines(Bp, -0.1, 3.15, colors='y', label=f"Bp={round(Bp,2)}")
+            #plt.hlines(Ap, -0.1, 3.15, colors='g', label=f"Ap={round(Ap,2)}")
+            #plt.hlines(Bp, -0.1, 3.15, colors='y', label=f"Bp={round(Bp,2)}")
             #plt.vlines(phi, 0, np.max(counts)*1.2, colors='m',label=f"{G_phi}={round(phi,2)}")
-            plt.vlines(phi, 0, np.max(counts)*1.2, colors='m',label=f"{G_phi}={round(phi,2)}({round(toDegrees(phi),2)} deg)")
+            #plt.vlines(phi, 0, np.max(counts)*1.2, colors='m',label=f"{G_phi}={round(phi,2)}({round(toDegrees(phi),2)} deg)")
             ax = plt.gca()
             miny,maxy = ax.get_ylim()
             mu = modFac(Ap,Bp)
@@ -258,7 +273,7 @@ def plot2dEvent(nuarray, info, picname, odir, plotMarker=None):
         ms = ax.matshow(nuarray, cmap='hot')
     fig.colorbar(ms,cax=cax,orientation='vertical')
     start = 120
-    ax.text(-90, start, info, fontsize=10,color='black' )    
+    #ax.text(-90, start, info, fontsize=10,color='black' )    
     #if(plotMarker is not None):
     #    ax.scatter(plotMarker[0],plotMarker[1],c='blue', marker='*')
     #    ax.text(-90,200, f"redX={plotMarker[0]}\nredY={plotMarker[1]}", fontsize=10, color='black')
@@ -273,25 +288,51 @@ def plot2dEvent(nuarray, info, picname, odir, plotMarker=None):
 
 def other2Dplot(nuarray, picname, odir):
 
-    non_zero_index = np.nonzero(nuarray)
+    #non_zero_index = np.nonzero(nuarray)
 
-    xmin, xmax = non_zero_index[0].min(), non_zero_index[0].max()
-    ymin, ymax = non_zero_index[1].min(), non_zero_index[1].max()
+    #xmin, xmax = non_zero_index[0].min(), non_zero_index[0].max()
+    #ymin, ymax = non_zero_index[1].min(), non_zero_index[1].max()
 
-    ROI = nuarray[xmin-10:xmax+10, ymin-10:ymax+10]
+    #ROI = nuarray[xmin-10:xmax+10, ymin-10:ymax+10]
+    ####################################################################
+
+    mean_x, mean_y, std_x, std_y = getClusterCenter(nuarray)
+    #print("{},{}: {},{}".format(mean_x,mean_y,std_x,std_y))
+
+    maxdev = 0
+    if(std_x > std_y):
+        maxdev = np.floor(std_x)
+    else:
+        maxdev = np.floor(std_y)
+
+    xmin = int(np.floor(mean_x) - 4*maxdev) 
+    xmax = int(np.floor(mean_x) + 4*maxdev)
+
+    ymin = int(np.floor(mean_y) - 4*maxdev)
+    ymax = int(np.floor(mean_y) + 4*maxdev)
+
+    ROI = nuarray[xmin-2:xmax+2, ymin-2:ymax+2]
+ 
+    #print("\n{},{}: {},{}\n".format(xmin,xmax,ymin,ymax))
+    #ROI = nuarray[xmin:xmax, ymin:ymax]
 
     plt.figure(figsize=(8,8))
 
-    plt.imshow(ROI, cmap='hot', origin='lower', extent=(ymin,ymax,xmin,xmax))
+    #plt.imshow(ROI, cmap='viridis', origin='lower', extent=(ymin,ymax,xmin,xmax))
+    plt.imshow(ROI, cmap='turbo', origin='lower', extent=(ymin,ymax,xmin,xmax))
     plt.gca().invert_yaxis() 
     plt.colorbar(orientation='vertical', label='Counts')
 
-    plt.title('Zoom-in')    
+    #plt.title('Zoom-in')    
     plt.xlabel('x')
     plt.ylabel('y')
-
+ 
     plt.plot()
+    #if("-285-" in picname):
     plt.savefig(f"{odir}/reco-zoom-event-{picname}.png")
+    #   plt.savefig(f"reco-zoom-event-{picname}.pdf")
+    #else:
+    #   plt.savefig(f"{odir}/reco-zoom-event-{picname}.png", dpi=200)
 
 def simpleSimRecoHist(data, nbins, minbin, maxbin, labels, picname, ylog, odir):
 
@@ -364,6 +405,10 @@ with tb.open_file(recofile, 'r') as f:
     #base_group_name = '/reconstruction/run_9999/chip_0/'
     #base_group_name = '/reconstruction/run_1868/chip_0/'
     
+    #comToA = f.get_node(base_group_name+"ToACombined")
+    #print(f"found VLarray TOACombined of size {type(comToA)}")
+    #ToA = f.get_node(base_group_name+"ToA")
+    #print(f"found VLarray TOT of size {type(ToA)}")
     ToT = f.get_node(base_group_name+"ToT")
     print(f"found VLarray TOT of size {type(ToT)}")
     centerX = f.get_node(base_group_name+"centerX")
@@ -424,8 +469,8 @@ with tb.open_file(recofile, 'r') as f:
 
     print("Printing global variable data sets")
     #simpleSimRecoHist(ToT.reshape(-1), 51, np.nanmin(ToT.reshape(-1)), np.nanmax(ToT.reshape(-1)), ['TOT_Cycles','TOT','N'], plotname+"-TOT", False, outdir)
-    #simpleSimRecoHist(centerX, 50, 6, 8, ['centerX','x','cnt'], plotname+"centerX", False, outdir)
-    #simpleSimRecoHist(centerY, 50, 6, 8, ['centerY','Y','cnt'], plotname+"centerY", False, outdir)
+    simpleSimRecoHist(centerX, 50, 6, 8, ['centerX','x','cnt'], plotname+"centerX", False, outdir)
+    simpleSimRecoHist(centerY, 50, 6, 8, ['centerY','Y','cnt'], plotname+"centerY", False, outdir)
     # - -------------------------------------------------------------------------
     #simpleSimRecoHist(excent, 50, 0.9, 10 , ['Excentricity','','cnt'], plotname+"excent", True, outdir)
     #simpleSimRecoHist(FIRT, 50, np.min(FIRT), np.max(FIRT)+0.5, ['frac_In_rms_T','','cnt'], plotname+"fracInRmsTrans", True, outdir)
@@ -513,6 +558,8 @@ with tb.open_file(recofile, 'r') as f:
     #matrix = np.zeros((256,256),dtype=np.uint16)
     matrixTotal = np.zeros((256,256),dtype=np.uint16)
 
+    #matrixTOA = np.zeros((256,256),dtype=np.uint16)
+
     #eventString = ""
 
     #multiClusterEvents = []
@@ -522,6 +569,7 @@ with tb.open_file(recofile, 'r') as f:
     print(f"\nTOTAL nr of clusters: {ntotal}\n")
     ievent, npics, mcevents = 0, 0, 0
     n_good = 0
+    n_tracks = 0
     for event in ToT:
 
         nhits = len(event)
@@ -570,18 +618,35 @@ with tb.open_file(recofile, 'r') as f:
 
         #n_good+=1
         #if(length[ievent] < 10):
-        for i in range(nhits):
-           #    matrix[x[ievent][i],y[ievent][i]] = event[i]
-           matrixTotal[x[ievent][i],y[ievent][i]] += 1
+        #for i in range(nhits):
+        #   #    matrix[x[ievent][i],y[ievent][i]] = event[i]
+        #   matrixTotal[x[ievent][i],y[ievent][i]] += 1
+
+        for xpos, ypos in zip(x[ievent],y[ievent]):
+            np.add.at(matrixTotal, (xpos,ypos), 1)
 
         #eventString+=f"{ievent},"
-        #if(npics < 50 and FIRT[ievent] > 0.01):      
-        #if(npics < 50):      
-        if(npics < 50 and ievent%100==0):      
+        #if(npics < 50 and FIRT[ievent] > 0.01):
+        
+        goodX = (centerX[ievent] < 6.85 and centerX[ievent] > 7.4)        
+        goodY = (centerY[ievent] < 6.75 and centerY[ievent] > 7.25)        
+
+        #if(npics < 100 and excent[ievent] > 2 and nhits > 25 and goodX and goodY):      
+        if(npics < 100 and nhits > 25 and excent[ievent] > 3):      
+        #if(npics < 50 and ievent%100==0):      
+        #if(npics < 50 and excent[ievent] > 3.0 and FIRT[ievent] < 0.1 and nhits > 20):      
+            #matrixTOA = np.zeros((256,256),dtype=np.uint16)
+            #matrixTOAcom = np.zeros((256,256),dtype=np.uint16)
             matrix = np.zeros((256,256),dtype=np.uint16)
             n_good+=1
             for i in range(nhits):
                 matrix[x[ievent][i],y[ievent][i]] = event[i]
+                #matrixTOA[x[ievent][i],y[ievent][i]] = ToA[ievent][i]
+                #matrixTOAcom[x[ievent][i],y[ievent][i]] = comToA[ievent][i]
+            
+
+            #for t in range(nhits):
+            #    matrixTOA[x[ievent][t],y[ievent][t]] = comToA[ievent][t]
 
             Sum_Qx = np.sum(event*x[ievent])
             Sum_Qy = np.sum(event*y[ievent])
@@ -590,16 +655,23 @@ with tb.open_file(recofile, 'r') as f:
             redY = Sum_Qy/np.sum(event)
        
             plot2dEvent(matrix, characs, f"cluster-{ievent}-{plotname}", outdir, [redX,redY]) 
-            #plot2dEvent(matrix, characs, f"cluster-{ievent}-{suffix}-{plotname}", outdir) 
-            #other2Dplot(matrix, f"cluster-{ievent}-{plotname}",outdir)
+            other2Dplot(matrix, f"cluster-{ievent}-{plotname}",outdir)
+
+            #other2Dplot(matrixTOA,f"TOA-cluster-{ievent}-{plotname}",outdir)
+           # other2Dplot(matrixTOAcom,f"TOAcom-cluster-{ievent}-{plotname}",outdir)
+            
+
             #plotDbscan(nz_index, labels, ievent, nfound, outdir)
             npics+=1
             matrix = np.zeros((256,256),dtype=np.uint16)
+            #matrixTOA = np.zeros((256,256),dtype=np.uint16)
+            #matrixTOAcom = np.zeros((256,256),dtype=np.uint16)
         progress(ntotal, ievent)
         ievent+=1
         
+        if(ievent==40000):
         #if("RomeRun" in recofile and ievent==30000):
-        #    break
+            break
 
         #exit(0)
 
@@ -610,7 +682,8 @@ print(f"resudec TOT has <{len(tot_reduced)}> entries")
 plot2dEvent(matrixTotal, "", "total-run",outdir)
 
 #simpleHist(alt_rotang, 51, 0.0, 180.0, ["Selected Cluster inclination","angle[deg]","N"], "ALT_ROTANG", outdir, fit="cosfunc") 
-simpleHist(alt_rotang, 51, 0.0, 3.15, ["Selected Cluster inclination","angle[radian]","N"], "ALT_ROTANG", outdir, fit="cosfunc") 
+#simpleHist(alt_rotang, 51, 0.0, 3.15, ["Selected Cluster inclination","angle[radian]","N"], "ALT_ROTANG", outdir, fit="cosfunc") 
+simpleHist(alt_rotang, 51, 0.0, 3.15, ["","Reconstructed angle,[rad]","Events,[N]"], "ALT_ROTANG", outdir, fit="cosfunc") 
 #simpleHist(tot_reduced, 101, 0, 400, ["TOT/nhits","N hits","#"], "TOT_REDUCED", outdir, fit="gaus")
 simpleHist(tot_reduced, 51, np.nanmin(tot_reduced), np.nanmax(tot_reduced), ["TOT/nhits","N hits","#"], "TOT_REDUCED", outdir, fit="gaus")
 simpleHist(TOTarray, 101, 0, np.nanmax(TOTarray), ['Total charge per event', 'TOT cycles','N'], "sumTOT", outdir, fit='gaus')

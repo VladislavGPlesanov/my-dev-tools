@@ -226,14 +226,16 @@ for file in inputlist:
     fcnt+=1
 
 plt.figure(figsize=(8,8))
+plt.hist([],weights=[], bins=101, range=(5000,35000), color='white', label=r"$V_{Grid}:$")
 for data in totHistList:
-    counts, bin_edges = np.histogram(data[0], bins=101, range=(0,35000))
-    plt.hist(bin_edges[:-1], weights=counts, bins=101, range=(0,35000), align='left', histtype='stepfilled', alpha=0.2, label=f"Vgrid = {data[1]} [V]")
+    counts, bin_edges = np.histogram(data[0], bins=101, range=(5000,35000))
+    plt.hist(bin_edges[:-1], weights=counts, bins=101, range=(5000,35000), align='left', histtype='stepfilled', alpha=0.2, label=f"{data[1]} [V]")
     
-plt.title("Energy spectrum, all runs")
-plt.xlabel("TOT cycles")
-plt.ylabel("N")
+plt.title("Fe55 Energy Spectrum")
+plt.xlabel("TOT cycles (charge)")
+plt.ylabel(r"$N_{events}$")
 plt.legend(loc='upper left')
+plt.grid(True)
 plt.savefig(f"TOT-Fe55-gainScan-Combined-{picname}.png")
 
 print(len(Vgrid_list))
@@ -247,7 +249,9 @@ fig, ax = plt.subplots()
 ax.errorbar(Vgrid_list, peak_mu, peak_mu_err, fmt='o', linewidth=2, capsize=6)
 ax.set_xlabel("Grid voltage [V]")
 ax.set_ylabel("Peak mu [TOT sum per event]")
-
+ax.set_xlim([405, 435])
+ax.set_ylim([13000, 28000])
+ax.grid(True)
 plt.savefig("GainCurve.png",dpi=400)
 ###################################################
 E_res = []
@@ -256,6 +260,7 @@ cnt = 0
 for mu in peak_mu:
     res = peak_sigma[cnt]/mu
     res_err = np.sqrt((peak_mu_err[cnt]/mu)**2 + (peak_sigma_err[cnt]/peak_sigma[cnt])**2)
+    print(f"calculating resolution => item={cnt}, {mu} +- {peak_mu_err[cnt]}, {peak_sigma[cnt]} +- {peak_sigma_err[cnt]}")
     E_res.append(res*100)
     E_res_err.append(res_err*100)
     cnt+=1
@@ -276,7 +281,7 @@ ax.set_xlabel("Grid voltage [V]")
 ax.set_ylabel(f"{G_delta}E/E [%]")
 ax.set_title("Energy resolution vs Grid voltage")
 
-ax.set_ylim([4,16])
+ax.set_ylim([0,20])
 ax.set_xlim([405,435])
 plt.grid()
 plt.savefig("Energy_resolutions.png")

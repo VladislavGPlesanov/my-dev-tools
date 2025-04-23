@@ -1,4 +1,4 @@
-import numpy
+import numpy as np
 import matplotlib.pyplot as plt
 import h5py
 from matplotlib import colors, cm
@@ -118,9 +118,10 @@ class myPlotter:
         if("occMap-" in plotname):
             _ , stats = findNoisyPixels(nuArray)       
          
-        fig, ax = plt.subplots()
+        fig, ax = plt.subplots(figsize=(10,8))
         cax = fig.add_axes([0.86, 0.1, 0.05, 0.8])
-        ms = ax.matshow(nuArray)
+        #ms = ax.matshow(nuArray)
+        ms = ax.matshow(nuArray, cmap='viridis', vmin=30, vmax=98)
         fig.colorbar(ms, cax=cax, orientation='vertical')
         if(stats is not None):
             ax.text(-85,270,r'$occ_{mean}$'+f' = {stats[0]:.2f}',fontsize=10)
@@ -148,6 +149,41 @@ class myUtils:
         clean_name = string_split[len(string_split)-1]
         clean_name = clean_name[:-3]
         return clean_name
+
+def getBaseGroupName(f, debug=None):
+
+    groups = f.walk_groups('/')
+    grouplist = []
+    for gr in groups:
+        print(f'found {gr}')
+        grouplist.append(gr)
+    main_group = str(grouplist[len(grouplist)-1])
+    if(debug):
+        print(f"last entry in walk_groups = \n{main_group}")
+
+    grouplist = None 
+
+    basewords = main_group.split('(')
+    if(debug):
+        print(basewords)
+
+    base_group_name = basewords[0][:-1]+'/'
+    #                              ^ removes space at the end of 'run_xxx/chip0 '
+    if(debug):
+        print(f'base group name is : <{base_group_name}>')
+    #bgn_split = base_group_name.split('/')
+    #if(debug):
+    #    print(bgn_split)
+    #run_name = bgn_split[2]
+    #if(debug):
+    #    print(f"<{run_name}>")
+    #run_num = int(run_name[4:])
+    #if(debug):
+    #    print(f'run number is {run_num}')
+
+    basewords = None
+ 
+    return base_group_name
 
 
 
