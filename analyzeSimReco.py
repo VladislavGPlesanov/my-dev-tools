@@ -397,7 +397,8 @@ def plotDbscan(index, dblabels, ievent, nfound, odir):
     plt.savefig(f"{odir}/DBSCAN-{ievent}.png")
 
 
-def plot2dEvent(nuarray, info, picname, odir, plotMarker=None):
+#def plot2dEvent(nuarray, info, picname, odir, plotMarker=None):
+def plot2dEvent(nuarray, info, picname, odir, figtype=None):
  
     # ---- matrix 2d hist ----
     fig, ax = plt.subplots()
@@ -407,6 +408,10 @@ def plot2dEvent(nuarray, info, picname, odir, plotMarker=None):
     if("total" in picname):
         #ms = ax.matshow(nuarray.T, cmap='hot')
         ms = ax.matshow(nuarray.T, cmap='gist_earth_r')
+        ax.set_title("Pixel occupancy (Beam profile)")
+        ax.set_xlabel("Pixel x")
+        ax.set_ylabel("Pixel y")
+
     else:
         ms = ax.matshow(nuarray, cmap='hot')
     fig.colorbar(ms,cax=cax,orientation='vertical')
@@ -423,7 +428,11 @@ def plot2dEvent(nuarray, info, picname, odir, plotMarker=None):
     #plt.text(-90, 200, f"n_xpeaks={peaks_x}\nn_ypeaks={peaks_y}")
 
     plt.plot()
-    fig.savefig(f"{odir}/reco-event-{picname}.png")
+    if(figtype is None or type(figtype) is not str):
+        fig.savefig(f"{odir}/reco-event-{picname}.png")
+    else:
+        fig.savefig(f"{odir}/reco-event-{picname}.{figtype}")
+    
     plt.close()
 
 
@@ -771,45 +780,52 @@ with tb.open_file(recofile, 'r') as f:
         goodx = (centerX[ievent] < 6.85 and centerX[ievent] > 7.4)        
         goodY = (centerY[ievent] < 6.75 and centerY[ievent] > 7.25)        
 
-#        if(npics < 100 and nhits > 25 and excent[ievent] > 3): # this one get the actual tracks
-#        #if(npics < 100 and sumTOT[ievent] < 200 and sumTOT[ievent] > 160):      
-#
-#            matrix = np.zeros((256,256),dtype=np.uint16)
-#            n_good+=1
-#            for i in range(nhits):
-#                matrix[x[ievent][i],y[ievent][i]] = event[i]
-#                #matrixTOA[x[ievent][i],y[ievent][i]] = ToA[ievent][i]
-#                #matrixTOAcom[x[ievent][i],y[ievent][i]] = comToA[ievent][i]
-#            
-#
-#            #for t in range(nhits):
-#            #    matrixTOA[x[ievent][t],y[ievent][t]] = comToA[ievent][t]
-#
-#            Sum_Qx = np.sum(event*x[ievent])
-#            Sum_Qy = np.sum(event*y[ievent])
-# 
-#            redX, redY = None, None
-#
-#            try:
-#                redX = Sum_Qx/np.sum(event)
-#                redY = Sum_Qy/np.sum(event)
-#            except ValueError:
-#                print('oops')
-#            finally:
-#                redX = -1
-#                redY = -1
-#       
-#            plot2dEvent(matrix, characs, f"cluster-{ievent}-{plotname}", outdir, [redX,redY]) 
-#            other2Dplot(matrix, f"cluster-{ievent}-{plotname}",outdir)
-#
-#            #other2Dplot(matrixTOA,f"TOA-cluster-{ievent}-{plotname}",outdir)
-#           # other2Dplot(matrixTOAcom,f"TOAcom-cluster-{ievent}-{plotname}",outdir)
-#            
-#            #plotDbscan(nz_index, labels, ievent, nfound, outdir)
-#            npics+=1
-#            matrix = np.zeros((256,256),dtype=np.uint16)
-#            #matrixTOA = np.zeros((256,256),dtype=np.uint16)
-#            #matrixTOAcom = np.zeros((256,256),dtype=np.uint16)
+        if(npics < 100 and nhits > 25 and excent[ievent] > 3): # this one get the actual tracks
+        #if(npics < 100 and nhits > 20 and rotAng[ievent]>0.5 and rotAng[ievent]<2.5): # this one get the actual tracks
+        #if(npics < 100 and sumTOT[ievent] < 200 and sumTOT[ievent] > 160):      
+
+            matrix = np.zeros((256,256),dtype=np.uint16)
+            n_good+=1
+            for i in range(nhits):
+                matrix[x[ievent][i],y[ievent][i]] = event[i]
+                #matrixTOA[x[ievent][i],y[ievent][i]] = ToA[ievent][i]
+                #matrixTOAcom[x[ievent][i],y[ievent][i]] = comToA[ievent][i]
+            
+
+            #for t in range(nhits):
+            #    matrixTOA[x[ievent][t],y[ievent][t]] = comToA[ievent][t]
+
+            #Sum_Qx = np.sum(event*x[ievent])
+            #Sum_Qy = np.sum(event*y[ievent])
+ 
+            #redX, redY = None, None
+
+            #try:
+            #    redX = Sum_Qx/np.sum(event)
+            #    redY = Sum_Qy/np.sum(event)
+            #except ValueError:
+            #    print('oops')
+            #finally:
+            #    redX = -1
+            #    redY = -1
+       
+            #plot2dEvent(matrix, characs, f"cluster-{ievent}-{plotname}", outdir, [redX,redY]) 
+            if(npics%10==0 or ievent==58):
+                plot2dEvent(matrix, characs, f"cluster-{ievent}-{plotname}", outdir, figtype="pdf") 
+            else:
+                plot2dEvent(matrix, characs, f"cluster-{ievent}-{plotname}", outdir) 
+            #other2Dplot(matrix, f"cluster-{ievent}-{plotname}",outdir)
+
+            #other2Dplot(matrixTOA,f"TOA-cluster-{ievent}-{plotname}",outdir)
+           # other2Dplot(matrixTOAcom,f"TOAcom-cluster-{ievent}-{plotname}",outdir)
+            
+            #plotDbscan(nz_index, labels, ievent, nfound, outdir)
+            npics+=1
+            matrix = np.zeros((256,256),dtype=np.uint16)
+            #matrixTOA = np.zeros((256,256),dtype=np.uint16)
+            #matrixTOAcom = np.zeros((256,256),dtype=np.uint16)
+            #if(rotAng[ievent]>0.5 and rotAng[ievent]<2.5):
+            #    plot2dEvent(matrix, characs, f"cluster-weirdRotAng-{ievent}-{plotname}", outdir) 
         progress(ntotal, ievent)
         ievent+=1
         
@@ -823,7 +839,8 @@ print(f"FOUND <{n_good}> events")
 
 print(f"resudec TOT has <{len(tot_reduced)}> entries")
 
-plot2dEvent(matrixTotal, "", "OCCUPANCY-total-run",outdir)
+#plot2dEvent(matrixTotal, "", "OCCUPANCY-total-run",outdir)
+plot2dEvent(matrixTotal, "", "OCCUPANCY-total-run",outdir, figtype="pdf")
 
 simpleHist(REAL_ALT_ROTANG, 100, -np.pi, np.pi, ["","Reconstructed angle,[rad]","Events,[N]"], "REAL_ALT_ROTANG", outdir, fit="cosfunc") 
 print(f"\n Cut on EXCENTRICITY accepted only: {naccepted/ntotal*100:.2f}% of data\n")
