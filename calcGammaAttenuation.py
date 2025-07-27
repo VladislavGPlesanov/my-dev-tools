@@ -175,7 +175,7 @@ for pline in prot_file:
         continue
     words = pline.split(",")
     pEnergy.append(float(words[0]))
-    pStopPow.append(float(words[1]))
+    pStopPow.append(float(words[1])*scinti_rho)
     pRange.append(float(words[2])/scinti_rho)
     plcnt+=1
 
@@ -187,13 +187,30 @@ plt.xscale('log')
 plt.yscale('log')
 plt.savefig("proton_range_in_plastic_scintillator.png")
 
+cycloP_loss = None
+
+closestLoss = findClosest(13.906, pEnergy,pStopPow)
+
+plt.figure()
+plt.plot(pEnergy, pStopPow, color='red')
+plt.xlabel('Proton Energy [MeV]')
+plt.ylabel('Energy Loss, [MeV/cm]')
+plt.vlines(13.609,0,1e3, colors='blue', linestyles='dashed')
+plt.hlines(closestLoss, 1e-3, 1e3, colors='blue',linestyles='dashed')
+plt.text(1e-3,10,r"13.609 MeV $p^{+}$ loose "+f"{closestLoss} Mev/cm")
+plt.xscale('log')
+plt.yscale('log')
+plt.savefig('ProtonEnergyLoss-plasticScinti.png')
+
+print(f'Protons loose {closestLoss} MeV/cm in scintillator material')
+
 ########### chekin BC-408 scinti light yield for protons ########################################
 # data from https://scintillator.lbl.gov/ej-20x-bc-40x-and-ne-110-quenching-data/i
 pYieldFile = open(folder+'plastic_scinti_light_yield_protons.txt','r')
 Eprotons, LightYield, LY_err = [], [], []
 
 # data normalised vs 477 keV electron response of BC-408
-# for 1 MeV e- this would be multiplied by a cator of 1 MeV/0.477MeV = 2096
+# for 1 MeV e- this would be multiplied by a factor of 1 MeV/0.477MeV = 2096
 scaleFactor = 2096.0
 
 for yline in pYieldFile:

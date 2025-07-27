@@ -32,10 +32,6 @@ def monitorCPU(freq, scriptname, write):
     outstr = ""
     line = ""
 
-    #if write:
-    #    name = makefilename()
-    #    ofile = open(name, 'a')        
-
     while True:
         try:
             proclist = None
@@ -74,11 +70,6 @@ def monitorCPU(freq, scriptname, write):
                 outstr += tempstr
 
             print("\r{}".format(outstr), end=" ",flush=True)
-            #if ofile is not None:
-            #   outstr+="\n"
-            #   ofile.write(outstr)
-            #outstr=""
-
             cnt+=1
 
             time.sleep(freq)
@@ -87,8 +78,6 @@ def monitorCPU(freq, scriptname, write):
                 input("ON PAUSE, press ENTER to CONTINUE, or ctrl+c to STOP")
             except KeyboardInterrupt:
                 print('\n')
-                #if(ofile is not None):
-                #    ofile.close()
                 return
 
 if __name__ == '__main__':

@@ -29,6 +29,10 @@ def modFac(Ap,Bp):
 
     return Bp/(2*Ap+Bp)
 
+def deltaMu(mu, Ap, Bp, Ap_err, Bp_err):
+
+    return mu * np.sqrt( (Bp_err / Bp)**2  + (2 * Ap_err / (Bp + 2*Ap) )**2 )
+
 def polDeg(Ap, Bp, mu):
 
     return (1/mu)*(Bp/((2*Ap)+Bp))
@@ -69,6 +73,70 @@ def progress(ntotal, ith):
     finally:
         print(f"\r{perc}% done", end="",flush=True)
 
+def runAngleReco(positions, charges):
+
+    xpos, ypos = positions
+    center = np.average(positions, axis=1, weights=charges)
+    X = np.vstack((xpos - center[0], ypos - center[1]))
+    
+    # Covariance matrix 
+    M = np.dot(X*charges, X.T)
+
+    # getin' eigen val's n vectors for covariance matrix
+    eigenVal, eigenVect = np.linalg.eig(M) 
+
+    # get axis which maximizes second moment - eigenvector w biggest eigenvalue
+    prime_axis = eigenVect[:, np.argmax(eigenVal)] 
+
+    # projectin' new axis on x-y and calc its angle      
+    projection_xy = np.array([prime_axis[0],prime_axis[1]])
+    angle = np.arctan2(projection_xy[1],projection_xy[0])
+
+    # projectin' data points onto new axis plane
+    projection_xy_fit = np.dot(X[:2].T, prime_axis[:2])
+
+    # calculatin' skewness
+    skew_xy = np.sum(charges * projection_xy_fit**3)/np.sum(charges)
+
+    if skew_xy > 0:
+        if angle > 0: 
+            angle = -np.pi + angle
+        else:
+            angle = np.pi + angle
+    else:
+        angle = angle
+
+    return angle
+
+#def scanForPeaks(nuarray, thr):
+#
+#    cnt_above_thr = 0
+#    n_peaks = 0
+#    counter = 0
+#
+#    for num in nuarray:
+#
+#        if num > thr:
+#            cnt_above_thr+=1
+#        else:
+#            continue
+#
+#        if nuarray[counter+1] < thr:
+#            n_peaks+=1
+#            cnt_above_thr = 0
+#        counter+=1
+#    
+#    return n_peaks
+#
+#def countDiscont(matrix):
+# 
+#    xproj, yproj = np.meshgrid(np.arange(matrix.shape[0]), np.arange(matrix.shape[1]), indexing='ij')
+#
+#    npeaks_x = scanForPeaks(xproj, max(xproj)*0.5)
+#    npeaks_y = scanForPeaks(yproj, max(yproj)*0.5), 
+#    
+#    return npeaks_x, npeaks_y
+
 def getClusterCenter(matrix):
 
     x,y = np.meshgrid(np.arange(matrix.shape[0]), np.arange(matrix.shape[1]), indexing='ij')
@@ -101,9 +169,76 @@ def multiHist(nuarray_list, nbins, binbounds, labels, legends, logy ,picname, od
     plt.legend()
     plt.savefig(f"{odir}/multiHist-{picname}.png")   
 
+
+def fitAndPlotModulation(nuarray, nbins, minbin, maxbin, labels, picname, odir):
+
+    # faithfully stolen from Markus's plot_angles.py
+    # fitting 
+    clear_data = nuarray[~np.isnan(nuarray)]
+    counts, bin_edges = np.histogram(clear_data, bins = nbins)
+    bin_centers = (bin_edges[:-1]+bin_edges[1:])/2
+    
+    count_errors = np.sqrt(counts)
+
+    params, covariance = curve_fit(cosfunc, bin_centers, counts, bounds=([0,0,-np.pi],[np.inf,np.inf,np.pi]),maxfev=1000000)
+
+    Ap, Bp, phi = params
+
+    expected_cts = cosfunc(bin_centers, *params)
+    
+    chisquare = np.sum(((counts - expected_cts)**2 )/ count_errors**2)
+    dof = len(counts) - len(params)
+    chired = chisquare / dof
+
+    Ap_err, Bp_err, phi_err = np.sqrt(np.diag(covariance))
+
+    # plotting 
+    plt.figure(figsize=(8,6))
+    plt.hist(bin_edges[:-1], 
+             weights=counts, 
+             bins=nbins, 
+             range=(minbin,maxbin), 
+             align='left', 
+             histtype='stepfilled', 
+             facecolor='forestgreen')
+
+    plt.plot(bin_centers[:-1], cosfunc(bin_centers[:-1], Ap, Bp, phi), '--r')
+    plt.vlines(phi, 
+                0, 
+                np.max(counts)*1.05,
+                colors='darkviolet',
+                linestyles='dashed',
+                label=f"{G_phi}={phi:.2f}"+r"$\pm$"+f"{phi_err:.2f}\n({toDegrees(phi):.2f} deg)")
+    ax = plt.gca()
+    miny,maxy = ax.get_ylim()
+    print(f"Getting miny/maxy for histogram: {picname}")
+    print(f"miny={miny}, maxy={maxy}")
+
+    plt.ylim([miny, maxy*1.1])
+
+    mu = modFac(Ap,Bp)
+    muErr = deltaMu(mu, Ap, Bp, Ap_err, Bp_err)
+
+    plt.text(-np.pi, maxy, f"{G_mu}={mu*100:.2f}%"+r"$\pm$"+f"{muErr:.2f}%", fontsize=11)
+    #plt.text(minbin*1.1, maxy, f"{G_mu}={mu*100:.2f}%"+r"$\pm$"+f"{muErr:.2f}")
+    #plt.text(minbin*1.1, maxy*0.95, r"$N(\phi) = A_{P} + B_{P}\cdot cos^2(\phi-\phi_{0})$")
+    #plt.text(minbin*1.1, maxy*0.90, f"Ap={Ap:.2f}, Bp={Bp:.2f}")
+
+    plt.legend(loc='upper right')
+
+    plt.title(labels[0])
+    plt.xlabel(labels[1])
+    plt.ylabel(labels[2])
+    plt.grid()
+    plt.savefig(f"{odir}/STOLEN-1DHist-{picname}.png")
+    plt.close()
+
+
 def simpleHist(nuarray, nbins, minbin, maxbin, labels, picname, odir,fit=None):
 
     plt.figure()
+
+    #nuarray = nuarray[~np.isnan(nuarray)]
 
     counts, bin_edges = np.histogram(nuarray, bins=nbins, range=(minbin,maxbin))
 
@@ -126,21 +261,13 @@ def simpleHist(nuarray, nbins, minbin, maxbin, labels, picname, odir,fit=None):
             peakbin+=1
 
             print(f"Found maximum bin at {peakbin} = {counts[peakbin]}")
-            model = Model(gauss)
-            
+            model = Model(gauss) 
             pars = model.make_params(A=maxbin_cnt, mu=peakbin*val_ibin, sigma=np.std(counts))
-            #pars['A'].min = maxbin_cnt*0.8
-            #pars['A'].min = maxbin_cnt*1.2
-
-            #pars['mu'].min = peakbin*0.6*val_ibin
-            #pars['mu'].min = peakbin*1.4*val_ibin
- 
-            #pars['sigma'].min = np.std(counts)*0.6
-            #pars['sigma'].min = np.std(counts)*1.4
-
             print(f"Gauss Fit: Setting: A={maxbin_cnt}, mu={peakbin*val_ibin}, sigma={np.std(counts)}")
 
-        elif(fit=="cosfunc"):            
+        if(fit=="cosfunc"):            
+
+            ######################################################
             model = Model(cosfunc)
             pars = model.make_params(Ap=minbin_cnt*0.9,Bp=maxbin_cnt*1.1,phi0=1.5)
             pars['Ap'].min = minbin_cnt*0.8
@@ -184,7 +311,8 @@ def simpleHist(nuarray, nbins, minbin, maxbin, labels, picname, odir,fit=None):
         if(fit=="cosfunc"):
             #print("########## FITTING COS^2 FUNCTION #############")
             Ap = result.params['Ap'].value
-            Bp = Ap + result.params['Bp'].value
+            #Bp = Ap + result.params['Bp'].value # NAHUYA i did this?
+            Bp = result.params['Bp'].value
             phi = result.params['phi0'].value
             fitlab+=f"Ap={round(Ap,2)}, Bp={round(Bp,2)}, {G_phi}={round(phi,2)}"
             plt.plot(bin_centers[:-1], result.best_fit, '--r')
@@ -192,13 +320,21 @@ def simpleHist(nuarray, nbins, minbin, maxbin, labels, picname, odir,fit=None):
             #plt.hlines(Ap, -0.1, 3.15, colors='g', label=f"Ap={round(Ap,2)}")
             #plt.hlines(Bp, -0.1, 3.15, colors='y', label=f"Bp={round(Bp,2)}")
             #plt.vlines(phi, 0, np.max(counts)*1.2, colors='m',label=f"{G_phi}={round(phi,2)}")
-            #plt.vlines(phi, 0, np.max(counts)*1.2, colors='m',label=f"{G_phi}={round(phi,2)}({round(toDegrees(phi),2)} deg)")
+            plt.vlines(phi, 0, np.max(counts)*1.05, colors='m',label=f"{G_phi}={round(phi,2)}({round(toDegrees(phi),2)} deg)")
             ax = plt.gca()
             miny,maxy = ax.get_ylim()
             mu = modFac(Ap,Bp)
-            P = polDeg(Ap,Bp,mu)
-            plt.text(0.05, maxy*0.9, f"{G_mu}={round(mu*100,2)}%, P={round(P,2)}")
-            plt.text(0.05, maxy*0.95, r"$N(\phi) = A_{P} + B_{P}\cdot cos^2(\phi-\phi_{0})$")
+            #P = polDeg(Ap,Bp,mu)
+            #plt.text(0.05, maxy*0.9, f"{G_mu}={round(mu*100,2)}%, P={round(P,2)}")
+            #plt.text(0.05, maxy*0.95, r"$N(\phi) = A_{P} + B_{P}\cdot cos^2(\phi-\phi_{0})$")
+
+            print(f"Getting miny/maxy for histogram: {picname}")
+            print(f"miny={miny}, maxy={maxy}")
+
+            #plt.text(minbin*1.1, maxy*0.9, f"{G_mu}={round(mu*100,2)}%, P={round(P,2)}")
+            plt.text(minbin*1.1, maxy*0.9, f"{G_mu}={round(mu*100,2)}%")
+            plt.text(minbin*1.1, maxy*0.95, r"$N(\phi) = A_{P} + B_{P}\cdot cos^2(\phi-\phi_{0})$")
+
         elif(fit=="gaus"):
             #print("########## FITTING GAUS FUNCTION #############")
             A = result.params["A"].value
@@ -241,6 +377,7 @@ def plot2Dhist(x,y,labels,picname,odir):
     plt.ylim(0,1)
     plt.plot()
     plt.savefig(f"{odir}/2Dhist-{picname}.png")
+    plt.close()
 
 
 def plotDbscan(index, dblabels, ievent, nfound, odir):
@@ -268,18 +405,22 @@ def plot2dEvent(nuarray, info, picname, odir, plotMarker=None):
     #ms = ax.matshow(nuarray, cmap='plasma')
     ms = None
     if("total" in picname):
-        ms = ax.matshow(nuarray.T, cmap='hot')
+        #ms = ax.matshow(nuarray.T, cmap='hot')
+        ms = ax.matshow(nuarray.T, cmap='gist_earth_r')
     else:
         ms = ax.matshow(nuarray, cmap='hot')
     fig.colorbar(ms,cax=cax,orientation='vertical')
     start = 120
-    #ax.text(-90, start, info, fontsize=10,color='black' )    
+    ax.text(-90, start, info, fontsize=10,color='black' )    
     #if(plotMarker is not None):
     #    ax.scatter(plotMarker[0],plotMarker[1],c='blue', marker='*')
     #    ax.text(-90,200, f"redX={plotMarker[0]}\nredY={plotMarker[1]}", fontsize=10, color='black')
 
     if("total" in picname):
         ax.invert_yaxis()
+    
+    #peaks_x, peaks_y = countDiscont(nuarray)
+    #plt.text(-90, 200, f"n_xpeaks={peaks_x}\nn_ypeaks={peaks_y}")
 
     plt.plot()
     fig.savefig(f"{odir}/reco-event-{picname}.png")
@@ -287,14 +428,6 @@ def plot2dEvent(nuarray, info, picname, odir, plotMarker=None):
 
 
 def other2Dplot(nuarray, picname, odir):
-
-    #non_zero_index = np.nonzero(nuarray)
-
-    #xmin, xmax = non_zero_index[0].min(), non_zero_index[0].max()
-    #ymin, ymax = non_zero_index[1].min(), non_zero_index[1].max()
-
-    #ROI = nuarray[xmin-10:xmax+10, ymin-10:ymax+10]
-    ####################################################################
 
     mean_x, mean_y, std_x, std_y = getClusterCenter(nuarray)
     #print("{},{}: {},{}".format(mean_x,mean_y,std_x,std_y))
@@ -323,16 +456,16 @@ def other2Dplot(nuarray, picname, odir):
     plt.gca().invert_yaxis() 
     plt.colorbar(orientation='vertical', label='Counts')
 
-    #plt.title('Zoom-in')    
     plt.xlabel('x')
     plt.ylabel('y')
  
     plt.plot()
-    #if("-285-" in picname):
     plt.savefig(f"{odir}/reco-zoom-event-{picname}.png")
     #   plt.savefig(f"reco-zoom-event-{picname}.pdf")
     #else:
     #   plt.savefig(f"{odir}/reco-zoom-event-{picname}.png", dpi=200)
+    plt.close()
+
 
 def simpleSimRecoHist(data, nbins, minbin, maxbin, labels, picname, ylog, odir):
 
@@ -472,7 +605,7 @@ with tb.open_file(recofile, 'r') as f:
     simpleSimRecoHist(centerX, 50, 6, 8, ['centerX','x','cnt'], plotname+"centerX", False, outdir)
     simpleSimRecoHist(centerY, 50, 6, 8, ['centerY','Y','cnt'], plotname+"centerY", False, outdir)
     # - -------------------------------------------------------------------------
-    #simpleSimRecoHist(excent, 50, 0.9, 10 , ['Excentricity','','cnt'], plotname+"excent", True, outdir)
+    simpleSimRecoHist(excent, 50, 0.9, 10 , ['Excentricity','','cnt'], plotname+"excent", True, outdir)
     #simpleSimRecoHist(FIRT, 50, np.min(FIRT), np.max(FIRT)+0.5, ['frac_In_rms_T','','cnt'], plotname+"fracInRmsTrans", True, outdir)
     #simpleSimRecoHist(kurtosisL, 50, np.nanmin(kurtosisL), np.nanmax(kurtosisL), ['kurtosisL','','cnt'], plotname+"kurtL", True, outdir)
     #simpleSimRecoHist(kurtosisT, 50, np.nanmin(kurtosisT), np.nanmax(kurtosisT), ['kurtosisT','','cnt'], plotname+"kurtT", True, outdir)
@@ -510,6 +643,9 @@ with tb.open_file(recofile, 'r') as f:
     std_centerX = np.std(centerX)
     std_centerY = np.std(centerY)
 
+    REAL_ALT_ROTANG = []
+    naccepted = 0
+
     print(f"Mean position of the \"beam\" x={mean_glob_x},y={mean_glob_y}")
     print(f"sigmmas of the \"beamspot\" {round(std_centerX,2)}, {round(std_centerY,2)}")
     #plot2Dhist(excent.reshape(-1),FIRT.reshape(-1), ["\u03B5 vs FIRT","excentricity","FIRT"], "epsilon-vs-FIRT", outdir)    
@@ -519,15 +655,15 @@ with tb.open_file(recofile, 'r') as f:
     ################################################################
     ################################################################
 
-    if(check_node(base_group_name+"angle_firststage", f)):
+    if(check_node(base_group_name+"angle_fiststage", f)):
         print("Found reconstruction data!")
         
-        firstangles = f.get_node(base_group_name+"angle_firststage")[:].T
+        firstangles = f.get_node(base_group_name+"angle_fiststage")[:].T
         secondangles = f.get_node(base_group_name+"angle_secondstage")[:].T
 
         multiHist([firstangles,secondangles], 
-                    62, 
-                    [0.0,3.15],
+                    101, 
+                    [-np.pi,np.pi],
                     ['xray angles','Angles [radian]','#'],
                     ['stage1','stage2'],
                     False,
@@ -535,23 +671,30 @@ with tb.open_file(recofile, 'r') as f:
                     outdir) 
 
         simpleHist(firstangles, 
-                    31, 
-                    0.0,
-                    3.15,
+                    100, 
+                    -np.pi,
+                    np.pi,
                     ["Reco angles first stage", "Angle,[radian]", "N"],
                     "XPolFirstStage",
                     outdir,
                     fit="cosfunc")
 
         simpleHist(secondangles, 
-                    31, 
-                    0.0,
-                    3.15,
+                    100, 
+                    -np.pi,
+                    np.pi,
                     ["Reco angles second stage", "Angle,[radian]", "N"],
                     "XPolSecondStage",
                     outdir,
                     fit="cosfunc")
 
+        fitAndPlotModulation(firstangles,
+                             100,
+                             -np.pi,
+                             np.pi,
+                             ["Reconstructed Angle Distribution", "Angle [radian]", r"$N_{Entries}$"],
+                             "STOLEN-XpolFirstStage",
+                             outdir)
 
         #exit(0)
 
@@ -570,7 +713,7 @@ with tb.open_file(recofile, 'r') as f:
     ievent, npics, mcevents = 0, 0, 0
     n_good = 0
     n_tracks = 0
-    for event in ToT:
+    for event in ToT:    
 
         nhits = len(event)
 
@@ -602,76 +745,77 @@ with tb.open_file(recofile, 'r') as f:
         rotAngDeg = round(rotAng[ievent]*180/3.1415,2)  
         characs = f"cX={round(centerX[ievent],2)}\ncY={round(centerY[ievent],2)}\n\u03B5={round(excent[ievent],2)}\nrotAng={rotAngDeg}\nnhits={nhits}\nlen={round(length[ievent],2)}\nwidth={round(width[ievent],2)}\nRMS:\n(T={round(RMS_T[ievent],2)},L={round(RMS_L[ievent],2)})\nFIRT={round(FIRT[ievent],2)}\nkurt:\nT={round(kurtosisT[ievent],2)}\n,L={round(kurtosisL[ievent],2)}\nLDRT={round(LDRT[ievent],2)}"        
 
-        #---- working below -------
-        #if(LDRT[ievent] > 10 and nhits>10 and FIRT[ievent]>0.01):
-        #--------------------------
-        #if(ievent in prop_ev or ievent in empty_ev):
-        #suffix = None
-        #if(ievent in prop_ev):
-        #    suffix = "PROP"
-        #else:
-        #    suffix = "EMPTY"
-        #good_events.append(ievent)
-
-        #alt_rotang.append(rotAngDeg)
         alt_rotang.append(rotAng[ievent])
 
-        #n_good+=1
-        #if(length[ievent] < 10):
-        #for i in range(nhits):
-        #   #    matrix[x[ievent][i],y[ievent][i]] = event[i]
-        #   matrixTotal[x[ievent][i],y[ievent][i]] += 1
+        xskip = [204, 194, 205, 191, 92, 86]
+        yskip = [245, 202, 200, 116, 36, 175]
 
         for xpos, ypos in zip(x[ievent],y[ievent]):
-            np.add.at(matrixTotal, (xpos,ypos), 1)
-
-        #eventString+=f"{ievent},"
-        #if(npics < 50 and FIRT[ievent] > 0.01):
+            #if(xpos=204 and xpos<245 and ypos > 240 and ypos < 250):
+            #    continue
+            #elif(xpos>190 and xpos<196 and ypos > 200 and ypos < 210):
+            #    continue
+            if(xpos in xskip and ypos in yskip):
+                continue
+            else:
+                np.add.at(matrixTotal, (xpos,ypos), 1)
         
-        goodX = (centerX[ievent] < 6.85 and centerX[ievent] > 7.4)        
+        # IF EXCENTRICITY IS good :
+        if excent[ievent] > 1.2:
+            #clusterangle = runAngleReco(x,y,event)
+            yoba_pos = x[ievent],y[ievent]
+            clusterangle = runAngleReco(yoba_pos,event)
+            REAL_ALT_ROTANG.append(clusterangle) 
+            naccepted+=1    
+
+        goodx = (centerX[ievent] < 6.85 and centerX[ievent] > 7.4)        
         goodY = (centerY[ievent] < 6.75 and centerY[ievent] > 7.25)        
 
-        #if(npics < 100 and excent[ievent] > 2 and nhits > 25 and goodX and goodY):      
-        if(npics < 100 and nhits > 25 and excent[ievent] > 3):      
-        #if(npics < 50 and ievent%100==0):      
-        #if(npics < 50 and excent[ievent] > 3.0 and FIRT[ievent] < 0.1 and nhits > 20):      
-            #matrixTOA = np.zeros((256,256),dtype=np.uint16)
-            #matrixTOAcom = np.zeros((256,256),dtype=np.uint16)
-            matrix = np.zeros((256,256),dtype=np.uint16)
-            n_good+=1
-            for i in range(nhits):
-                matrix[x[ievent][i],y[ievent][i]] = event[i]
-                #matrixTOA[x[ievent][i],y[ievent][i]] = ToA[ievent][i]
-                #matrixTOAcom[x[ievent][i],y[ievent][i]] = comToA[ievent][i]
-            
-
-            #for t in range(nhits):
-            #    matrixTOA[x[ievent][t],y[ievent][t]] = comToA[ievent][t]
-
-            Sum_Qx = np.sum(event*x[ievent])
-            Sum_Qy = np.sum(event*y[ievent])
- 
-            redX = Sum_Qx/np.sum(event)
-            redY = Sum_Qy/np.sum(event)
-       
-            plot2dEvent(matrix, characs, f"cluster-{ievent}-{plotname}", outdir, [redX,redY]) 
-            other2Dplot(matrix, f"cluster-{ievent}-{plotname}",outdir)
-
-            #other2Dplot(matrixTOA,f"TOA-cluster-{ievent}-{plotname}",outdir)
-           # other2Dplot(matrixTOAcom,f"TOAcom-cluster-{ievent}-{plotname}",outdir)
-            
-
-            #plotDbscan(nz_index, labels, ievent, nfound, outdir)
-            npics+=1
-            matrix = np.zeros((256,256),dtype=np.uint16)
-            #matrixTOA = np.zeros((256,256),dtype=np.uint16)
-            #matrixTOAcom = np.zeros((256,256),dtype=np.uint16)
+#        if(npics < 100 and nhits > 25 and excent[ievent] > 3): # this one get the actual tracks
+#        #if(npics < 100 and sumTOT[ievent] < 200 and sumTOT[ievent] > 160):      
+#
+#            matrix = np.zeros((256,256),dtype=np.uint16)
+#            n_good+=1
+#            for i in range(nhits):
+#                matrix[x[ievent][i],y[ievent][i]] = event[i]
+#                #matrixTOA[x[ievent][i],y[ievent][i]] = ToA[ievent][i]
+#                #matrixTOAcom[x[ievent][i],y[ievent][i]] = comToA[ievent][i]
+#            
+#
+#            #for t in range(nhits):
+#            #    matrixTOA[x[ievent][t],y[ievent][t]] = comToA[ievent][t]
+#
+#            Sum_Qx = np.sum(event*x[ievent])
+#            Sum_Qy = np.sum(event*y[ievent])
+# 
+#            redX, redY = None, None
+#
+#            try:
+#                redX = Sum_Qx/np.sum(event)
+#                redY = Sum_Qy/np.sum(event)
+#            except ValueError:
+#                print('oops')
+#            finally:
+#                redX = -1
+#                redY = -1
+#       
+#            plot2dEvent(matrix, characs, f"cluster-{ievent}-{plotname}", outdir, [redX,redY]) 
+#            other2Dplot(matrix, f"cluster-{ievent}-{plotname}",outdir)
+#
+#            #other2Dplot(matrixTOA,f"TOA-cluster-{ievent}-{plotname}",outdir)
+#           # other2Dplot(matrixTOAcom,f"TOAcom-cluster-{ievent}-{plotname}",outdir)
+#            
+#            #plotDbscan(nz_index, labels, ievent, nfound, outdir)
+#            npics+=1
+#            matrix = np.zeros((256,256),dtype=np.uint16)
+#            #matrixTOA = np.zeros((256,256),dtype=np.uint16)
+#            #matrixTOAcom = np.zeros((256,256),dtype=np.uint16)
         progress(ntotal, ievent)
         ievent+=1
         
-        if(ievent==40000):
+        #if(ievent==4000):
         #if("RomeRun" in recofile and ievent==30000):
-            break
+        #    break
 
         #exit(0)
 
@@ -679,11 +823,13 @@ print(f"FOUND <{n_good}> events")
 
 print(f"resudec TOT has <{len(tot_reduced)}> entries")
 
-plot2dEvent(matrixTotal, "", "total-run",outdir)
+plot2dEvent(matrixTotal, "", "OCCUPANCY-total-run",outdir)
 
+simpleHist(REAL_ALT_ROTANG, 100, -np.pi, np.pi, ["","Reconstructed angle,[rad]","Events,[N]"], "REAL_ALT_ROTANG", outdir, fit="cosfunc") 
+print(f"\n Cut on EXCENTRICITY accepted only: {naccepted/ntotal*100:.2f}% of data\n")
 #simpleHist(alt_rotang, 51, 0.0, 180.0, ["Selected Cluster inclination","angle[deg]","N"], "ALT_ROTANG", outdir, fit="cosfunc") 
 #simpleHist(alt_rotang, 51, 0.0, 3.15, ["Selected Cluster inclination","angle[radian]","N"], "ALT_ROTANG", outdir, fit="cosfunc") 
-simpleHist(alt_rotang, 51, 0.0, 3.15, ["","Reconstructed angle,[rad]","Events,[N]"], "ALT_ROTANG", outdir, fit="cosfunc") 
+simpleHist(alt_rotang, 100, 0.0, np.pi, ["","Reconstructed angle,[rad]","Events,[N]"], "ALT_ROTANG", outdir, fit="cosfunc") 
 #simpleHist(tot_reduced, 101, 0, 400, ["TOT/nhits","N hits","#"], "TOT_REDUCED", outdir, fit="gaus")
 simpleHist(tot_reduced, 51, np.nanmin(tot_reduced), np.nanmax(tot_reduced), ["TOT/nhits","N hits","#"], "TOT_REDUCED", outdir, fit="gaus")
 simpleHist(TOTarray, 101, 0, np.nanmax(TOTarray), ['Total charge per event', 'TOT cycles','N'], "sumTOT", outdir, fit='gaus')
