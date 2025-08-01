@@ -2,6 +2,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 import h5py
 from matplotlib import colors, cm
+import tables as tb
+
 
 class myPlotter:
     def __init__(self):
@@ -156,40 +158,44 @@ class myUtils:
 
         return round(p_atm*760,2)
 
-def getBaseGroupName(f, debug=None):
-
-    groups = f.walk_groups('/')
-    grouplist = []
-    for gr in groups:
-        print(f'found {gr}')
-        grouplist.append(gr)
-    main_group = str(grouplist[len(grouplist)-1])
-    if(debug):
-        print(f"last entry in walk_groups = \n{main_group}")
-
-    grouplist = None 
-
-    basewords = main_group.split('(')
-    if(debug):
-        print(basewords)
-
-    base_group_name = basewords[0][:-1]+'/'
-    #                              ^ removes space at the end of 'run_xxx/chip0 '
-    if(debug):
-        print(f'base group name is : <{base_group_name}>')
-    #bgn_split = base_group_name.split('/')
-    #if(debug):
-    #    print(bgn_split)
-    #run_name = bgn_split[2]
-    #if(debug):
-    #    print(f"<{run_name}>")
-    #run_num = int(run_name[4:])
-    #if(debug):
-    #    print(f'run number is {run_num}')
-
-    basewords = None
+    def getBaseGroupName(f, debug=None):
+   
+        infile = tb.open_file(f,'r')
  
-    return base_group_name
+        groups = infile.walk_groups('/')
+
+        infile.close()
+        grouplist = []
+        for gr in groups:
+            print(f'found {gr}')
+            grouplist.append(gr)
+        main_group = str(grouplist[len(grouplist)-1])
+        if(debug):
+            print(f"last entry in walk_groups = \n{main_group}")
+    
+        grouplist = None 
+    
+        basewords = main_group.split('(')
+        if(debug):
+            print(basewords)
+    
+        base_group_name = basewords[0][:-1]+'/'
+        #                              ^ removes space at the end of 'run_xxx/chip0 '
+        if(debug):
+            print(f'base group name is : <{base_group_name}>')
+        #bgn_split = base_group_name.split('/')
+        #if(debug):
+        #    print(bgn_split)
+        #run_name = bgn_split[2]
+        #if(debug):
+        #    print(f"<{run_name}>")
+        #run_num = int(run_name[4:])
+        #if(debug):
+        #    print(f'run number is {run_num}')
+    
+        basewords = None
+     
+        return base_group_name
 
 #class myColors:
 #
