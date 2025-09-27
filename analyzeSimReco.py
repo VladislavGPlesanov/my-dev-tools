@@ -7,6 +7,10 @@ from sklearn.cluster import DBSCAN
 from scipy.optimize import curve_fit
 from lmfit import Model
 
+# for interactive 3d plotting 
+from mpl_toolkits.mplot3d import Axes3D
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 
 ###GREEK LETTERS###
 
@@ -72,6 +76,31 @@ def progress(ntotal, ith):
         perc = 0.0
     finally:
         print(f"\r{perc}% done", end="",flush=True)
+
+def plotInteractive3D(xlist, ylist, zlist, labels, picname, odir):
+
+    fig = go.Figure()
+    
+    fig.add_trace(go.Scatter3d(
+        x=xlist, y=ylist, z=zlist,
+        mode="markers",
+        marker=dict(size=3,color="blue"),
+        name=f"Track {labels}"
+ 
+    )) 
+    print("SUKA")   
+ 
+    fig.update_layout(
+        scene=dict(
+            xaxis=dict(title="x [pixel]", range=[0,256]),
+            yaxis=dict(title="y [pixel]", range=[0,256]),
+            zaxis=dict(title="z [TOA combined]")
+        ),
+        margin=dict(l=0,r=0,b=0,t=0)
+    )
+    print("PADLA")   
+    fig.write_html(f"{odir}/Track-{picname}.html")
+
 
 def runAngleReco(positions, charges):
 
@@ -308,6 +337,21 @@ def simpleHist(nuarray, nbins, minbin, maxbin, labels, picname, odir,fit=None):
 
     plt.figure()
 
+    datasize = None
+    try:
+        if(type(nuarray)=='numpy.ndarray'):
+            datasize = nuarray.shape[0]
+        else:
+            datasize = len(nuarray)
+        if(datgasize==0):
+            print(f"data array for {picname} is empty!")
+            return 0 
+    except:
+        print(f"Data type container for {picname} is ambiguous")
+        pass
+
+    print(f"Got {datasize} events selected for figure {picname}")
+
     #nuarray = nuarray[~np.isnan(nuarray)]
 
     counts, bin_edges = np.histogram(nuarray, bins=nbins, range=(minbin,maxbin))
@@ -449,6 +493,28 @@ def plot2Dhist(x,y,labels,picname,odir):
     plt.savefig(f"{odir}/2Dhist-{picname}.png")
     plt.close()
 
+def plot2DProjectionXY(matrix, labels, picname, odir):
+
+    projectionX = matrix.sum(axis=0)
+    projectionY = matrix.sum(axis=1)
+
+    fig, ax = plt.subplots(1, 2, figsize=(12,10))
+
+    #ax[0].plot(projectionX)
+    ax[0].bar(range(len(projectionX)), projectionX, width=1.0, align="center")
+    ax[0].set_title(labels[0])
+    ax[0].set_xlabel(labels[1])
+    ax[0].set_ylabel(labels[2])
+
+    #ax[1].plot(projectionY)
+    ax[1].bar(range(len(projectionY)), projectionY, width=1.0, align="center")
+    ax[1].set_title(labels[3])
+    ax[1].set_xlabel(labels[4])
+    ax[1].set_ylabel(labels[5])
+
+    plt.tight_layout()
+    plt.savefig(f"{odir}/XYproj-hist-{picname}.png")
+    plt.close()
 
 def plotDbscan(index, dblabels, ievent, nfound, odir):
 
@@ -583,6 +649,9 @@ alt_rotang = []
 tot_reduced = []   
 TOTarray=[]
 
+# for plotting 3d tracks
+xlist, ylist, zlist = [], [], []
+
 #matrix = np.zeros((256,256),dtype=np.uint16)
 matrixTotal = np.zeros((256,256),dtype=np.uint16)
 #matrixTOA = np.zeros((256,256),dtype=np.uint16)
@@ -691,31 +760,23 @@ with tb.open_file(recofile, 'r') as f:
     #simpleSimRecoHist(centerY, 50, 6, 8, ['centerY','Y','cnt'], plotname+"centerY", False, outdir)
     # - -------------------------------------------------------------------------
     simpleSimRecoHist(excent, 50, 0.9, 10 , ['Excentricity','','cnt'], plotname+"excent", True, outdir)
-    simpleSimRecoHist(FIRT, 50, np.min(FIRT), np.max(FIRT)+0.5, ['frac_In_rms_T','','cnt'], plotname+"fracInRmsTrans", True, outdir)
-    simpleSimRecoHist(kurtosisL, 50, np.nanmin(kurtosisL), np.nanmax(kurtosisL), ['kurtosisL','','cnt'], plotname+"kurtL", True, outdir)
-    simpleSimRecoHist(kurtosisT, 50, np.nanmin(kurtosisT), np.nanmax(kurtosisT), ['kurtosisT','','cnt'], plotname+"kurtT", True, outdir)
+    #simpleSimRecoHist(FIRT, 50, np.min(FIRT), np.max(FIRT)+0.5, ['frac_In_rms_T','','cnt'], plotname+"fracInRmsTrans", True, outdir)
+    #simpleSimRecoHist(kurtosisL, 50, np.nanmin(kurtosisL), np.nanmax(kurtosisL), ['kurtosisL','','cnt'], plotname+"kurtL", True, outdir)
+    #simpleSimRecoHist(kurtosisT, 50, np.nanmin(kurtosisT), np.nanmax(kurtosisT), ['kurtosisT','','cnt'], plotname+"kurtT", True, outdir)
     simpleSimRecoHist(length, 50, np.min(length), np.max(length), ['length','','cnt'], plotname+"length", True, outdir)
     #simpleSimRecoHist(length, 50, np.min(length), 6, ['length','','cnt'], plotname+"length", False, outdir)
 
     simpleSimRecoHist(hits, 100, np.min(hits), np.max(hits), ['hits','','cnt'], plotname+"hits", True, outdir)
-    #simpleSimRecoHist(hits, 50, np.min(hits), 500, ['hits','','cnt'], plotname+"hits", False, outdir)
-    #simpleSimRecoHist(hits, 100, np.min(hits), 200, ['hits','','cnt'], plotname+"hits", False, outdir)
+    #simpleSimRecoHist(LDRT, 50,0,50, ['lenDivRmsTrans','','cnt'], plotname+"LDRT", True, outdir)
 
-    simpleSimRecoHist(LDRT, 50,0,50, ['lenDivRmsTrans','','cnt'], plotname+"LDRT", True, outdir)
-
-    simpleSimRecoHist(RMS_L, 50,np.min(RMS_L), 2.0, ['RMS_L','',''], plotname+"RMS_L", True, outdir)
-    simpleSimRecoHist(RMS_T, 50,np.min(RMS_T), 1.5, ['RMS_T','',''], plotname+"RMS_T", True, outdir)
-
-    #simpleSimRecoHist(rotAng*180/3.14159, 50,0,360, ['rotAng','',''], plotname+"rotAng", False, outdir)
+    #simpleSimRecoHist(RMS_L, 50,np.min(RMS_L), 2.0, ['RMS_L','',''], plotname+"RMS_L", True, outdir)
+    #simpleSimRecoHist(RMS_T, 50,np.min(RMS_T), 1.5, ['RMS_T','',''], plotname+"RMS_T", True, outdir)
 
     simpleSimRecoHist(rotAng, 50,np.min(rotAng),np.max(rotAng), ['rotAng','',''], plotname+"rotAng", True, outdir)
-    simpleSimRecoHist(skewL, 50,np.nanmin(skewL),np.nanmax(skewL), ['skewL','',''], plotname+"skewL", True, outdir)
-    simpleSimRecoHist(skewT, 50,np.nanmin(skewT),np.nanmax(skewT), ['skewT','',''], plotname+"skewT", True, outdir)
-    #simpleSimRecoHist(sumTOT, 100 , 0, 6000, ['Total charge per event','TOT, [n cycles]','N'], plotname+"sumTOT", False, outdir)
+    #simpleSimRecoHist(skewL, 50,np.nanmin(skewL),np.nanmax(skewL), ['skewL','',''], plotname+"skewL", True, outdir)
+    #simpleSimRecoHist(skewT, 50,np.nanmin(skewT),np.nanmax(skewT), ['skewT','',''], plotname+"skewT", True, outdir)
     simpleSimRecoHist(sumTOT, 100,np.min(sumTOT),np.max(sumTOT), ['sumTOT','',''], plotname+"sumTOT", True, outdir)
-    #simpleSimRecoHist(sumTOT, 100,np.min(sumTOT),40000, ['Total charge per event','TOT cycles','N'], plotname+"-sumTOT", False, outdir)
-    #simpleSimRecoHist(sumTOT, 50, 0 ,7000, ['sumTOT','',''], plotname+"sumTOT", False, outdir)
-    simpleSimRecoHist(width, 50,np.min(width), 2, ['width','',''], plotname+"width", True, outdir)
+    #simpleSimRecoHist(width, 50,np.min(width), 2, ['width','',''], plotname+"width", True, outdir)
     # -----------------------------------------------------------------------------
     print("---------- CHINAZES! ------------")
 
@@ -729,6 +790,7 @@ with tb.open_file(recofile, 'r') as f:
     std_centerY = np.std(centerY)
 
     REAL_ALT_ROTANG = []
+    hitsPerEvent = []
     naccepted = 0
 
     print(f"Mean position of the \"beam\" x={mean_glob_x},y={mean_glob_y}")
@@ -739,6 +801,13 @@ with tb.open_file(recofile, 'r') as f:
     ################################################################
     ################################################################
     ################################################################
+
+    TOAcomb = None
+    ToA = None
+    if(check_node(base_group_name+"ToACombined",f)):
+        TOAComb = f.get_node(base_group_name+"ToACombined")
+        ToA = f.get_node(base_group_name+"ToA")
+        print("FOUND TOACombined!")
 
     if(check_node(base_group_name+"angle_fiststage", f)):
         print("Found reconstruction data!")
@@ -787,143 +856,144 @@ with tb.open_file(recofile, 'r') as f:
 
     ntotal = ToT.shape[0]
 
+    matrix_cut = np.zeros((256,256),dtype=int)
+
     print(f"\nTOTAL nr of clusters: {ntotal}\n")
     ievent, npics, mcevents = 0, 0, 0
     n_good = 0
     n_tracks = 0
-    for event in ToT:    
+    for event in ToT: 
 
         nhits = len(event)
-        # --- related to proton counting ---
-        avg_hits_proton_track = 1403.5 # hits per proton track (counted by hand on a spreadsheet)
-        
-        if(nhits>np.ceil(avg_hits_proton_track/2.0)):
-            nprotons += np.ceil(nhits/avg_hits_proton_track)
+        hitsPerEvent.append(nhits)
+        #--------------------------------------------------------------
+        ## --- related to proton counting ---
+        #avg_hits_proton_track = 1403.5 # hits per proton track (counted by hand on a spreadsheet)
+        #
+        #if(nhits>np.ceil(avg_hits_proton_track/2.0)):
+        #    nprotons += np.ceil(nhits/avg_hits_proton_track)
 
-        i_bincnt, _ = np.histogram(event, bins=tot_edges)
-        tot_list += i_bincnt       
+        #i_bincnt, _ = np.histogram(event, bins=tot_edges)
+        #tot_list += i_bincnt       
 
-        #redX = int(Sum_Qx/float(sumTOT[ievent]))
-        #redY = int(Sum_Qy/float(sumTOT[ievent]))
-
-        #tot_reduced.append(sum(event)/hits[ievent])
         tot_reduced.append(sumTOT[ievent]/hits[ievent])
         TOTarray.append(sumTOT[ievent])
-
-        # tryna' dbscan (fuck it slows down things...)
-        #
-        #smearedMat = matrix.reshape(64,4,64,4).mean(axis=(1,3))
-        #nz_index = np.transpose(np.nonzero(smearedMat))
-        #nholes = 1
-        #min_hits = 2
-        #db = DBSCAN(eps=nholes, min_samples=min_hits).fit(nz_index)
- 
-        #labels = db.labels_
-        #nfound = len(set(labels)) - (1 if -1 in labels else 0)
-
-        #if(nfound>1):
-        #    multiClusterEvents.append(ievent)
-        #    mcevents+=1
-       
+        #--------------------------------------------------------------
+         
         rotAngDeg = round(rotAng[ievent]*180/3.1415,2)  
         characs = f"cX={round(centerX[ievent],2)}\ncY={round(centerY[ievent],2)}\n\u03B5={round(excent[ievent],2)}\nrotAng={rotAngDeg}\nnhits={nhits}\nlen={round(length[ievent],2)}\nwidth={round(width[ievent],2)}\nRMS:\n(T={round(RMS_T[ievent],2)},L={round(RMS_L[ievent],2)})\nFIRT={round(FIRT[ievent],2)}\nkurt:\nT={round(kurtosisT[ievent],2)}\n,L={round(kurtosisL[ievent],2)}\nLDRT={round(LDRT[ievent],2)}"        
-
         alt_rotang.append(rotAng[ievent])
+       
+        #--------------------------------------------------------------
+        #          uncomment if analyzin' cyclotron data! 
+        #
+        #          old Timepix chip (most noisy channels)
+        #
+        #xskip = [96,206,183,56,101,128,103,106,194,204]
+        #yskip = [161,84,123,64,103,125,112,127,202,245]
 
-        xskip = [96,206,183,56,101,128,103,106,194,204]
-        yskip = [161,84,123,64,103,125,112,127,202,245]
-
+        #for xpos, ypos in zip(x[ievent],y[ievent]):
+        #    if(xpos in xskip and ypos in yskip):
+        #        continue
+        #    else:
+        #        np.add.at(matrixTotal, (xpos,ypos), 1)
+        # 
+        #--------------------------------------------------------------
         for xpos, ypos in zip(x[ievent],y[ievent]):
-            if(xpos in xskip and ypos in yskip):
-                continue
-            else:
-                np.add.at(matrixTotal, (xpos,ypos), 1)
-        
+            np.add.at(matrixTotal, (xpos,ypos), 1)
+ 
         # IF EXCENTRICITY IS good :
+        pol_angle = None
         if excent[ievent] > 1.2:
-            #clusterangle = runAngleReco(x,y,event)
+        #if ((y[ievent]>99).all() and (y[ievent]<151).all() and (x[ievent]>99).all() and (x[ievent]<151).all()):
             yoba_pos = x[ievent],y[ievent]
             clusterangle = runAngleReco(yoba_pos,event)
             REAL_ALT_ROTANG.append(clusterangle) 
+            pol_angle = clusterangle
+            #for ix,iy in zip(x[ievent],y[ievent]):
+            #    np.add.at(matrix_cut, (ix,iy), 1)
             naccepted+=1    
 
-        #goodx = (centerX[ievent] < 6.85 and centerX[ievent] > 7.4)        
-        #goodY = (centerY[ievent] < 6.75 and centerY[ievent] > 7.25)        
 
-        if(npics < 100 and nhits > 25 and excent[ievent] > 3): # this one get the actual tracks
+     
+        if((npics < 50 and nhits > 25 and excent[ievent] > 2) or (nhits>2e4)): # this one get the actual tracks
+        #if(sumTOT[ievent]>2e4): # EXTRA long tracks
+        #if(npics < 50 and pol_angle is not None and pol_angle < 0):
         #if(npics < 100 and nhits > 20 and rotAng[ievent]>0.5 and rotAng[ievent]<2.5): # this one get the actual tracks
         #if(npics < 100 and sumTOT[ievent] < 200 and sumTOT[ievent] > 160):      
 
             matrix = np.zeros((256,256),dtype=np.uint16)
             n_good+=1
-            for i in range(nhits): 
-                matrix[x[ievent][i],y[ievent][i]] = event[i]
-                #matrixTOA[x[ievent][i],y[ievent][i]] = ToA[ievent][i]
-                #matrixTOAcom[x[ievent][i],y[ievent][i]] = comToA[ievent][i]
-            
-            #for t in range(nhits):
-            #    matrixTOA[x[ievent][t],y[ievent][t]] = comToA[ievent][t]
-
-            #Sum_Qx = np.sum(event*x[ievent])
-            #Sum_Qy = np.sum(event*y[ievent])
+            #for i in range(nhits): 
+            #    matrix[x[ievent][i],y[ievent][i]] = event[i]
+            #    #matrixTOA[x[ievent][i],y[ievent][i]] = ToA[ievent][i]
+            #    #matrixTOAcom[x[ievent][i],y[ievent][i]] = comToA[ievent][i]
+            for k,l,m in zip(x[ievent],y[ievent],event):
+                np.add.at(matrix, (k,l), m)               
  
-            #redX, redY = None, None
-
-            #try:
-            #    redX = Sum_Qx/np.sum(event)
-            #    redY = Sum_Qy/np.sum(event)
-            #except ValueError:
-            #    print('oops')
-            #finally:
-            #    redX = -1
-            #    redY = -1
-       
-            #plot2dEvent(matrix, characs, f"cluster-{ievent}-{plotname}", outdir, [redX,redY]) 
-            #if(npics%10==0 or ievent==58):
-            if(npics%10==0):
-                plot2dEvent(matrix, characs, f"cluster-{ievent}-{plotname}", outdir, figtype="pdf") 
-            else:
-                plot2dEvent(matrix, characs, f"cluster-{ievent}-{plotname}", outdir) 
-            #other2Dplot(matrix, f"cluster-{ievent}-{plotname}",outdir)
+            # this block is for plotting proton/ion tracks: ----------------------------
+            #if(npics%10==0):
+            #    plot2dEvent(matrix, characs, f"cluster-{ievent}-{plotname}", outdir, figtype="pdf") 
+            #else:
+            #    plot2dEvent(matrix, characs, f"cluster-{ievent}-{plotname}", outdir) 
+            # --------------------------------------------------------------------------
+            # this block is for plotting photoelectron tracks: -------------------------
+            plot2dEvent(matrix, characs, f"cluster-{ievent}-{plotname}", outdir) 
+            other2Dplot(matrix, f"cluster-{ievent}-{plotname}",outdir)
 
             #other2Dplot(matrixTOA,f"TOA-cluster-{ievent}-{plotname}",outdir)
-           # other2Dplot(matrixTOAcom,f"TOAcom-cluster-{ievent}-{plotname}",outdir)
+            #other2Dplot(matrixTOAcom,f"TOAcom-cluster-{ievent}-{plotname}",outdir)
             
             #plotDbscan(nz_index, labels, ievent, nfound, outdir)
             npics+=1
             matrix = np.zeros((256,256),dtype=np.uint16)
             #matrixTOA = np.zeros((256,256),dtype=np.uint16)
             #matrixTOAcom = np.zeros((256,256),dtype=np.uint16)
-            #if(rotAng[ievent]>0.5 and rotAng[ievent]<2.5):
-            #    plot2dEvent(matrix, characs, f"cluster-weirdRotAng-{ievent}-{plotname}", outdir) 
+
+            #if(ToA is not None):
+            #   #print(f"TOAComb is not None and the event is {ievent}")
+            #   xlist = x[ievent]
+            #   ylist = y[ievent]
+            #   zlist = (ToA[ievent]*25+1)/55.0
+            #   plotInteractive3D(xlist,ylist,zlist,f"Event-{ievent}", f"-Evt-{ievent}-"+plotname, outdir)
+ 
         progress(ntotal, ievent)
         ievent+=1
-        
+        # ======== lookin' at absurd tracks in polarization data in 3D ========== 
+        #if(TOAComb is not None and ievent==287911):
+        #   print(f"TOAComb is not None and the event is {ievent}")
+        #   xlist = x[ievent]
+        #   ylist = y[ievent]
+        #   zlist = TOAComb[ievent]
+        #   plotInteractive3D(xlist,ylist,zlist,"Event-287911", plotname, outdir)
         #if(ievent==4000):
         #if("RomeRun" in recofile and ievent==30000):
         #    break
 
         #exit(0)
 
-print(f"FOUND <{n_good}> events")
+print(f"\nFOUND <{n_good}> events\n")
 
-print(f"resudec TOT has <{len(tot_reduced)}> entries")
+print(f"reduced TOT has <{len(tot_reduced)}> entries\n")
 
-#plot2dEvent(matrixTotal, "", "OCCUPANCY-total-run",outdir)
+hits_arr = np.asarray(hitsPerEvent, dtype=np.uint16)
+
+plot2dEvent(matrixTotal, "", "OCCUPANCY-total-run",outdir)
+plot2DProjectionXY(matrixTotal, ["Occupancy X projection", "X [pixel]", r"$N_{Entries}$","Occupancy Y projection", "Y [pixel]", r"$N_{Entries}$"], plotname, outdir)
 plot2dEvent(matrixTotal, "", "OCCUPANCY-total-run",outdir, figtype="pdf")
+
+#cut_comment = "x>99 & x<151\ny>99 & y<151"
+#plot2dEvent(matrix_cut, cut_comment, "OCCUPANCY-CUT-ON-position",outdir)
 
 simpleHist(REAL_ALT_ROTANG, 100, -np.pi, np.pi, ["","Reconstructed angle,[rad]","Events,[N]"], "REAL_ALT_ROTANG", outdir, fit="cosfunc") 
 print(f"\n Cut on EXCENTRICITY accepted only: {naccepted/ntotal*100:.2f}% of data\n")
-#simpleHist(alt_rotang, 51, 0.0, 180.0, ["Selected Cluster inclination","angle[deg]","N"], "ALT_ROTANG", outdir, fit="cosfunc") 
-#simpleHist(alt_rotang, 51, 0.0, 3.15, ["Selected Cluster inclination","angle[radian]","N"], "ALT_ROTANG", outdir, fit="cosfunc") 
 simpleHist(alt_rotang, 100, 0.0, np.pi, ["","Reconstructed angle,[rad]","Events,[N]"], "ALT_ROTANG", outdir, fit="cosfunc") 
-#simpleHist(tot_reduced, 101, 0, 400, ["TOT/nhits","N hits","#"], "TOT_REDUCED", outdir, fit="gaus")
-simpleHist(tot_reduced, 51, np.nanmin(tot_reduced), np.nanmax(tot_reduced), ["TOT/nhits","N hits","#"], "TOT_REDUCED", outdir, fit="gaus")
-#simpleHist(TOTarray, 101, 0, np.nanmax(TOTarray), ['Total charge per event', 'TOT cycles','N'], "sumTOT", outdir, fit='gaus')
-#simpleHist(TOTarray, 101, 0, 60000, ['Total charge per event', 'TOT cycles','N'], "sumTOT", outdir, fit='gaus')
+simpleHist(tot_reduced, 100, np.nanmin(tot_reduced), np.nanmax(tot_reduced), ["TOT Reduced by Number of Hits Per Event",r"$N {hits}$",r"$TOT/N_{Hits}$"], "TOT_REDUCED", outdir, fit="gaus")
+simpleHist(TOTarray, 100, 0, 15000, [r"$\Sigma$ TOT Per Event",r"$N {Events}$",r"$\Sigma$ TOT"], "ALT_sumTOT", outdir, fit="gaus")
+simpleHist(hits_arr, 100, np.nanmin(hits_arr), 250, ["Hits per Event",r"$_{hits}$",r"$N_{Events}$"], "HITS", outdir)
 
+# ------------ cyclotron data here: --------------------------
 #simpleHistSpectrum(TOTarray, 101, 0, 60000, ['TOT cyles per event (Before Irradiation)', 'TOT cycles','N'], "sumTOT", outdir, scale="linear")
-
 
 print(f"TOTAL events: {ntotal}")
 print(f"protons counted: {nprotons}")

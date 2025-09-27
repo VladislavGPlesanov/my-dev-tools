@@ -3,11 +3,6 @@ import os
 import glob
 import numpy as np
 import matplotlib.pyplot as plt
-#import tables as tb
-#from sklearn.cluster import DBSCAN 
-#from scipy.optimize import curve_fit
-#from lmfit import Model
-
 
 dirpath = sys.argv[1]
 npixels_active = int(sys.argv[2])

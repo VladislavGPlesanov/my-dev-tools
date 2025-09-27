@@ -24,7 +24,8 @@ with tb.open_file(infile,'r') as f:
 
     xdata = f.root.data.x[:]
     ydata = f.root.data.y[:]
-    TOTdata = f.root.data.TOT[:]
+    #TOTdata = f.root.data.TOT[:]
+    TOTdata = f.root.data.TOA[:]
   
     nframes = len(xdata)
     iframe = 0
@@ -40,11 +41,14 @@ with tb.open_file(infile,'r') as f:
 
 plt.figure(figsize=(8,8))
 plt.imshow(matrix, origin='lower', cmap='inferno')
-plt.colorbar(label='Sum TOT')
+#plt.colorbar(label='Sum TOT')
+plt.colorbar(label='Sum TOA')
 plt.xlabel('pixel x')
 plt.ylabel('pixel y')
-plt.title('Total Charge For Each Pixel')
+#plt.title('Total Charge For Each Pixel')
+plt.title('Timing (TOA) For Each Pixel')
 plt.tight_layout()
-plt.savefig(f'SunTOTmatrix-{picname}.png')
+#plt.savefig(f'SunTOTmatrix-{picname}.png')
+plt.savefig(f'SumTOAmatrix-{picname}.png')
 
 

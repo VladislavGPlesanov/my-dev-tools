@@ -115,15 +115,36 @@ plt.plot()
 fig.savefig(f"THL-matrix-diff-{picname}.png")
 fig.savefig(f"THL-matrix-diff-{picname}.pdf")
 
-#fig, ax = plt.subplots()
-#cax = fig.add_axes([0.86,0.1,0.05,0.8])
-#ms = ax.matshow(THL_matrix_after.T, cmap='viridis')
-#ax.set_title("THL of Each pixel after Irrad.")
-#ax.set_xlabel("Pixel x")
-#ax.set_ylabel("Pixel y")
-#fig.colorbar(ms,cax=cax,orientation='vertical')
-#plt.plot()
-#fig.savefig(f"THL-matrix-after-{picname}.png")
+# tryna' plot direction change in trimmer values
+updown_mat = np.zeros((256,256), dtype=int)
+
+for i in range(256):
+    for j in range(256):
+
+        change = THL_matrix[i][j] - THL_matrix_after[i][j]
+        if(change<0):
+            updown_mat[i][j] = -10
+        elif(change>0):
+            updown_mat[i][j] = 10
+        else:
+            updown_mat[i][j] = 0
+
+fig, ax = plt.subplots()
+cax = fig.add_axes([0.86,0.1,0.05,0.8])
+ms = ax.matshow(updown_mat.T, cmap='viridis')
+ax.set_title("Direction Change in Threshold of Pixels")
+ax.set_xlabel("Pixel x")
+ax.set_ylabel("Pixel y")
+fig.colorbar(ms,cax=cax,orientation='vertical')
+plt.plot()
+fig.savefig(f"THL-trimmer-direction-{picname}.png")
+fig.savefig(f"THL-trimmer-direction-{picname}.pdf")
+
+
+
+
+
+
 
 
 

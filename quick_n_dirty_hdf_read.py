@@ -735,9 +735,6 @@ def getToaClusters(toalist, nskip):
     
     return clust
 
-#def clusterSpread()
-
-
 def findNoisyPixels(nuArray):
    
     median = np.median(nuArray)
@@ -982,6 +979,15 @@ option = str(sys.argv[2])
 clean_filename = removePath(filename)
 
 with tb.open_file(filename, 'r') as f:
+
+     if(option=="intp"):
+
+        print("--------------")
+        cfg = f.root.interpreted.run_0.configuration.run_config[:]
+        print(cfg)
+        genCfg = f.root.interpreted.run_0.configuration.generalConfig[:] 
+        print(genCfg)
+        print("--------------")
 
      if(option=="mask"):
         mask = None

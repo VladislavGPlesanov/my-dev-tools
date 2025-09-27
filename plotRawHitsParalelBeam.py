@@ -171,6 +171,7 @@ plt.grid(which='major', color='grey', linestyle='-',linewidth=0.5)
 plt.grid(which='minor', color='grey', linestyle='--',linewidth=0.25)
 plt.legend(loc='upper left')
 plt.savefig(f"RawData-calcRates-{picname}.png")
+plt.savefig(f"RawData-calcRates-{picname}.pdf")
 plt.close()
 
 print(rate_list[0:6])
