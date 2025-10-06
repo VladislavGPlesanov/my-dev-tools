@@ -21,9 +21,11 @@ G_delta = '\u0394'
 G_phi = '\u03C6'
 
 ######
+
 def cosfunc(x, Ap, Bp, phi0):
 
     return Ap + Bp*np.cos(x - phi0)**2
+    #return Bp + Ap*np.cos(x - phi0)**2
 
 def gauss(x, A, mu, sigma):
 
@@ -32,6 +34,10 @@ def gauss(x, A, mu, sigma):
 def modFac(Ap,Bp):
 
     return Bp/(2*Ap+Bp)
+
+def calcIntensity(A, B):
+
+    return np.round(A + B/2.0, 2)
 
 def deltaMu(mu, Ap, Bp, Ap_err, Bp_err):
 
@@ -67,6 +73,21 @@ def getMaxBin(numbers):
             cnt+=1
 
     return maxbin
+
+def getMinBin(numbers):
+
+    mincounts = 0
+    minbin = 0
+    cnt = 0
+    for n in numbers:
+        if(n<mincounts):
+            mincounts = n
+            minbin = cnt
+            cnt+=1
+        else:
+            cnt+=1
+
+    return minbin
 
 def progress(ntotal, ith):
 
@@ -335,7 +356,7 @@ def simpleHistSpectrum(nuarray, nbins, minbin, maxbin, labels, picname, odir, sc
 
 def simpleHist(nuarray, nbins, minbin, maxbin, labels, picname, odir,fit=None):
 
-    plt.figure()
+    plt.figure(figsize=(10,10))
 
     datasize = None
     try:
@@ -356,11 +377,14 @@ def simpleHist(nuarray, nbins, minbin, maxbin, labels, picname, odir,fit=None):
 
     counts, bin_edges = np.histogram(nuarray, bins=nbins, range=(minbin,maxbin))
 
+    Q, U, modfac = None, None, None
+
     #plt.hist(nuarray, nbins, range=(minbin,maxbin), histtype='stepfilled', facecolor='b')
     plt.hist(bin_edges[:-1], weights=counts, bins=nbins, range=(minbin,maxbin), align='left', histtype='stepfilled', facecolor='b')
     if(fit):
         plt.figsize=(8,8)
         maxbin_cnt = np.max(counts)
+        mean_cnt = np.max(counts)
         minbin_cnt = np.min(counts)
         #minval, maxval = max, counts[len(counts)-1]
         val_ibin = (maxbin-minbin)/nbins
@@ -370,6 +394,7 @@ def simpleHist(nuarray, nbins, minbin, maxbin, labels, picname, odir,fit=None):
 
         ########################################################
         model = None
+        nfits = 0
         if(fit=="gaus"): 
             peakbin = getMaxBin(counts[1:])
             peakbin+=1
@@ -381,27 +406,38 @@ def simpleHist(nuarray, nbins, minbin, maxbin, labels, picname, odir,fit=None):
 
         if(fit=="cosfunc"):            
 
+            params, _ = curve_fit(cosfunc, bin_centers, counts, bounds=([0.0, 0.0,-np.pi],[np.inf,np.inf,np.pi]),maxfev=1000000)
+            #params, _ = curve_fit(cosfunc, bin_centers, counts, bounds=([minbin_cnt*0.5, maxbin_cnt*0.5,-np.pi],[np.inf, np.inf,np.pi]),maxfev=1000000)
+            #params, _ = curve_fit(cosfunc, bin_centers, counts, maxfev=1000000)
+            Ap, Bp, phi = params
+
             ######################################################
-            model = Model(cosfunc)
-            pars = model.make_params(Ap=minbin_cnt*0.9,Bp=maxbin_cnt*1.1,phi0=1.5)
-            pars['Ap'].min = minbin_cnt*0.8
-            #pars['Ap'].max = minbin*1.5
-            #pars['Bp'].min = minbin_cnt*1.1
-            #pars['Bp'].max = maxbin*1.5
-            pars['phi0'].min = 0.0
-            pars['phi0'].max = 3.14
+            #model = Model(cosfunc)
+            #pars = model.make_params(Ap=initAp_cnt,Bp=maxbin_cnt,phi0=0)
+
+            #pars['Ap'].min = maxbin_cnt*0.8
+            #pars['Ap'].max = minbin*1.2
+            #pars['Bp'].min = minbin_cnt
+            #pars['Bp'].max = np.inf
+            #pars['phi0'].min = -2*np.pi/3
+            #pars['phi0'].max = 2*np.pi/3
 
         print(f"\n\ncounts={counts} \n\n")
         print(maxbin_cnt)
         print(minbin_cnt)
-        print(f"max_amplitude={maxbin_cnt - minbin_cnt}")
+        print(f"max_amplitude={maxbin_cnt - minbin_cnt}") 
 
+        result = None
         if(fit=="cosfunc"):
             print("########## FITTING COS^2 FUNCTION #############")
         if(fit=="gaus"):
+            result = model.fit(counts[:-1], pars, x=bin_centers[:-1])
+            print(result.fit_report()) 
             print("########## FITTING GASUSS FUNCTION #############")
-        result = model.fit(counts[:-1], pars, x=bin_centers[:-1])
-        print(result.fit_report()) 
+        #result = model.fit(counts[:-1], pars, x=bin_centers[:-1])
+        
+        nfits+=1
+
         if(fit=="gaus" and result.params['mu']<=0):
 
             #pars['A'].min = maxbin_cnt*0.8
@@ -418,36 +454,64 @@ def simpleHist(nuarray, nbins, minbin, maxbin, labels, picname, odir,fit=None):
             #result = model.fit(counts[peakbin-10:peakbin+10], pars, x=bin_centers[peakbin-10:peakbin+10])
 
             print(result.fit_report()) 
-        ########################################################            
+        
+            nfits += 1
+        ######### handing failed fit on modullation curve ################            
+        #if(fit=="cosfunc" and (result.params['Ap']<=0 or result.params['Bp']<=0)):
+        #    
+        #    pars['Ap'].min = maxbin_cnt*0.5 
+        #    #pars['Ap'].max = minbin_cnt*1.3
+
+        #    pars['Bp'].min = 0.0
+        #    #pars['Bp'].max = maxbin_cnt*1.3
+
+        #    #pars['phi0'].min = -np.pi/2
+        #    #pars['phi0'].max = np.pi/2 
+
+        #    print("COSFUNC FIT FAILED: restricting fit parameters and re-fitting")
+        #    result = model.fit(counts[:-1], pars, x=bin_centers[:-1] )
+        #    nfits+=1
 
         fitlab = ""
         miny,maxy = 0, 0
         if(fit=="cosfunc"):
             #print("########## FITTING COS^2 FUNCTION #############")
-            Ap = result.params['Ap'].value
-            #Bp = Ap + result.params['Bp'].value # NAHUYA i did this?
-            Bp = result.params['Bp'].value
-            phi = result.params['phi0'].value
-            fitlab+=f"Ap={round(Ap,2)}, Bp={round(Bp,2)}, {G_phi}={round(phi,2)}"
-            plt.plot(bin_centers[:-1], result.best_fit, '--r')
-            #plt.plot(bin_edges[:-1], result.best_fit, '--r')
-            #plt.hlines(Ap, -0.1, 3.15, colors='g', label=f"Ap={round(Ap,2)}")
-            #plt.hlines(Bp, -0.1, 3.15, colors='y', label=f"Bp={round(Bp,2)}")
-            #plt.vlines(phi, 0, np.max(counts)*1.2, colors='m',label=f"{G_phi}={round(phi,2)}")
+            # these are for model = Model(cosfunc)
+            #Ap = result.params['Ap'].value
+            #Bp = result.params['Bp'].value
+            #phi = result.params['phi0'].value
+            #fitlab+=f"Ap={round(Ap,2)}, Bp={round(Bp,2)}, {G_phi}={round(phi,2)} "+r"($N_{fits}$="+f"{nfits})"
+            #plt.plot(bin_centers[:-1], result.best_fit, '--r')
+            #========================================
+            plt.plot(bin_centers[:-1], cosfunc(bin_centers[:-1], Ap, Bp, phi), '--r')
+            plt.hlines(Ap, -0.1, 3.15, colors='g', label=f"Ap={round(Ap,2)}")
+            plt.hlines(Bp, -0.1, 3.15, colors='y', label=f"Bp={round(Bp,2)}")
+            #plt.hlines(maxbin_cnt, -0.1, 3.14, colors='r',linestyles='--', label=f"MAXBIN-CTS")
+            #plt.hlines(minbin_cnt, -0.1, 3.14, colors='r',linestyles='--', label=f"MINBIN-CTS")
             plt.vlines(phi, 0, np.max(counts)*1.05, colors='m',label=f"{G_phi}={round(phi,2)}({round(toDegrees(phi),2)} deg)")
             ax = plt.gca()
             miny,maxy = ax.get_ylim()
             mu = modFac(Ap,Bp)
-            #P = polDeg(Ap,Bp,mu)
-            #plt.text(0.05, maxy*0.9, f"{G_mu}={round(mu*100,2)}%, P={round(P,2)}")
-            #plt.text(0.05, maxy*0.95, r"$N(\phi) = A_{P} + B_{P}\cdot cos^2(\phi-\phi_{0})$")
+
+            Q = (1/mu) * (Bp/2) * np.cos(2*phi)
+            U = (1/mu) * (Bp/2) * np.sin(2*phi)  
+
+            intensity = calcIntensity(Ap, Bp)
 
             print(f"Getting miny/maxy for histogram: {picname}")
             print(f"miny={miny}, maxy={maxy}")
 
-            #plt.text(minbin*1.1, maxy*0.9, f"{G_mu}={round(mu*100,2)}%, P={round(P,2)}")
-            plt.text(minbin*1.1, maxy*0.9, f"{G_mu}={round(mu*100,2)}%")
-            plt.text(minbin*1.1, maxy*0.95, r"$N(\phi) = A_{P} + B_{P}\cdot cos^2(\phi-\phi_{0})$")
+            plt.text(-3.13 , maxy*0.96, r"$N(\phi) = A_{P} + B_{P}\cdot cos^2(\phi-\phi_{0})$"+r"($N_{fits}$="+f"{nfits})")
+            plt.text(-3.13 , maxy*0.94, f"{G_mu}={mu:.2f}%")
+            plt.text(-3.13 , maxy*0.92, f"I={intensity:.2f}")
+            plt.text(-3.13 , maxy*0.90, f"P1={Q:.2f}")
+            plt.text(-3.13 , maxy*0.88, f"P2={U:.2f}")
+
+            print("________________________________________________________")
+            print(f"Modulation factor = {mu}")
+            print(f"\nStokes Parameters: \nQ(P1)={Q:.4f}, U(P2)={U:.4f}\n")
+            print(f"Intensity = {intensity}")
+            print("^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^")
 
         elif(fit=="gaus"):
             #print("########## FITTING GAUS FUNCTION #############")
@@ -462,6 +526,7 @@ def simpleHist(nuarray, nbins, minbin, maxbin, labels, picname, odir,fit=None):
 
         plt.legend(loc='upper right')
 
+    
 
     plt.title(labels[0])
     plt.xlabel(labels[1])
@@ -735,6 +800,8 @@ with tb.open_file(recofile, 'r') as f:
     y = f.get_node(base_group_name+"y")
     print(f"found y {type(y)}")
 
+    #firstangles, secondangles = None, None
+
     #print(f"centerX is {type(centerX)}, centerY is {type(centerY)}")    
     #print(f"centerX shape={centerX.shape}")
     #print(f"first ten centerX={centerX[0:10]}")
@@ -809,10 +876,18 @@ with tb.open_file(recofile, 'r') as f:
         ToA = f.get_node(base_group_name+"ToA")
         print("FOUND TOACombined!")
 
-    if(check_node(base_group_name+"angle_fiststage", f)):
+    oldXpolReco = check_node(base_group_name+"angle_fiststage", f)
+    newXpolReco = check_node(base_group_name+"angle_firststage", f)
+
+    #if(check_node(base_group_name+"angle_firststage", f)):
+    if(oldXpolReco or newXpolReco):
         print("Found reconstruction data!")
         
-        firstangles = f.get_node(base_group_name+"angle_fiststage")[:].T
+        if(oldXpolReco):
+            firstangles = f.get_node(base_group_name+"angle_fiststage")[:].T
+        if(newXpolReco):
+            firstangles = f.get_node(base_group_name+"angle_firststage")[:].T
+        
         secondangles = f.get_node(base_group_name+"angle_secondstage")[:].T
 
         multiHist([firstangles,secondangles], 
@@ -842,17 +917,24 @@ with tb.open_file(recofile, 'r') as f:
                     outdir,
                     fit="cosfunc")
 
-        fitAndPlotModulation(firstangles,
-                             100,
-                             -np.pi,
-                             np.pi,
-                             ["Reconstructed Angle Distribution", "Angle [radian]", r"$N_{Entries}$"],
-                             "STOLEN-XpolFirstStage",
-                             outdir)
+        exit(0)
+        #fitAndPlotModulation(firstangles,
+        #                     100,
+        #                     -np.pi,
+        #                     np.pi,
+        #                     ["Reconstructed Angle Distribution", "Angle [radian]", r"$N_{Entries}$"],
+        #                     "STOLEN-XpolFirstStage",
+        #                     outdir)
+
+        #fitAndPlotModulation(secondangles,
+        #                     100,
+        #                     -np.pi,
+        #                     np.pi,
+        #                     ["Reconstructed Angle Distribution", "Angle [radian]", r"$N_{Entries}$"],
+        #                     "STOLEN-XpolSecondStage",
+        #                     outdir)
 
         #exit(0)
-
-    #multiClusterEvents = []
 
     ntotal = ToT.shape[0]
 
@@ -904,7 +986,8 @@ with tb.open_file(recofile, 'r') as f:
  
         # IF EXCENTRICITY IS good :
         pol_angle = None
-        if excent[ievent] > 1.2:
+        if excent[ievent] > 1.3:
+        #if excent[ievent] > 1.2 and nhits >= 80 and sumTOT[ievent] >= 2800 and sumTOT[ievent] < 5500 and length[ievent] <= 4.0:
         #if ((y[ievent]>99).all() and (y[ievent]<151).all() and (x[ievent]>99).all() and (x[ievent]<151).all()):
             yoba_pos = x[ievent],y[ievent]
             clusterangle = runAngleReco(yoba_pos,event)
@@ -913,9 +996,7 @@ with tb.open_file(recofile, 'r') as f:
             #for ix,iy in zip(x[ievent],y[ievent]):
             #    np.add.at(matrix_cut, (ix,iy), 1)
             naccepted+=1    
-
-
-     
+         
         if((npics < 50 and nhits > 25 and excent[ievent] > 2) or (nhits>2e4)): # this one get the actual tracks
         #if(sumTOT[ievent]>2e4): # EXTRA long tracks
         #if(npics < 50 and pol_angle is not None and pol_angle < 0):
