@@ -4,6 +4,9 @@ import tables as tb
 import numpy as np
 import matplotlib.pyplot as plt
 from lmfit import Model
+from scipy.special import gamma
+from scipy.optimize import curve_fit
+
 
 ###GREEK LETTERS###
 
@@ -12,6 +15,99 @@ G_sigma = '\u03c3'
 G_chi = '\u03c7'
 G_delta = '\u0394'
 G_phi = '\u03C6'
+
+def lineFunc(x,a,b):
+
+    return x*a + b 
+
+def polya_MG(x, K, G, T):
+    Tp1 = T + 1
+    return (K / G) * (np.power(Tp1, Tp1))/(gamma(Tp1)) * np.power((x/G), T) * np.exp(-(Tp1*x)/(G))
+
+def chargeperpixel(charge, picname, electrons):
+    # Definition of the plot size
+    fig_width, fig_height = 7, 6  # in inches
+
+    # Relative font size
+    font_size = fig_height * 2  # Beispiel: 2 mal die Breite der Figur
+
+    # Set font size
+    plt.rcParams.update({
+        'font.size': font_size,
+        'axes.titlesize': font_size,
+        'axes.labelsize': font_size,
+        'xtick.labelsize': font_size,
+        'ytick.labelsize': font_size,
+        'legend.fontsize': font_size,
+    })
+
+    fig, ax = plt.subplots(figsize=(fig_width, fig_height))
+
+    ax.cla()
+    maximum = charge.max()
+    unique_data = np.sort(np.unique(charge))
+    bin_edges = np.concatenate((unique_data - 0.5, [unique_data[-1] + 0.5]))
+
+    hist, bins = np.histogram(charge, bins=bin_edges, density=True)
+    bin_centers = (bins[:-1] + bins[1:]) / 2
+
+    fit_range, fit_range_end, fit_range_start = None, None, None
+
+    if(electrons):
+        fit_range_start = 600
+        fit_range = (bin_centers >= fit_range_start)
+    else:
+        fit_range_start = np.nanmin(charge)
+        charge_cap = np.ceil(np.median(charge))
+        #fit_range = (bin_centers >= fit_range_start)
+        fit_range = (bin_centers <= charge_cap*4)
+        fit_range_end = len(bin_centers[fit_range])-1
+
+    params, params_covariance = curve_fit(polya_MG, bin_centers[fit_range], hist[fit_range], p0=[10000, 2000, 1])
+    params_errors = np.sqrt(np.diag(params_covariance))
+    x_values = None
+    if(electrons):
+        x_values = np.linspace(fit_range_start, max(bin_edges), 1000)
+    else:
+        x_values = np.linspace(fit_range_start, fit_range_end, 1000)
+    polya_fit = polya_MG(x_values, *params)
+
+    residuals = hist[fit_range] - polya_MG(bin_centers[fit_range], *params)
+    reduced_chi_squared = np.sum((residuals ** 2) / polya_MG(bin_centers[fit_range], *params)) / (len(hist[fit_range]) - len(params))
+
+    info_K = f"K = {params[0]:.3f}"+" $\pm$ "+f"{params_errors[0]:.3f}\n"
+    info_G = f"G = {params[1]:.3f}"+" $\pm$ "+f"{params_errors[1]:.3f}\n"
+    info_theta = r"$\theta$ = "+f"{params[2]:.3f} "+r"$\pm$"+f" {params_errors[2]:.3f}\n"
+    info_chired = ""
+    if(reduced_chi_squared>1e5):
+        info_chired += r"$\chi^2_{{\mathrm{{red}}}}$ > 1e5"
+    elif(reduced_chi_squared<1e5):
+        info_chired += r"$\chi^2_{{\mathrm{{red}}}}$ < 1e5"
+    else:
+        info_chired += r"$\chi^2_{{\mathrm{{red}}}}$"+f" = {reduced_chi_squared:.3f}"
+
+    fit_info = info_K+info_G+info_theta+info_chired
+    
+    plt.gca().text(0.68, 0.95, fit_info, transform=plt.gca().transAxes, 
+               fontsize=10, verticalalignment='top', horizontalalignment='left',
+               bbox=dict(boxstyle='round,pad=0.3', facecolor='white', alpha=0.5))
+
+    ax.hist(charge, bins=bin_edges, density=True)
+    plt.plot(x_values, polya_fit, 'r-', lw=2)
+    if electrons:
+        ax.set_xlabel("Charge per pixel [electrons]")
+    else:
+        ax.set_xlabel("Charge per pixel [clock cycles]")
+    ax.set_ylabel("Normalised number of events")
+    ax.set_ylim([1e-8,1])
+    ax.set_yscale('log')
+    ax.grid(which='both')
+    plt.grid(True)
+    if(electrons):
+        plt.savefig(f"ChargePerPixel-electrons-{picname}.png", bbox_inches='tight', pad_inches=0.08)
+    else:
+        plt.savefig(f"ChargePerPixel-TOT-{picname}.png", bbox_inches='tight', pad_inches=0.08)
+
 
 def estimateHalfPeak(counts, nbins, peakbin):
 
@@ -228,6 +324,8 @@ hit_peak_amp_err, hit_peak_mu_err, hit_peak_sigma_err = None, None, None
 
 TOT, HITS = [], []
 
+sumElec_sliced = []
+
 with tb.open_file(infile) as f:
 
     print(f"Reading {f}")
@@ -262,19 +360,36 @@ with tb.open_file(infile) as f:
     
     ###############################################
     sumTOT = f.get_node(base_group_name+"sumTot")
+    rawTOT = f.get_node(base_group_name+"ToT")
+    electrons = f.get_node(base_group_name+"charge")
+    evNum = f.get_node(base_group_name+"eventNumber")[::5]
+    #evNum = f.get_node(base_group_name+"eventNumber")
+    slice_electrons = f.get_node(base_group_name+"charge")[::5]
+    #slice_electrons = f.get_node(base_group_name+"charge")
+    
     print(f"found sumTOT {type(sumTOT)}")
     print(f"Contains {len(sumTOT)} events/hits")
     for totsum in sumTOT:
         TOT.append(totsum)
     sumTOT = None
     
+    for se in slice_electrons:
+        sumElec_sliced.append(np.sum(se)/se.shape[0])
+
     hits = f.get_node(base_group_name+"hits")
     print(f"found nhits {type(hits)}")
     print(f"Contains {len(hits)} events/hits")
     for h in hits:    
         HITS.append(h)
     hits = None
-   
+
+    charge = np.concatenate(rawTOT) 
+    chargeperpixel(charge, picname, False) 
+
+    charge_q = np.concatenate(electrons) 
+    chargeperpixel(charge_q, picname, True) 
+
+  
 print("=============== FITTING TOT ================================")
 #peak_info = simpleHist(TOT, 100,0, 60000, [f"TOT per event", "TOT cycles", "N"], f"TOT-DESYP09-"+picname)
 peak_info = simpleHist(TOT, 100,0, 6000, [f"TOT per event", "TOT cycles", "N"], f"TOT-DESYP09-"+picname)
@@ -335,8 +450,68 @@ plt.ylabel(r"$N_{events}$")
 plt.legend(loc='upper right')
 plt.grid(True)
 plt.savefig(f"HITS-Fe55-gainScan-Single-{picname}.png")
+plt.close()
 
 counts, bin_edges, weights = None, None, None
+
+## plotting linear fit plot for sumTOT/sumELECTRONS per event
+
+# pruning data for reference
+
+arr_evNum = np.array(evNum)
+arr_elecPerHit = np.array(sumElec_sliced)
+
+mean_elec = np.mean(arr_elecPerHit)
+stdev_elec = np.std(arr_elecPerHit)
+
+#prune_index = np.where(arr_elecPerHit < 15000)
+#prune_index2 = np.where(arr_elecPerHit < 8000)
+
+prune_index = np.where(arr_elecPerHit < (mean_elec + 3*stdev_elec))
+prune_index2 = np.where(arr_elecPerHit < (mean_elec + 2*stdev_elec))
+
+arr_elecPerHit_pruned = arr_elecPerHit[prune_index]
+arr_elecPerHit_pruned2 = arr_elecPerHit[prune_index2]
+
+arr_evNum_pruned = arr_evNum[prune_index]
+arr_evNum_pruned2 = arr_evNum[prune_index2]
+
+#Fitting line first:
+popt, pcov = curve_fit(lineFunc,evNum,sumElec_sliced)
+
+pruned_popt, pruned_pcov = curve_fit(lineFunc,arr_evNum_pruned,arr_elecPerHit_pruned)
+
+pruned2_popt, pruned2_pcov = curve_fit(lineFunc,arr_evNum_pruned2,arr_elecPerHit_pruned2)
+
+slope = popt[0]
+offset = popt[1]
+
+pruned_slope = pruned_popt[0]
+pruned_offset = pruned_popt[1]
+
+pruned2_slope = pruned2_popt[0]
+pruned2_offset = pruned2_popt[1]
+
+# plot
+plt.figure(figsize=(14,8))
+plt.scatter(evNum,sumElec_sliced, marker='.', c='green',label="events")
+plt.plot(evNum,lineFunc(evNum,*popt), c="red",label=f"slope={slope:4f}\noffset={offset:.4f}")
+#plt.plot(arr_evNum_pruned,lineFunc(arr_evNum_pruned,*pruned_popt), c="blue",label=f"(<15000) slope={pruned_slope:4f}\n       offset={pruned_offset:.4f}")
+plt.plot(arr_evNum_pruned,lineFunc(arr_evNum_pruned,*pruned_popt), c="blue",label=f"(mean+3sig) slope={pruned_slope:4f}\n       offset={pruned_offset:.4f}")
+#plt.plot(arr_evNum_pruned2,lineFunc(arr_evNum_pruned2,*pruned2_popt), c="magenta",label=f"(<8000) slope={pruned2_slope:4f}\n     offset={pruned2_offset:.4f}")
+plt.plot(arr_evNum_pruned2,lineFunc(arr_evNum_pruned2,*pruned2_popt), c="magenta",label=f"(mean+2sig) slope={pruned2_slope:4f}\n     offset={pruned2_offset:.4f}")
+plt.xlabel("event nr.")
+plt.ylabel(r"$N_{electrons}/hit$")
+plt.title("Electrons per hit in cluster vs time")
+plt.grid(which='both')
+plt.legend(loc='upper right')
+plt.savefig(f"Electrons-vs-Time-{picname}.png")
+plt.close()
+
+
+
+
+
 #============================================================
 
 
