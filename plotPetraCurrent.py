@@ -44,4 +44,7 @@ plt.legend(loc='upper right')
 plt.grid(True)
 plt.savefig(f"PetraCurrent-{runnr}-{picname}.png",dpi=400)
 
+total_runtime = max(time)
+
+print(f"Total runtime = {total_runtime:.4f} [s]")
 

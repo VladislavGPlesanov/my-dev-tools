@@ -9,6 +9,7 @@ from lmfit import Model
 from matplotlib.colors import LogNorm
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 import math
+import glob
 
 # for interactive 3d plotting 
 from mpl_toolkits.mplot3d import Axes3D
@@ -33,10 +34,56 @@ OUT_GRAY = '\033[1;37m'
 OUT_YELLOW = '\033[1;33m'
 OUT_CYAN = '\033[1;36m'
 OUT_MAGEN = '\033[1;35m'
+OUT_RED_BGR = '\x1b[41m'
+OUT_BLUE_BGR = '\x1b[44m'
+OUT_GREEN_BGR = '\x1b[42m'
+OUT_YEL_BGR = '\x1b[43m'
+OUT_CYAN_BGR = '\x1b[46m'
+OUT_WHITE_BGR = '\x1b[47m'
+OUT_MAG_BGR = '\x1b[45m'
+
 
 #######
 # defining cut setting dictionary
 #
+
+# run times of the data sets fro direct beam
+TIME_DICT={
+    "DB-120Hz-0deg":3651.5069,
+    "DB-1260Hz-0deg":1810.9238,
+    "DB-1260Hz-30deg":1814.2037,
+    "DB-1260Hz-60deg":2542.2456,
+    "DB-1260Hz-90deg":2557.6083,
+    "DB-15100Hz-0deg":910.3009,
+    "DB-15100Hz-30deg":908.9542,
+    "DB-15100Hz-60deg":909.7484,
+    "DB-15100Hz-90deg":911.8904,
+    "DB-153000Hz-0deg":460.7452,
+    "DB-153000Hz-30deg":459.7881,
+    "DB-153000Hz-60deg":459.2557,
+    "DB-153000Hz-90deg":461.6843,
+    "CP0": 2536.6465,
+    "CP1": 18.6879,
+    "CP2": 11.9262,
+    "CP3": 1817.0506,
+    "CP4": 1828.4342,
+    "CP5": -1,
+    "CP6": 1816.2043,
+    "CP7": 18.6959,
+    "MP1": 1809.7429,
+    "MP2": 1813.8812,
+    "MP3": 1213.6367,
+    "MP4": 613.7001,
+    "MP5": 1815.8047,
+    "MP6": 1832.4772,
+    "MP7": 3031.4198,
+    "450V": 1205.8401,
+    "460V": 1206.6218,
+    "470V": 1204.2670,
+    "480V": 1203.8432,
+    "490V": 1210.5999
+     
+}
 
 CUTS_DICT={
     "DB-120Hz-0deg":{
@@ -44,10 +91,10 @@ CUTS_DICT={
         "length": 3.0,
         "width": 2.0,
         "nhits": 100, 
-        "weightXY": -999, 
+        "weightXY": "none", 
         "convX": [100,150], 
         "convY": [125,175], 
-        "convXY":-999, 
+        "convXY":"none", 
         "Excent":5.0, 
         "RMSL":1.2
     },
@@ -59,7 +106,7 @@ CUTS_DICT={
         "weightXY": [100,200], 
         "convX": [100,150], 
         "convY": [125,175], 
-        "convXY":-999, 
+        "convXY":"none", 
         "Excent":5.0, 
         "RMSL":1.2
     },
@@ -68,27 +115,85 @@ CUTS_DICT={
         "length": 4.0,
         "width": 2.8,
         "nhits": [40,250], 
-        "weightXY": -999, 
+        "weightXY": "none", 
         "convX": [100,150], 
         "convY": [125,175], 
-        "convXY":-999, 
+        "convXY":"none", 
         "Excent":50, 
-        "RMSL":-999
+        "RMSL":"none"
     },
     "BGR":{
-        "sumTOT": -999,
-        "length": -999,
-        "width": -999,
+        "sumTOT": "none",
+        "length": "none",
+        "width": "none",
         "nhits": 25, 
-        "weightXY": -999, 
+        "weightXY": "none", 
         "convX": [3,252], 
         "convY": [3,252], 
-        "convXY":-999, 
+        "convXY":"none", 
         "Excent":50, 
-        "RMSL":-999
+        "RMSL":"none"
+    },
+    "SIM-TPX3":{
+        "sumTOT": -20000,
+        "length": -20,
+        "width": "none",
+        "nhits": 25, 
+        "weightXY": "none", 
+        "convX": [3,252], 
+        "convY": [3,252], 
+        "convXY":"none", 
+        "Excent":-50, 
+        "RMSL":"none"
+    },
+    "CP0":{
+        "sumTOT": -20000,
+        "length": -20,
+        "width": "none",
+        "nhits": [25,1000], 
+        "weightXY": "none", 
+        "convX": "none", 
+        "convY": "none", 
+        "convXY":"none", 
+        "Excent":[1.2,20], 
+        "RMSL":"none"
     }
 
 }
+
+#---------------------------------
+# dictionary to store main results for output
+main_results={
+    "Mod_Orig":{},
+    "Mod_BGR":{},
+    "Mod_Cut":{}
+}
+
+#---------------------------------
+def getCut(dict_entry, check_value):
+
+    # e.g. if i pass CUTS_DICT["DB120Hz-0deg"]["sumTOT"]
+    #                or cutset["sumTOT"]
+    
+    if(isinstance(dict_entry,list)):
+        maxvalue = dict_entry[1]
+        minvalue = dict_entry[0]
+        return True if (check_value <= maxvalue and check_value >= minvalue) else False
+
+    elif(isinstance(dict_entry,str)):
+        if(dict_entry=="none"):
+            return True
+        else:
+            return False
+    else:
+        if(dict_entry > 0):
+            return True if (check_value >= abs(dict_entry)) else False
+        else:
+            return True if (check_value <= abs(dict_entry)) else False
+
+    #return False
+
+
 
 #######
 
@@ -107,6 +212,10 @@ def modFac(Ap,Bp):
 def calcIntensity(A, B):
 
     return A + B/2.0
+
+def calcIntensityError(sigA, sigB):
+
+    return np.sqrt(sigA**2 + 0.5*sigB**2)
 
 def deltaMu(mu, Ap, Bp, Ap_err, Bp_err):
 
@@ -351,6 +460,23 @@ def runTwoStepAngleReco(coords, charges, radius_min=None, radius_max=None, weigh
     #return results
     return phi_1, phi_2, center, start_indices, end_indices, absorption_point, skewness_xy, quality
 
+def simpleScatter(xdata, ydata, labels, picname, odir):
+
+    print(len(xdata))
+    print(len(ydata))
+    if(len(xdata)!=len(ydata)):
+        print(f"{OUT_RED}[simpleScatter] ERROR, data mismatch -> x={len(xdata)}, y={len(ydata)}{OUT_RST}")
+
+    plt.figure(figsize=(14,8))
+    plt.scatter(xdata,ydata, marker='.', c='green')
+    plt.xlabel(labels[1])
+    plt.ylabel(labels[2])
+    plt.title(labels[0])
+    plt.grid(which='both')
+    #plt.legend(loc='upper right')
+    plt.savefig(f"{odir}/1D-SCAT-{picname}.png")
+    plt.close()
+
 def runAngleReco(positions, charges):
 
     fTPX3 = True if len(positions)==3 else False
@@ -471,15 +597,24 @@ def fitAndPlotModulation(nuarray, nbins, minbin, maxbin, labels, picname, odir):
 
     fBinColor = None
 
+    mukey, Apkey, Bpkey, phikey, chikey = "mu","Ap", "Bp", "phi", "chired"
+    muerrkey, Aperrkey, Bperrkey, phierrkey = "muErr", "Aperr", "Bperr", "phierr"
+    Ikey, Qkey, Ukey = "I","Q","U"
+    Ierrkey, Qerrkey, Uerrkey = "Ierr", "Qerr", "Uerr"
+    branch = None
+
     if("BGR" in picname):
         fBinColor='gray'
+        branch = "Mod_BGR"
     elif("CutOnPosition" in picname):
         fBinColor='darkorange'
+        branch = "Mod_Cut"
     else:
         fBinColor='forestgreen'
+        branch = "Mod_Orig"
         
     # plotting 
-    plt.figure(figsize=(8,6))
+    plt.figure(figsize=(10,8))
     plt.hist(bin_edges[:-1], 
              weights=counts, 
              bins=nbins, 
@@ -509,6 +644,7 @@ def fitAndPlotModulation(nuarray, nbins, minbin, maxbin, labels, picname, odir):
     mu = modFac(Ap,Bp)
     muErr = deltaMu(mu, Ap, Bp, Ap_err, Bp_err)
     intensity = calcIntensity(Ap, Bp)
+    intensity_err = calcIntensityError(Ap_err, Bp_err)
     P = polDeg(Ap, Bp, mu)
  
     # Paolo, Polarimetry pdf, page 27
@@ -536,7 +672,7 @@ def fitAndPlotModulation(nuarray, nbins, minbin, maxbin, labels, picname, odir):
     # Some publication 
     #Q = intensity * mu * np.cos(2*phi)
     #U = intensity * mu * np.sin(2*phi)  
-    V = np.sqrt((P*intensity)**2 - Q**2 - U**2)
+    #V = np.sqrt((P*intensity)**2 - Q**2 - U**2)
 
     #---------------------------------------------------
     # normalised modulation
@@ -553,18 +689,34 @@ def fitAndPlotModulation(nuarray, nbins, minbin, maxbin, labels, picname, odir):
     #---------------------------------------------------
     plt.text(-3.13, maxy*1.16, r"$\Sigma$"+f"(Entries)={len(nuarray)}",fontsize=11)
     plt.text(-3.13 , maxy*1.10, r"$N(\phi) = A_{P} + B_{P}\cdot cos^2(\phi-\phi_{0})$", fontsize=11)
-    plt.text(-3.13 , maxy*1.04, f"{G_mu}={mu*100:.2f}%"+r"$\pm$"+f"{muErr:.2f}%", fontsize=11)
-    plt.text(-3.13 , maxy*0.98, f"I={intensity:.2f}", fontsize=11)
-    plt.text(-3.13 , maxy*0.92, f"Q={Q:.2f} +- {dQ:.2f} ({Q/intensity:.4f}+-{dQ/intensity:.4f})", fontsize=11)
-    plt.text(-3.13 , maxy*0.86, f"U={U:.2f} +- {dU:.2f} ({U/intensity:.4f}+-{dU/intensity:.4f})", fontsize=11)
-    plt.text(-3.13 , maxy*0.80, f"V={V:.2f})", fontsize=11)
+    plt.text(-3.13 , maxy*1.04, f"{G_mu}={mu*100:.2f}%"+r"$\pm$"+f"{muErr*100:.2f}%", fontsize=11)
+    plt.text(-3.13 , maxy*0.98, f"I={intensity:.2f}"+r"$\pm$"+f"{intensity_err:.2f}", fontsize=11)
+    plt.text(-3.13 , maxy*0.92, f"Q={Q:.2f}"+r"$\pm$"+f"{dQ:.2f} ({Q/intensity:.4f}"+r"$\pm$"+f"{dQ/intensity:.4f})", fontsize=11)
+    plt.text(-3.13 , maxy*0.86, f"U={U:.2f}"+r"$\pm$"+f"{dU:.2f} ({U/intensity:.4f}"+r"$\pm$"+f"{dU/intensity:.4f})", fontsize=11)
+    plt.text(-3.13 , maxy*0.80, r"$\chi^2_{red}$"+f"={chired:.2f})", fontsize=11)
 
     print("________________________________________________________")
     print(f"{OUT_RED} Modulation factor = {mu*100.0:.2f} {OUT_RST}")
     print(f"Polarization degree = {P:.2f}")
-    print(f"\nStokes Parameters: \nQ(P1)={Q:.4f}, U(P2)={U:.4f}, V={V:.4f}\n")
+    print(f"\nStokes Parameters: \nQ(P1)={Q:.4f}, U(P2)={U:.4f}\n")
     print(f"Intensity = {intensity}")
     print("^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^")
+
+    main_results[branch][mukey] = mu
+    main_results[branch][Apkey] = Ap
+    main_results[branch][Bpkey] = Bp
+    main_results[branch][phikey] = phi
+    main_results[branch][chikey] = chired
+    main_results[branch][muerrkey] = muErr
+    main_results[branch][Aperrkey] = Ap_err
+    main_results[branch][Bperrkey] = Bp_err
+    main_results[branch][phierrkey] = phi_err
+    main_results[branch][Ikey] = intensity
+    main_results[branch][Qkey] = Q
+    main_results[branch][Ukey] = U
+    main_results[branch][Ierrkey] = intensity_err
+    main_results[branch][Qerrkey] = dQ
+    main_results[branch][Uerrkey] = dU
 
     plt.legend(loc='upper right')
 
@@ -647,7 +799,9 @@ def simpleHistSpectrum(nuarray, nbins, minbin, maxbin, labels, picname, odir, sc
 
 def simpleHist(nuarray, nbins, minbin, maxbin, labels, picname, odir,fit=None):
 
-    print(f"{OUT_MAGEN}[simpleHist]-->{picname}-->{labels[0]}{OUT_RST}")
+    print(f"{OUT_MAGEN}[simpleHist]-->{picname}-->{labels[0]} ({len(nuarray)}) {OUT_RST}")
+    if(len(nuarray)==0):
+        print(f"{OUT_RED}[ERROR::EMPTY_DATA]-->{picname}-->{labels[0]}{OUT_RST}")
 
     plt.figure(figsize=(10,8))
 
@@ -769,6 +923,7 @@ def simpleHist(nuarray, nbins, minbin, maxbin, labels, picname, odir,fit=None):
             U = (1/mu) * (Bp/2) * np.sin(2*phi)  
 
             intensity = calcIntensity(Ap, Bp)
+            intensity_err = calcIntensityError(Ap_err, Bp_err)
 
             print(f"Getting miny/maxy for histogram: {picname}")
             print(f"miny={miny}, maxy={maxy}")
@@ -827,10 +982,44 @@ def simpleHist(nuarray, nbins, minbin, maxbin, labels, picname, odir,fit=None):
 
 
 def plot2Dhist(x,y, labels, picname, odir):
-    
+ 
+    nentries_x = x.shape[0] 
+    nentries_y = y.shape[0]
+
+    print(f"{OUT_GRAY} [plot2Dhist]--> {picname} --> {labels[0]} ({nentries_x},{nentries_y}) {OUT_RST}")
+    if(nentries_x==0 or nentries_y==0):    
+        print(f"{OUT_RED} [ERROR::EMPTY_DATA] --> {picname} MISSING DATA {OUT_RST}")
+        return 0        
+
+    mismatch = 0
+    idx_stop = None
+    if(nentries_x >= nentries_y):
+        idx_stop = nentries_y-1
+        mismatch = 1.0 - (nentries_y/nentries_x)
+    else:
+        idx_stop = nentries_x-1
+        mismatch = 1.0 - (nentries_x/nentries_y)
+ 
+    if(mismatch>0.1):
+        print(f"{OUT_RED}[plot2Dhist]: mismatch of {mismatch*100:.2f}% of data sets for {labels[0]} {OUT_RST}")
+
     plt.figure(figsize=(8,6))
 
-    plt.hist2d(x, y, bins=100, norm=LogNorm(), cmap="jet")
+    if("Theta" in picname or "theta" in labels[0]):
+        idx = np.where(y>-999)
+        plt.hist2d(x[idx], y[idx], bins=100, norm=LogNorm(), cmap="jet")
+
+    elif("ToA Mean" in labels[0]):
+        idx = np.where(y<40)
+        plt.hist2d(x[idx], y[idx], bins=100, norm=LogNorm(), cmap="jet")
+    elif("ToA RMS" in labels[0]):
+        idx = np.where(y<30)
+        plt.hist2d(x[idx], y[idx], bins=100, norm=LogNorm(), cmap="jet")
+    elif("ToA length" in labels[0]):
+        idx = np.where(y<140)
+        plt.hist2d(x[idx], y[idx], bins=100, norm=LogNorm(), cmap="jet")    
+    else:
+        plt.hist2d(x[0:idx_stop], y[0:idx_stop], bins=100, norm=LogNorm(), cmap="jet")
     plt.colorbar(label=r"$N_{Entries}$")
 
     plt.title(labels[0])
@@ -879,8 +1068,14 @@ def plotDbscan(index, dblabels, ievent, nfound, odir):
     plt.savefig(f"{odir}/DBSCAN-{ievent}.png")
 
 #def plot2dEvent(nuarray, info, picname, odir, plotMarker=None):
-def plot2dEvent(nuarray, info, picname, odir, figtype=None, plotMarker=None):
+def plot2dEvent(nuarray, info, picname, odir, figtype=None, plotMarker=None):  
+    
+    print(f"{OUT_YELLOW} [plot2dEvent]--> {picname} ({len(nuarray)}) {OUT_RST}")
  
+    if(np.sum(nuarray)==0):
+        print(f"{OUT_RED}[ERROR::EMPTY_DATA] {picname} matrix all zeros! {OUT_RST}")
+        return 0
+
     # ---- matrix 2d hist ----
     fig, ax = plt.subplots(figsize=(8,6))
     cax = fig.add_axes([0.86,0.1,0.05,0.8])
@@ -999,7 +1194,18 @@ def simpleSimRecoHist(data, nbins, minbin, maxbin, labels, picname, ylog, odir):
     plt.savefig(f"{odir}/simpleSimRecoHist-{picname}.png")                                   
 
 
+def getEvolutionDirection(centerX, centerY, weightX, weightY, absX, absY):
+    # basically dx/dy of charge center and absorption point
+
+
+    deriv = ((absX-centerX) - (weightX-centerX))/((absY-centerY) - (weightY-centerY))
+    if(deriv == np.inf or deriv == -np.inf):
+        deriv = NaN
+
+    return deriv
+
 #####################################################################
+
 recofile = sys.argv[1]
 plotname = sys.argv[2]
 
@@ -1007,6 +1213,24 @@ outdir = f"tmp-{plotname}/"
 if not os.path.exists(outdir):
     os.makedirs(outdir)
 
+dataset, cutset = None, None
+for item in CUTS_DICT.keys():
+    #print(item)
+    if(item in recofile):
+        #print("Found cuts for this data set")
+        dataset = item
+        #print(CUTS_DICT[item])
+        cutset = CUTS_DICT[item]
+        #print(CUTS_DICT[item]["sumTOT"])
+        break
+
+if(dataset is not None):
+    print(f"Found cut set for {dataset}")
+else:
+    print("Did not find cuts for this data set in CUTS_DICTionary")
+
+#
+#exit(0)
 # valid for NeCO2-45deg run only
 #empty_ev = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29]
 #prop_ev =[41, 42, 43, 44, 45, 46, 47, 183, 184, 185, 186, 193, 205, 206, 207, 322, 352, 366, 383, 384, 385, 386, 387, 583, 584, 585, 586, 587, 747, 748] 
@@ -1041,7 +1265,8 @@ weightCenters_cut = np.zeros((256,256),dtype=int)
 
 # defining some temp lists to plot parameters after cuts
 
-tmp_excent, tmp_hits, tmp_sumTOT =[], [], []
+tmp_derivative = []
+tmp_excent, tmp_hits, tmp_sumTOT, tmp_evtnr = [], [], [], []
 tmp_centerX, tmp_centerY = [], []
 tmp_length,tmp_width = [], []
 
@@ -1049,7 +1274,7 @@ tmp_RMSL, tmp_RMST = [], []
 
 tmp_densityRMS, tmp_densityWL = [], []
 tmp_secondangles = []
-tmp_secondangles_Y= []
+tmp_secondangles_Y, tmp_secondangles_Y_conv = [], []
 tmp_BGRangles = []
 
 tmp_theta = []
@@ -1059,7 +1284,7 @@ tmp_evtArea = []
 
 conversionX, conversionY =  None, None
 ConvX, ConvY = [],[]
-#tmp_toaMean, tmp_toaRMS, tmp_toaSkew, tmp_toaLength =  [],[],[],[]
+tmp_toaMean, tmp_toaRMS, tmp_toaSkew, tmp_toaLength =  [],[],[],[]
 
 tmp_weightedY, tmp_weightedX = [], []
 
@@ -1081,6 +1306,10 @@ fTiming = False
 fCharge = False
 fConverted = False
 
+freport = open(f"analReport-{plotname[:-3]}.log",'a')
+
+freport.write("===================================\n")
+freport.write(f"ANALYZING: {recofile}")
 
 with tb.open_file(recofile, 'r') as f:
    
@@ -1106,6 +1335,7 @@ with tb.open_file(recofile, 'r') as f:
     print(f"<{run_name}>")
     run_num = int(run_name[4:])
     print(f'run number is {run_num}')
+    freport.write(f"\nRun number: {run_num}")
 
     basewords = None
     # =========== gettin' shit ==================
@@ -1147,38 +1377,35 @@ with tb.open_file(recofile, 'r') as f:
     print(f"found x {type(x)}")
     y = f.get_node(base_group_name+"y")
     print(f"found y {type(y)}")
+    EVENTNR = f.get_node(base_group_name+"eventNumber")
+    print(f"found eventNumber {type(EVENTNR)}")
 
-    n_x = len(x)
-    print(f"rate = {n_x/60} per second")
+    #allevents = []
+    ##print(np.max(EVENTNR))
+    #for i in EVENTNR:
+    #    allevents.append(i)
 
-    # =========== plottin' shit =================
+    #idx_event = np.linspace(0,len(EVENTNR),len(EVENTNR))
+    #simpleScatter(idx_event, allevents, ["Event number vs actual event", "Nevent", "EVTNR"], "OLOLO",outdir)
 
-#    print("Printing global variable data sets")
-#    #simpleSimRecoHist(centerX, 50, 6, 8, ['centerX','x','cnt'], plotname+"centerX", False, outdir)
-#    #simpleSimRecoHist(centerY, 50, 6, 8, ['centerY','Y','cnt'], plotname+"centerY", False, outdir)
-#    # - -------------------------------------------------------------------------
-#    simpleSimRecoHist(excent, 50, 0.9, 10 , ['Excentricity','','cnt'], plotname+"excent", True, outdir)
-#    #simpleSimRecoHist(FIRT, 50, np.min(FIRT), np.max(FIRT)+0.5, ['frac_In_rms_T','','cnt'], plotname+"fracInRmsTrans", True, outdir)
-#    #simpleSimRecoHist(kurtosisL, 50, np.nanmin(kurtosisL), np.nanmax(kurtosisL), ['kurtosisL','','cnt'], plotname+"kurtL", True, outdir)
-#    #simpleSimRecoHist(kurtosisT, 50, np.nanmin(kurtosisT), np.nanmax(kurtosisT), ['kurtosisT','','cnt'], plotname+"kurtT", True, outdir)
-#    simpleSimRecoHist(length, 50, np.min(length), np.max(length), ['length','','cnt'], plotname+"length", True, outdir)
-#    #simpleSimRecoHist(length, 50, np.min(length), 6, ['length','','cnt'], plotname+"length", False, outdir)
-#
-#    simpleSimRecoHist(hits, 100, np.min(hits), np.max(hits), ['hits','','cnt'], plotname+"hits", True, outdir)
-#    #simpleSimRecoHist(LDRT, 50,0,50, ['lenDivRmsTrans','','cnt'], plotname+"LDRT", True, outdir)
-#
-#    simpleSimRecoHist(RMS_L, 50,np.min(RMS_L), 2.0, ['RMS_L','',''], plotname+"RMS_L", True, outdir)
-#    simpleSimRecoHist(RMS_T, 50,np.min(RMS_T), 1.5, ['RMS_T','',''], plotname+"RMS_T", True, outdir)
-#
-#    simpleSimRecoHist(rotAng, 50,np.min(rotAng),np.max(rotAng), ['rotAng','',''], plotname+"rotAng", True, outdir)
-#    #simpleSimRecoHist(skewL, 50,np.nanmin(skewL),np.nanmax(skewL), ['skewL','',''], plotname+"skewL", True, outdir)
-#    #simpleSimRecoHist(skewT, 50,np.nanmin(skewT),np.nanmax(skewT), ['skewT','',''], plotname+"skewT", True, outdir)
-#    simpleSimRecoHist(sumTOT, 100,np.min(sumTOT),np.max(sumTOT), ['sumTOT','',''], plotname+"sumTOT", True, outdir)
-#    simpleSimRecoHist(width, 100, np.min(width), np.max(width), ['width','',''], plotname+"width", True, outdir)
-#    # -----------------------------------------------------------------------------
-#    print("---------- CHINAZES! ------------")
+    #exit(0)
 
     print(f"\nFile has {len(hits)} clusters\n")
+    measurement_time = None
+    for item in TIME_DICT.keys():
+        if item in recofile:
+            measurement_time = float(TIME_DICT[item])
+            print(f"Found run time value [{measurement_time} seconds] for run [{item}]")
+            freport.write(f"\nRun time: {measurement_time} , [{item}]")
+            break
+    
+    if(measurement_time is not None):
+        n_clusters = len(hits)
+        raw_rate = n_clusters/measurement_time 
+        print(f"{OUT_RED_BGR} Rate = {raw_rate:.4f} [Hz] {OUT_RST}")
+        freport.write(f"\nRun Rate: {raw_rate}")
+
+    print("---------- CHINAZES! ------------")
 
     REAL_ALT_ROTANG = []
     SECOND_STEP_ALT_ROTANG = []
@@ -1201,7 +1428,7 @@ with tb.open_file(recofile, 'r') as f:
 
     if(check_node(base_group_name+"charge",f)):
         fCharge = True 
-        electrons = f.get_node(base_group_name+"charge") 
+        electrons = f.get_node(base_group_name+"charge")
 
     if(check_node(base_group_name+"ToACombined",f)):
         TOAComb = f.get_node(base_group_name+"ToACombined")
@@ -1215,33 +1442,6 @@ with tb.open_file(recofile, 'r') as f:
         toaKurt = f.get_node(base_group_name+"toaKurtosis")
 
         fTiming = True
-
-        #print(type(TOAComb))
-        #print(type(ToA.shape))
-        #print(type(fTOA.shape))
-
-        #print("________TOACombined___________")
-        #print(TOAComb[0:10])
-        #print("________TOA___________")
-        #print(ToA[0:10])
-        #print("________fTOA___________")
-        #print(fTOA[0:10])
-        #print("________TOAlength___________")
-        #print(toaLength[0:10])
-        #print("________TOAmean___________")
-        #print(toaMean[0:10])
-        #print("________TOArms___________")
-        #print(toaRMS[0:10])
-
-        #'/home/vlad/readoutSW/tools/tmp-measurement-CP0-raw-2D/2Dhist-2D-Excent-Length.png' simpleSimRecoHist(TOAComb, 100 ,np.nanmin(TOAComb),np.nanmax(TOAComb), ['TOACombined','',''], plotname+"-TOACombined", True, outdir)
-        #simpleSimRecoHist(np.array(ToA).reshape(-1), 100,np.nanmin(np.array(ToA).reshape(-1)),np.nanmax(np.array(ToA).reshape(-1)), ['ToA','',''], plotname+"-ToA", True, outdir)
-        #simpleSimRecoHist(fTOA.reshape(-1), 100,np.nanmin(fTOA.reshape(-1)),np.nanmax(fTOA.reshape(-1)), ['fTOA','',''], plotname+"-fTOA", True, outdir)
-        #simpleSimRecoHist(toaLength, 100,np.nanmin(toaLength), 200, ['toaLength','',''], plotname+"-toaLength", True, outdir)
-        #simpleSimRecoHist(toaMean, 100,np.nanmin(toaMean), 50, ['toaMean','',''], plotname+"-toaMean", True, outdir)
-        #simpleSimRecoHist(toaRMS, 100,np.nanmin(toaRMS), 50, ['toaRMS','',''], plotname+"-toaRMS", True, outdir)
-        #simpleSimRecoHist(toaSkew, 100,np.nanmin(toaSkew),np.nanmax(toaSkew), ['toaSkew','',''], plotname+"-toaSkew", True, outdir)
-        #simpleSimRecoHist(toaKurt, 100,np.nanmin(toaKurt),np.nanmax(toaKurt), ['toaKurtosis','',''], plotname+"-toaKurt", True, outdir)
-
         print("FOUND TOACombined!")
 
     oldXpolReco = check_node(base_group_name+"angle_fiststage", f)
@@ -1293,11 +1493,10 @@ with tb.open_file(recofile, 'r') as f:
         conversionX = absorp_x
         conversionY = absorp_y
 
-        #absorp_x = absorp_x[np.where(~np.isnan(absorp_x))]
-        #absorp_y = absorp_y[np.where(~np.isnan(absorp_y))]
-
         print(f"absorption x,y lengths: {absorp_x.shape[0]}\t{absorp_y.shape[0]}")
         print(f"Pruned lists          : {len(ConvX)}\t{len(ConvY)}")
+        freport.write(f"\nAbsorption Point Data:\nLengths = {absorp_x.shape[0]}\t{absorp_y.shape[0]}\n")
+        freport.write(f"\nPruned Length = {len(ConvX)}\t{len(ConvY)}")
 
         abs_stdx = np.std(ConvX)
         abs_stdy = np.std(ConvY)
@@ -1308,6 +1507,7 @@ with tb.open_file(recofile, 'r') as f:
         print(f"{abs_stdy:.4f}")
         print(f"{abs_meanx:.4f}")
         print(f"{abs_meany:.4f}")
+        freport.write(f"\nAbsorption peak: {abs_stdx:.4f}, {abs_stdy:.4f},{abs_meanx:.4f},{abs_meany:.4f}")
 
         absorp_x, absorp_y = None, None
         print(f"Deviation in absorption x and y are:\n{OUT_BLUE} sigma_x={abs_stdx:.4f}, sigma_y={abs_stdy:.4f} {OUT_RST}")
@@ -1317,9 +1517,58 @@ with tb.open_file(recofile, 'r') as f:
     ntotal = ToT.shape[0]
 
     print(f"\nTOTAL nr of clusters: {ntotal}\n")
+    freport.write(f"\nN_clusters = {ntotal}")
+
     ievent, npics, mcevents = 0, 0, 0
     n_good = 0
     n_tracks = 0
+
+    # definin' some global cuts
+    # TEMPORARY
+    #
+    minHits = 25
+    maxHits = 1000
+    minSumTot = 1000
+    maxSumTot = 1000
+
+    if("450V" in recofile):
+        minHits = 10
+        naxHits = 60
+        minSumTot = 255
+        maxSumTot = 900
+    
+    if("460V" in recofile):
+        minHits = 20
+        naxHits = 75
+        minSumTot = 500
+        maxSumTot = 1750
+ 
+    if("470V" in recofile):
+        minHits = 40
+        naxHits = 90
+        minSumTot = 1000
+        maxSumTot = 2500
+ 
+    if("480V" in recofile):
+        minHits = 60
+        naxHits = 115
+        minSumTot = 1500
+        maxSumTot = 3500
+ 
+    if("490V" in recofile):
+        minHits = 70
+        naxHits = 140
+        minSumTot = 2000
+        maxSumTot = 4500
+ 
+    if("500V" in recofile):
+        minHits = 90
+        naxHits = 160
+        minSumTot = 2500
+        maxSumTot = 6000
+
+    #----------------------------
+
     for event in ToT: 
 
         isumElec = 0
@@ -1327,12 +1576,11 @@ with tb.open_file(recofile, 'r') as f:
             isumElec = np.sum(electrons[ievent])
 
         nhits = len(event)
-        #hitsPerEvent.append(nhits)
 
-        densityRMS = RMS_T[ievent]/RMS_L[ievent]
-        densityWL = width[ievent]/length[ievent]
+        densityRMS = nhits/(RMS_T[ievent]/RMS_L[ievent])
+        densityWL = nhits/(width[ievent]/length[ievent])
         areaWL = width[ievent]*length[ievent]
-        
+ 
         #--------------------------------------------------------------
         ## --- related to proton counting ---
         #avg_hits_proton_track = 1403.5 # hits per proton track (counted by hand on a spreadsheet)
@@ -1395,13 +1643,24 @@ with tb.open_file(recofile, 'r') as f:
 
         # checks/cuts:
 
-        ## selecting only interesting events 
-        goodLength = True if (length[ievent]<=20) else False
-        goodSumTOT = True if (sumTOT[ievent]<=20000) else False
-        goodHits = True if (hits[ievent]>=25 and hits[ievent]<1000) else False
-        goodExcent = True if (excent[ievent] < 50) else False
-        goodArea = True if (areaWL < 50) else False
+        # selecting only interesting events 
+        goodLength = True if (length[ievent]<=7) else False
 
+        #goodSumTOT = True if (sumTOT[ievent]<=20000) else False
+        #goodHits = True if (hits[ievent]>=25 and hits[ievent]<1000) else False
+
+        goodSumTOT = True if (sumTOT[ievent]>=minSumTot and sumTOT[ievent]<=maxSumTot) else False
+        goodHits = True if (hits[ievent]>=minHits and hits[ievent]<maxHits) else False
+
+        goodExcent = True if (excent[ievent] < 20) else False
+        goodArea = True if (areaWL < 50) else False
+        goodConvXY = checkClusterPosition(abs_meanx, 
+                                          abs_meany,
+                                          conversionX[ievent],
+                                          conversionY[ievent],
+                                          abs_stdx*2.5 
+                                          )  
+ 
         # Cuts for Background run file!  
         #goodLength = True if (length[ievent]<=6) else False
         #goodSumTOT = True if (sumTOT[ievent]<=8000) else False
@@ -1434,22 +1693,42 @@ with tb.open_file(recofile, 'r') as f:
         # seem to cut goddamn noise and 'tis the rejected part that shows soem modulation
         
         #goodLength = True if (length[ievent]<=3) else False
-        #goodWidth = True if (length[ievent]<=2.) else False
-        #goodSumTOT = True if (sumTOT[ievent]>= 3750 and sumTOT[ievent]<=6200) else False
+        #goodWidth = True if (width[ievent]<=2.) else False
+        #goodSumTOT = True if (sumTOT[ievent]>= 4200 and sumTOT[ievent]<=5750) else False
         #goodHits = True if (hits[ievent]>100 and hits[ievent]<170) else False
         #goodExcent = True if (excent[ievent] <=5 ) else False
         #goodRMSL = True if (RMS_L[ievent] <= 1.2) else False
         #goodConvX = True if (conversionX[ievent] >= 100 and conversionX[ievent] <= 150) else False
         #goodConvY = True if (conversionY[ievent] >= 125 and conversionY[ievent] <= 175) else False 
+        #goodConvXY = checkClusterPosition(abs_meanx, 
+        #                                  abs_meany,
+        #                                  conversionX[ievent],
+        #                                  conversionY[ievent],
+        #                                  30
+        #                                  )  
+       
+        ### automating cuts from dictionary ### 
+        #goodLength = getCut(cutset["length"],length[ievent])
+        #goodWidth = getCut(cutset["width"],width[ievent])
+        #goodSumTOT = getCut(cutset["sumTOT"],sumTOT[ievent])
+        #goodHits = getCut(cutset["nhits"],hits[ievent])
+        #goodExcent = getCut(cutset["Excent"],excent[ievent])
+        #goodRMSL = getCut(cutset["RMSL"],RMS_L[ievent])
 
         ## Specific to: 1,26kHz data 
-        #goodLength = True if (length[ievent]<=4) else False
+        #goodLength = True if (length[ievent]<=7) else False
         #goodWidth = True if (length[ievent]<=2.8) else False
-        #goodSumTOT = True if (sumTOT[ievent]<=6000) else False
+        #goodSumTOT = True if (sumTOT[ievent]>=3750 and sumTOT[ievent]<=6000) else False
         #goodHits = True if (hits[ievent]>40 and hits[ievent]<250) else False
-        #goodExcent = True if (excent[ievent] < 50) else False
+        #goodExcent = True if (excent[ievent] < 10) else False
         #goodRMSL = True if (RMS_L[ievent] <= 1.2) else False
-
+        #goodConvXY = checkClusterPosition(abs_meanx, 
+        #                                  abs_meany-7,
+        #                                  conversionX[ievent],
+        #                                  conversionY[ievent],
+        #                                  abs_stdx/1.5 
+        #                                  )  
+ 
         ## Specific to: 15.1 kHz data 
         #goodLength = True if (length[ievent]<=5) else False
         #goodWidth = True if (length[ievent]<=2.8) else False
@@ -1475,7 +1754,8 @@ with tb.open_file(recofile, 'r') as f:
         np.add.at(weightCenters, (int(np.round(weightX)), int(np.round(weightY))), 1)
  
         # overall cut to exclude outer part of chip
-        goodXY = True if (weightX>=3 and weightX <=252 and weightY >= 3 and weightY <= 252) else False
+        #goodXY = True if (weightX>=3 and weightX <=252 and weightY >= 3 and weightY <= 252) else False
+        goodXY = True if (weightX>=15 and weightX <=240 and weightY >= 15 and weightY <= 240) else False
         # cutting lower edge of matrix in BGR data
         #goodXY = True if (weightX>=3 and weightX <=252 and weightY >= 45 and weightY <= 252) else False
         # ROME DATA Cu 8keV: selecting the line of vertical scan in  the middle
@@ -1529,14 +1809,14 @@ with tb.open_file(recofile, 'r') as f:
         #                                  3*abs_stdx
         #                                 )  
         # using ellipse cut defined for major axis along x-axis
-        goodConvXY = checkClusterPositionEllipse(abs_meanx, 
-                                                 abs_meany-7,
-                                                 conversionX[ievent],
-                                                 conversionY[ievent],
-                                                 3.2*abs_stdx,
-                                                 2.5*abs_stdy
-                                                 )  
-
+        #goodConvXY = checkClusterPositionEllipse(abs_meanx, 
+        #                                         abs_meany-7,
+        #                                         conversionX[ievent],
+        #                                         conversionY[ievent],
+        #                                         3.4*abs_stdx,
+        #                                         2.7*abs_stdy
+        #                                         )  
+        #goodExcent = True if (excent[ievent] > 1.2 and excent[ievent] < 20) else False
         #============== MAGNETIC PEAK ====================================
         # peak position for for magnetic peak meas
         #goodXY = True if (weightX>=60 and weightX <=130 and weightY >= 75 and weightY <= 130) else False
@@ -1550,72 +1830,84 @@ with tb.open_file(recofile, 'r') as f:
         #                                  conversionY[ievent],
         #                                  30
         #                                 )  
+        #goodConvXY = checkClusterPositionEllipse(105, 
+        #                                         105,
+        #                                         conversionX[ievent],
+        #                                         conversionY[ievent],
+        #                                         50,
+        #                                         25
+        #                                         )  
+ 
         # looking at the background part:
         #goodXY = True if (weightX>=150 and weightX <=225 and weightY >= 50 and weightY <= 150) else False
 
         # IF EXCENTRICITY IS good :
         pol_angle = None
-        if (#goodLength and 
+        if (goodLength and 
             #goodWidth and 
             #goodArea and
-            #goodXY and 
+            goodXY and 
             #goodConvX and 
             #goodConvY and 
+            #goodConvXY and 
             #not goodConvXY and 
             #goodRMSL and
             #goodSumTOT and 
-            #goodHits and
-            goodExcent #and
+            goodHits #and
+            #goodExcent #and
              ):# improved based on length cut
 
-            yoba_pos =  [x[ievent],y[ievent]]
-            clusterangle, i_k, q_k, u_k = runAngleReco(yoba_pos,event)
+            #yoba_pos =  [x[ievent],y[ievent]]
+            #clusterangle, i_k, q_k, u_k = runAngleReco(yoba_pos,event)
             #_, PHI2, _, _, _, _, _, _ = runTwoStepAngleReco(np.array(yoba_pos), event)
             #alt_ik, alt_qk, alt_uk = getIthSokesParams(PHI2)
   
             tmp_secondangles.append(secondangles[ievent]) 
             np.add.at(weightCenters_cut, (int(np.round(weightX)), int(np.round(weightY))), 1)
           
-            #Weighting by excentricity 
-            #wi = 1
-
-            sum_I += i_k#*wi
-            sum_Q += q_k#*wi
-            sum_U += u_k#*wi
+            #sum_I += i_k#*wi
+            #sum_Q += q_k#*wi1
+            #sum_U += u_k#*wi
             
-            ##################################
-            #altsum_I += alt_ik
-            #altsum_Q += alt_qk
-            #altsum_U += alt_uk
-
             if(hasTheta):
                 tmp_theta.append(checkNANTheta(theta_secondstage[ievent]))
+
             tmp_densityRMS.append(checkNAN(densityRMS))
             tmp_densityWL.append(checkNAN(densityWL))
             tmp_excent.append(checkNAN(excent[ievent]))
             tmp_hits.append(checkNAN(hits[ievent]))
             tmp_sumTOT.append(checkNAN(sumTOT[ievent]))
+            tmp_evtnr.append(checkNAN(EVENTNR[ievent]))
             tmp_length.append(checkNAN(length[ievent]))
             tmp_width.append(checkNAN(width[ievent]))
             tmp_RMST.append(checkNAN(RMS_T[ievent]))
             tmp_RMSL.append(checkNAN(RMS_L[ievent]))
             tmp_evtArea.append(areaWL)
+ 
             if(fConverted):
                 tmp_convX.append(checkNAN(conversionX[ievent]))
                 tmp_convY.append(checkNAN(conversionY[ievent]))
                 np.add.at(absorption_points_pruned, (int(np.round(checkNAN(conversionX[ievent]))),int(np.round(checkNAN(conversionY[ievent])))),1)
+                tmp_secondangles_Y_conv.append(checkNAN(secondangles[ievent]))
+                #tmp_derivative.append(checkNAN(getEvolutionDirection(abs_meanx,abs_meany,weightX,weightY,conversionX[ievent],conversionY[ievent]))) 
+        
+            if(fTiming):
+                tmp_toaLength.append(toaLength[ievent])
+                tmp_toaMean.append(toaMean[ievent])
+                tmp_toaRMS.append(toaRMS[ievent])
+                tmp_toaSkew.append(toaSkew[ievent])
+                #tmp_toaRMS.append(toaRMS[ievent])
 
             if(fCharge):
                 tmp_sumElec.append(isumElec)
                 tmp_elecPerHit.append(isumElec/nhits)
 
-            if(goodXY):
-            #if(goodConvXY):
+            if(goodXY or goodConvXY):
                 tmp_secondangles_Y.append(checkNAN(secondangles[ievent]))
                 tmp_weightedY.append(checkNAN(weightY))
                 tmp_weightedX.append(checkNAN(weightX))
 
-            REAL_ALT_ROTANG.append(clusterangle)
+            #REAL_ALT_ROTANG.append(clusterangle)
             #SECOND_STEP_ALT_ROTANG.append(PHI2)
             #pol_angle = clusterangle
             for ix,iy,itot in zip(x[ievent],y[ievent], event):
@@ -1625,26 +1917,27 @@ with tb.open_file(recofile, 'r') as f:
 
         else:
             tmp_BGRangles.append(secondangles[ievent]) 
-            yoba_pos =  [x[ievent],y[ievent]]
-            clusterangle, i_k, q_k, u_k = runAngleReco(yoba_pos,event)
-            sum_I -= i_k
-            sum_Q -= q_k
-            sum_U -= u_k
+            #yoba_pos =  [x[ievent],y[ievent]]
+            #clusterangle, i_k, q_k, u_k = runAngleReco(yoba_pos,event)
+            #sum_I -= i_k
+            #sum_Q -= q_k
+            #sum_U -= u_k
  
-        #this_angle = True if (secondangles[ievent] >=-2.055 and secondangles[ievent] <= -1.92) else False
-        #if((npics < 50 and nhits > 25 and excent[ievent] > 2) or (nhits>2e4)): # this one get the actual tracks
-
         if((npics < 10 and
-           #goodLength  and
+           goodLength  and
            #goodConvX and 
            #goodConvY and 
            #not goodConvXY and 
-           #goodXY and
-           #goodSumTOT and
+           #goodConvXY and 
+           goodXY and
+           goodSumTOT and
            #density < 0 #and 
-           #goodHits and
-           goodExcent) or
-           nhits > 5000
+           goodHits) or # and
+           #goodExcent) or
+           nhits > 5000 #or
+           #toaLength[ievent]>16000 or
+           #(toaRMS[ievent]>1000 and toaRMS[ievent<4000]) or
+           #(toaMean[ievent]>8000 and toaMean[ievent]<11000)
            ): # this one get the actual tracks
 
             matrix = np.zeros((256,256),dtype=np.uint16)
@@ -1660,7 +1953,7 @@ with tb.open_file(recofile, 'r') as f:
 
             #------------------------------------------------------------------
             # for viewing 3D tracks
-            if(toaLength is not None):
+            if(toaLength is not None and npics < 5):
                 zpos = []
                 vdrift_NeCO2 = 17.7867
                 for toa, ftoa in zip(ToA[ievent], fTOA[ievent]):
@@ -1678,10 +1971,7 @@ with tb.open_file(recofile, 'r') as f:
             #    other2Dplot(matrix, f"zoom-cluster-{ievent}-{plotname}",outdir)
             #except:
             #    pass
-
-            #other2Dplot(matrixTOA,f"TOA-cluster-{ievent}-{plotname}",outdir)
-            #other2Dplot(matrixTOAcom,f"TOAcom-cluster-{ievent}-{plotname}",outdir)
-            
+         
             #plotDbscan(nz_index, labels, ievent, nfound, outdir)
             npics+=1
             matrix = np.zeros((256,256),dtype=np.uint16)
@@ -1704,15 +1994,10 @@ with tb.open_file(recofile, 'r') as f:
         #   ylist = y[ievent]
         #   zlist = TOAComb[ievent]
         #   plotInteractive3D(xlist,ylist,zlist,"Event-287911", plotname, outdir)
-        #if(ievent==4000):
-        #if("RomeRun" in recofile and ievent==30000):
-        #    break
-
-        #exit(0)
 
 print(f"\nFOUND <{n_good}> events\n")
 
-#print(f"reduced TOT has <{len(tot_reduced)}> entries\n")
+freport.write(f"\nData after cuts: {n_good}")
 
 fitAndPlotModulation(np.array(tmp_secondangles),
                      100,
@@ -1730,16 +2015,15 @@ fitAndPlotModulation(np.array(tmp_BGRangles),
                      "STOLEN-XpolSecondStage-CutOnPosition-BGRangles",
                      outdir)
 
-#hits_arr = np.asarray(hitsPerEvent, dtype=np.uint16)
-
 plot2dEvent(matrixTotal, "", "OCCUPANCY-total-run", outdir)
 plot2dEvent(matrixTotal_TOT, "", "TOT-total-run", outdir)
-plot2DProjectionXY(matrixTotal, ["Occupancy X projection", "X [pixel]", r"$N_{Entries}$","Occupancy Y projection", "Y [pixel]", r"$N_{Entries}$"], plotname, outdir)
+#plot2DProjectionXY(matrixTotal, ["Occupancy X projection", "X [pixel]", r"$N_{Entries}$","Occupancy Y projection", "Y [pixel]", r"$N_{Entries}$"], plotname, outdir)
 plot2dEvent(matrixTotal, "", "OCCUPANCY-total-run", outdir, figtype="pdf")
 
 plot2dEvent(weightCenters, "title:Weight Centers of All tracks", "weight-centers", outdir)
-plot2dEvent(weightCenters_cut, "title:Weight Centers of All tracks (CUT)", "weight-centers-cut", outdir)
-if(fConverted):
+if(np.sum(weightCenters_cut)>0):
+    plot2dEvent(weightCenters_cut, "title:Weight Centers of All tracks (CUT)", "weight-centers-cut", outdir)
+if(fConverted and np.sum(absorption_points_pruned)>0):
     plot2dEvent(absorption_points_pruned, "title:Absorption Points Pruned", "AbsPointsPruned",outdir)
 
 #plot2dEvent(matrix_instant_0, "title:Events over 10 polling cycles", "OCCUPANCY-10-events", outdir)
@@ -1756,23 +2040,13 @@ except:
     print("Failed to plot cut_TOTMAP")
     pass
 
-simpleHist(REAL_ALT_ROTANG, 100, -np.pi, np.pi, ["Filtered First Step Angle Reco","Reconstructed angle,[rad]","Events,[N]"], "REAL_ALT_ROTANG", outdir, fit="cosfunc") 
-#simpleHist(SECOND_STEP_ALT_ROTANG, 100, -np.pi, np.pi, ["TWO-STEP Reconstructed Angles",r"$\phi_{0}$,[rad]",r"$N_{tracks}$,[N]"], "SECOND_STEP_ALT_ROTANG", outdir, fit="cosfunc") 
-#simpleHist(tot_reduced, 100, np.nanmin(tot_reduced), np.nanmax(tot_reduced), ["TOT Reduced by Number of Hits Per Event",r"$N {hits}$",r"$TOT/N_{Hits}$"], "TOT_REDUCED", outdir, fit="gaus")
-
-#totvals, totcts = np.unique(TOTarray, return_counts=True)
-#totidx = np.argmax(totcts)
-#totMode = totvals[totidx]
-#totmaxbin = np.ceil(totMode*3)
-#simpleHist(np.array(TOTarray), 100, 0, totmaxbin, [r"$\Sigma$ TOT Per Event",r"$N {Events}$",r"$\Sigma$ TOT"], "ALT_sumTOT", outdir, fit="gaus")
-#
-#hitvals, hitcts = np.unique(hits_arr, return_counts=True)
-#hitidx = np.argmax(hitcts)
-#hitMode = hitvals[hitidx]
-#hitmaxbin = np.ceil(hitMode*3)
-#simpleHist(hits_arr, 100, np.nanmin(hits_arr), hitmaxbin, ["Hits per Event",r"$_{hits}$",r"$N_{Events}$"], "HITS", outdir)
+#simpleHist(REAL_ALT_ROTANG, 100, -np.pi, np.pi, ["Filtered First Step Angle Reco","Reconstructed angle,[rad]","Events,[N]"], "REAL_ALT_ROTANG", outdir, fit="cosfunc") 
 
 # ---------- plotting parameters after cuts ----------------------
+if(len(tmp_evtnr)>100000):
+    simpleScatter(tmp_evtnr[::10],tmp_sumTOT[::10],[r"$\Sigma$(TOT) vs Event Number (Every 10th Event)","EvtNr",r"$\Sigma$(TOT)"],"sumTOT-vs-EventNumber",outdir)
+else:
+    simpleScatter(tmp_evtnr,tmp_sumTOT,[r"$\Sigma$(TOT) vs Event Number","EvtNr",r"$\Sigma$(TOT)"],"sumTOT-vs-EventNumber",outdir)
 
 simpleHist(np.array(tmp_excent), 100, np.nanmin(tmp_excent), np.nanmax(tmp_excent), ["Excentricity","Excentricity","Events,[N]"], "tmp_excent", outdir) 
 simpleHist(np.array(tmp_hits), 100, np.nanmin(tmp_hits), np.nanmax(tmp_hits), ["Hits per Cluster",r"$N_{hits}$","Events,[N]"], "tmp_hits", outdir) 
@@ -1782,6 +2056,9 @@ simpleHist(np.array(tmp_densityWL), 100, np.nanmin(tmp_densityWL), np.nanmax(tmp
 simpleHist(np.array(tmp_evtArea), 100, np.nanmin(tmp_evtArea), np.nanmax(tmp_evtArea), ["Cluster Area",r"$width \cdot length$","Events,[N]"], "tmp_evtArea", outdir) 
 if(hasTheta):
     simpleHist(np.array(tmp_theta), 100, -np.pi, np.pi, [r"Cluster $\theta$",r"$\theta$, [radian]","Events,[N]"], "tmp_theta", outdir) 
+    #plot2Dhist(np.array(tmp_hits), np.array(tmp_theta), [r"Cluster $\theta$ vs Cluster Hits", r"$N_{hits}$", r"$Cluster \theta$"], "2D-Theta-vs-nhits", outdir)
+    #plot2Dhist(np.array(tmp_length), np.array(tmp_theta), [r"Cluster $\theta$ vs Cluster length", r"Cluster $length$", r"$Cluster \theta$"], "2D-Theta-vs-length", outdir)
+   
 if(fCharge):
     simpleHist(np.array(tmp_sumElec), 100, np.nanmin(tmp_sumElec), np.nanmax(tmp_sumElec), ["Cluster Charge (electrons)",r"$\Sigma (e^{-})$,","Events,[N]"], "tmp_sumElec", outdir) 
     simpleHist(np.array(tmp_elecPerHit), 100, np.nanmin(tmp_elecPerHit), np.nanmax(tmp_elecPerHit), ["Electrons per Hit",r"$N_{e^{-}}/N_{Hits}$,","Events,[N]"], "tmp_elecPerHit", outdir) 
@@ -1800,18 +2077,19 @@ plot2Dhist(np.array(tmp_weightedY), np.array(tmp_secondangles_Y), ["Charge-Weigh
 plot2Dhist(np.array(tmp_weightedX), np.array(tmp_secondangles_Y), ["Charge-Weighted cluster X vs reco angle", "X", "Reconstructed angle"], "2D-weightX-SecAng", outdir)
 
 if(fConverted):
-    plot2Dhist(np.array(tmp_convX), np.array(tmp_secondangles_Y), [r"Reconstructed $\phi$ vs reconstructed Absorption point X", "Absorption X", r"$\phi_{reco}$"], "2D-AbsPointX-SecAng", outdir)
-    plot2Dhist(np.array(tmp_convY), np.array(tmp_secondangles_Y), [r"Reconstructed $\phi$ vs reconstructed Absorption point Y", "Absorption Y", r"$\phi_{reco}$"], "2D-AbsPointY-SecAng", outdir)
+    #plot2Dhist(np.array(tmp_convX), np.array(tmp_secondangles_Y_conv), [r"Reconstructed $\phi$ vs reconstructed Absorption point X", "Absorption X", r"$\phi_{reco}$"], "2D-AbsPointX-SecAng", outdir)
+    #plot2Dhist(np.array(tmp_convY), np.array(tmp_secondangles_Y_conv), [r"Reconstructed $\phi$ vs reconstructed Absorption point Y", "Absorption Y", r"$\phi_{reco}$"], "2D-AbsPointY-SecAng", outdir)
     plot2Dhist(np.array(tmp_convX), np.array(tmp_sumTOT), [r"Cluster $\Sigma$(TOT) X vs reconstructed Absorption X", "Absorption X", r"$\Sigma$(TOT)"], "2D-AbsPointX-vs-sumTOT", outdir)
     plot2Dhist(np.array(tmp_convY), np.array(tmp_sumTOT), [r"Cluster $\Sigma$(TOT) Y vs reconstructed Absorption Y", "Absorption Y", r"$\Sigma$(TOT)"], "2D-AbsPointY-vs-sumTOT", outdir)
+    #plot2Dhist(np.array(tmp_hits), np.array(tmp_derivative), [r'Track Derivative vs $\Sigma$(TOT)', r"$\Sigma$(TOT)",r"$\frac{dx}{dy}$"],"2D-Derivative-vs-sumTOT",outdir) 
 
-
-
-#if(fTiming):
-#    plot2Dhist(np.array(tmp_sumTOT), np.array(tmp_toaLength), [r"Cluster $\epsilon$ vs ToA length", r"$\epsilon$", "ToA Length [CLK]"], "2D-Hits-TOALength", outdir)
-#    plot2Dhist(np.array(tmp_sumTOT), np.array(tmp_toaMean), [r"Cluster $\epsilon$ vs ToA Mean", r"$\epsilon$", "ToA Mean [CLK]"], "2D-Epsilon-TOAMean", outdir)
-#    plot2Dhist(np.array(tmp_sumTOT), np.array(tmp_toaRMS), [r"Cluster $\epsilon$ vs ToA RMS", r"$\epsilon$", "ToA RMS [CLK]"], "2D-Epsilon-TOARMS", outdir)
-#    plot2Dhist(np.array(tmp_sumTOT), np.array(tmp_toaSkew), [r"Cluster $\epsilon$ vs ToA Skeweness", r"$\epsilon$", "ToA Skew [CLK]"], "2D-Epsilon-TOASkew", outdir)
+if(fTiming):
+    plot2Dhist(np.array(tmp_hits), np.array(tmp_toaLength), [r"Cluster ToA length vs Hits", "$N_{hits}$", "ToA Length [CLK]"], "2D-Hits-TOALength", outdir)
+    plot2Dhist(np.array(tmp_length), np.array(tmp_toaMean), [r"Cluster ToA Mean vs Cluster Length", r"$length$", "ToA Mean [CLK]"], "2D-length-TOAMean", outdir)
+    plot2Dhist(np.array(tmp_convX), np.array(tmp_toaMean), [r"Cluster ToA Mean vs Recosntructed Abs. X", r"$X_{Conversion}$", "ToA Mean [CLK]"], "2D-AbsPointX-TOAMean", outdir)
+    plot2Dhist(np.array(tmp_convY), np.array(tmp_toaMean), [r"Cluster ToA Mean vs Recosntructed Abs. Y", r"$Y_{Conversion}$", "ToA Mean [CLK]"], "2D-AbsPointY-TOAMean", outdir)
+    plot2Dhist(np.array(tmp_hits), np.array(tmp_toaRMS), [r"Cluster ToA RMS vs Hits", r"$N_{hits}$", "ToA RMS [CLK]"], "2D-hits-TOARMS", outdir)
+    #plot2Dhist(np.array(tmp_sumTOT), np.array(tmp_toaSkew), [r"Cluster $\epsilon$ vs ToA Skeweness", r"$\epsilon$", "ToA Skew [CLK]"], "2D-Epsilon-TOASkew", outdir)
 
 #plotInteractive3D(tmp_weightedX,
 #                tmp_weightedY,
@@ -1822,12 +2100,26 @@ if(fConverted):
 # ------------ cyclotron data here: --------------------------
 #simpleHistSpectrum(TOTarray, 101, 0, 60000, ['TOT cyles per event (Before Irradiation)', 'TOT cycles','N'], "sumTOT", outdir, scale="linear")
 
-print(f"\n Cut on EXCENTRICITY accepted only: {naccepted/ntotal*100:.2f}% of data\n")
-print("Calculated sum of Stokes parameters:")
-print(f"I = {sum_I:.2f}  Q = {sum_Q:.2f} , U = {sum_U:.2f}")
-normQ = sum_Q/sum_I
-normU = sum_Q/sum_I
-print(f"Normalized  :    Q = {normQ:.2f} , U = {normU:.2f}")
+print(f"\n {OUT_BLUE} DATA AFTER CUTS: {naccepted/ntotal*100:.2f}% survived {OUT_RST}\n")
+
+#print(f"{OUT_CYAN_BGR}Calculated sum of Stokes parameters:{OUT_RST}")
+#print(f"{OUT_CYAN_BGR}I = {sum_I:.2f}  Q = {sum_Q:.2f} , U = {sum_U:.2f}{OUT_RST}")
+#normQ = sum_Q/sum_I
+#normU = sum_Q/sum_I
+#print(f"{OUT_CYAN_BGR}Normalized  :    Q = {normQ:.2f} , U = {normU:.2f}{OUT_RST}")
+
+print("Writing Modulation fit results to reoprt file...")
+freport.write("\nModulation factor Calculations:\n")
+outstring = ""
+for branch in main_results.keys():
+    outstring+=f"{branch}:\n"
+    subset = main_results[branch]
+    for key in subset.keys():
+        outstring+=f"{key}={main_results[branch][key]}\n"
+    outstring+="\n"
+
+freport.write(outstring)
+freport.close()
 #pL = 2*0.2*np.sqrt(sum_Q**2 + sum_U**2)
 #direction_psi = 0.5*math.atan(normU/normQ)
 #print(f"Fraction of linear polarization: {pL:.2f} with direction {direction_psi*180/np.pi:.2f}")
