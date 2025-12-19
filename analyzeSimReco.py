@@ -7,9 +7,12 @@ from sklearn.cluster import DBSCAN
 from scipy.optimize import curve_fit
 from lmfit import Model
 from matplotlib.colors import LogNorm
+import matplotlib.patches as patches
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 import math
 import glob
+import h5py
+import datetime as dtime
 
 # for interactive 3d plotting 
 from mpl_toolkits.mplot3d import Axes3D
@@ -62,6 +65,7 @@ TIME_DICT={
     "DB-153000Hz-30deg":459.7881,
     "DB-153000Hz-60deg":459.2557,
     "DB-153000Hz-90deg":461.6843,
+    "DB-1490000Hz-0deg":103.6765,
     "CP0": 2536.6465,
     "CP1": 18.6879,
     "CP2": 11.9262,
@@ -161,6 +165,13 @@ CUTS_DICT={
 
 }
 
+peak_dict={
+    "CP0":[125,125],
+    "CP3":[125,125],
+    "CP4":[],
+    "CP5":[]
+}
+
 #---------------------------------
 # dictionary to store main results for output
 main_results={
@@ -190,10 +201,6 @@ def getCut(dict_entry, check_value):
             return True if (check_value >= abs(dict_entry)) else False
         else:
             return True if (check_value <= abs(dict_entry)) else False
-
-    #return False
-
-
 
 #######
 
@@ -289,12 +296,6 @@ def getMinBin(numbers):
 
     return minbin
 
-#def getHistRange(data):
-#
-#    data = np.array(data)
-#    unqiue = np.sort(np.unique(data))
-#    
-
 def progress(ntotal, ith):
 
     try:
@@ -347,6 +348,25 @@ def getIthSokesParams(angle):
 
     return i,q,u
 
+def getMDP(mu, Nphotons):
+   
+    #assuming -> source rate >> bgr rate 
+    return 4.29/(mu*np.sqrt(Nphotons))
+
+def checkRateOrder(rate):
+
+    number = rate
+    rate = str(int(abs(rate)))
+    
+    if(len(rate)>0 and len(rate)<=3):
+        return number, "Hz"
+    elif(len(rate)>3 and len(rate)<=6):
+        return round(number/1000.0,2), "kHz"
+    elif(len(rate)>6 and len(rate)<=9):
+        return round(number/1000000.0,2), "MHz"
+    else:
+        return number, "IMPOSIBRU!"    
+
 def checkClusterPosition(centerX, centerY, clusterX, clusterY, radius):
 
     r = np.sqrt((clusterX - centerX)**2 + (clusterY - centerY)**2)
@@ -364,101 +384,431 @@ def checkClusterPositionEllipse(centerX, centerY, clusterX, clusterY, Major_radi
     else:
         return True
 
-def runTwoStepAngleReco(coords, charges, radius_min=None, radius_max=None, weighting=None):
-    """
-    Combined two-stage reconstruction for 2D or 3D Timepix data.
-    Computes both phi_1 and phi_2 in a single call.
-    """
+# making replica of MG's event plotter with moments and circles n shit...
+def examineTrack(rawposx, rawposy, charges, phi1, phi2, 
+                 startidx, endidx, toa, ftoa, absX, absY, 
+                 picname, odir, Rin=None, Rout=None, WGHT=None, theta_fs=None):
 
-    if coords.shape[0] not in [2, 3]:
-        raise ValueError("Coordinates must be 2D or 3D")
+    # calculatin' weight centers
 
-    # --- Center-of-charge shift ---
-    center = np.average(coords, axis=1, weights=charges)
-    X = coords - center[:, np.newaxis]
+    if(Rin < 0):
+        Rin = 1.6
+    if(Rout < 0):
+        Rout = 3.5
+    if(WGHT < 0):
+        WGHT = 1.8
 
-    # --- Step 1: Coarse principal axis determination ---
-    cov = np.dot(X * charges, X.T)
-    eigenvalues, eigenvectors = np.linalg.eig(cov)
-    principal_axis = eigenvectors[:, np.argmax(eigenvalues)]
+    fig, ax, ax2, ax3 = None, None, None, None
 
-    # --- Angle (phi_1) in xy-plane ---
-    projection_xy = np.array([principal_axis[0], principal_axis[1]])
-    phi_1 = np.arctan2(projection_xy[1], projection_xy[0])
-
-    # --- Compute projections and skewness ---
-    proj_xy = np.dot(X[:2].T, principal_axis[:2])
-    skewness_xy = np.sum(charges * proj_xy**3) / np.sum(charges)
-
-    # --- Define start/end indices based on skewness ---
-    left_indices = np.where(proj_xy < 0)[0]
-    right_indices = np.where(proj_xy >= 0)[0]
-    if skewness_xy <= 0:
-        start_indices = left_indices
-        end_indices = right_indices
+    if(theta_fs is not None):
+        fig, (ax,ax2,ax3) = plt.subplots(1,3, figsize=(18,6))
     else:
-        start_indices = right_indices
-        end_indices = left_indices
+        fig, ax = plt.subplots()
 
-    # --- Second-moment ratio (quality) ---
-    m2_max = np.sum(charges * proj_xy**2) / np.sum(charges)
-    min_axis = eigenvectors[:, np.argmin(eigenvalues)]
-    m2_min = np.sum(charges * np.dot(X[:2].T, min_axis[:2])**2) / np.sum(charges)
-    quality = m2_max / m2_min
+    line_length = 20
+    centerX = np.average(rawposx, weights=charges)
+    centerY = np.average(rawposy, weights=charges)
+    centerX_start = np.average(rawposx[startidx.astype(int)], weights=charges[startidx.astype(int)])
+    centerY_start = np.average(rawposy[startidx.astype(int)], weights=charges[startidx.astype(int)])
 
-    # --- Absorption point (within radius range if defined) ---
-    radii2 = np.sum((X[:2])**2, axis=0)
-    if radius_min is not None and radius_max is not None:
-        r_inner = (radius_min * np.sqrt(m2_max))**2
-        r_outer = (radius_max * np.sqrt(m2_max))**2
-        circle_indices = np.where((radii2 > r_inner) & (radii2 < r_outer))[0]
-        absorption_indices = np.intersect1d(start_indices, circle_indices)
+    # ---------- plotting setup ------------
+
+    ax.cla()
+    ax.set_xlabel("x [pixel]")
+    ax.set_ylabel("y [pixel]")
+
+    xmin, xmax, ymin, ymax = None, None, None, None
+    xrange, yrange = None, None
+    # estimatin' limits of the plots...
+    if(np.max(rawposx)-np.min(rawposx)> np.max(rawposy)-np.min(rawposy)):
+        xmin = np.min(rawposx)-20
+        xmax = np.max(rawposx)+20
+        xrange = np.max(rawposx) - np.min(rawposx)
+        ymin = centerY - xrange/2-20
+        ymax = centerY + xrange/2+20
     else:
-        absorption_indices = start_indices
+        xmin = np.min(rawposx)-20
+        xmax = np.max(rawposx)+20
+        yrange = np.max(rawposy) - np.min(rawposy)
+        ymin = centerY - xrange/2-20
+        ymax = centerY + xrange/2+20 
 
-    if len(absorption_indices) > 0:
-        absorption_point = np.average(coords[:, absorption_indices], axis=1, weights=charges[absorption_indices])
-    else:
-        absorption_point = np.full(coords.shape[0], np.nan)
+    ax.set_xlim([xmin,xmax]) 
+    ax.set_ylim([ymin,ymax]) 
 
-    # --- Step 2: Fine refinement ---
-    if weighting is not None:
-        # Weight by distance from absorption point
-        distances = np.sqrt(np.sum((coords - absorption_point[:, np.newaxis])**2, axis=0))
-        w_charges = charges * np.exp(-distances / weighting)
-        cov2 = np.dot((X * w_charges), X.T)
-    else:
-        # Restrict to start pixels only
-        X2 = X[:, start_indices]
-        c2 = charges[start_indices]
-        cov2 = np.dot((X2 * c2), X2.T)
+    maxcharge = np.max(charges)
+    ax.scatter(rawposx[startidx.astype(int)], 
+               rawposy[startidx.astype(int)], 
+               color='orange', 
+               marker='s', 
+               s=4*charges[startidx.astype(int)]/maxcharge)
 
-    eigenvalues2, eigenvectors2 = np.linalg.eig(cov2)
-    principal_axis2 = eigenvectors2[:, np.argmax(eigenvalues2)]
-    proj2_xy = np.array([principal_axis2[0], principal_axis2[1]])
-    phi_2 = np.arctan2(proj2_xy[1], proj2_xy[0])
+    ax.scatter(rawposx[endidx.astype(int)], 
+               rawposy[endidx.astype(int)], 
+               color='blue', 
+               marker='s', 
+               s=4*charges[endidx.astype(int)]/maxcharge)
 
-    # --- Ensure angular continuity between phi_1 and phi_2 ---
-    dphi = phi_2 - phi_1
-    if dphi > np.pi/2:
-        phi_2 -= np.pi
-    elif dphi < -np.pi/2:
-        phi_2 += np.pi
+    ax.scatter(centerX, centerY, color='red', label='Q center', marker='o', s=40)
+    ax.scatter(absX,absY, color='green', label="Abs.Point",marker='o', s=40)   
+    ax.scatter([],[], color='white', label=r"$n_{hits}$="+f"{len(rawposx)}") 
+    ax.scatter([],[], color='white', label=r"$n_{start}$="+f"{len(rawposx[startidx.astype(int)])}") 
 
-    # --- Return everything ---
-    #results = dict(
-    #    phi_1=phi_1,
-    #    phi_2=phi_2,
-    #    center=center,
-    #    start_indices=start_indices,
-    #    end_indices=end_indices,
-    #    absorption_point=absorption_point,
-    #    skewness_xy=skewness_xy,
-    #    quality=quality
-    #)
+    #ax.text(xmin,ymax*0.9, f"nhits={len(rawposx)}")    
+    #ax.text(xmin*1.05, ymax)
 
-    #return results
-    return phi_1, phi_2, center, start_indices, end_indices, absorption_point, skewness_xy, quality
+    # plottin' arrows
+    x1 = centerX - line_length*np.cos(phi1)
+    x2 = centerX + line_length*np.cos(phi1)
+    y1 = centerY - line_length*np.sin(phi1)
+    y2 = centerY + line_length*np.sin(phi1)
+    first_arrow = patches.FancyArrowPatch((x1,y1),(x2,y2), mutation_scale=5, arrowstyle='->,head_width=1,head_length=2',color='red')
+    first_arrow_weight = patches.FancyArrowPatch((x1,y1),(x2,y2), mutation_scale=5, arrowstyle='->,head_width=1,head_length=2',color='red')
+    ax.add_patch(first_arrow)
+
+    # Bragg-cut line
+    x1 = centerX + line_length*np.sin(phi1)
+    x2 = centerX - line_length*np.sin(phi1)
+    y1 = centerY - line_length*np.cos(phi1)
+    y2 = centerY + line_length*np.cos(phi1)
+    ax.plot([x1,x2],[y1,y2], linestyle='--', color='red')
+
+    cutX1 = x1
+    cutX2 = x2
+    cutY1 = y1
+    cutY2 = y2
+
+    # ----------------------------------------------
+    # calculatin' stuff for radii 
+
+    vdrift=17.7867 # for NeCo2 8020 500Vcm 779torr
+
+    rawposz = None
+    try:
+        #rawposz = ((toa*25+1)-ftoa*1.5625)*vdrift/55.
+        rawposz = ((toa*25+1)-ftoa*1.5625)*1/55.
+    except:
+        rawposz = np.zeros(len(rawposx))
+    
+    coords = np.array([rawposx, rawposy, rawposz])
+    center = np.average(coords,axis=1,weights=charges)
+    X = np.vstack((rawposx-center[0],rawposy-center[1],rawposz-center[2]))
+    M = np.dot(X*charges, X.T)
+    eigenval, eigenvect = np.linalg.eig(M)
+    principal_axis = eigenvect[:,np.argmax(eigenval)]
+    proj_new_plane = np.dot(X.T, principal_axis) # 3D case
+    #proj_new_plane = np.dot(X[:2].T, principal_axis[:2]) # 2D case
+    m2_max = np.sum(charges*np.power(proj_new_plane,2))/np.sum(charges)
+    Rlow = Rin * np.sqrt(m2_max) 
+    Rhigh = Rout * np.sqrt(m2_max) 
+    circle_in = plt.Circle((centerX,centerY), Rlow, color='red', fill=False, linestyle=':')
+    circle_in_weight = plt.Circle((centerX,centerY), Rlow, color='red', fill=False, linestyle=':')
+    circle_out = plt.Circle((centerX,centerY), Rhigh, color='red', fill=False, linestyle='--')
+    circle_out_weight = plt.Circle((centerX,centerY), Rhigh, color='red', fill=False, linestyle='--')
+    ax.add_patch(circle_in)
+    ax.add_patch(circle_out)
+    
+    # drawing arrow for second step reco angle
+
+    x1 = absX - line_length*np.cos(phi2)
+    x2 = absX + line_length*np.cos(phi2)
+    y1 = absY - line_length*np.sin(phi2)
+    y2 = absY + line_length*np.sin(phi2)
+    second_arrow = patches.FancyArrowPatch((x1,y1),(x2,y2), mutation_scale=5, arrowstyle='->,head_width=1,head_length=2',color='green')
+    second_arrow_weight = patches.FancyArrowPatch((x1,y1),(x2,y2), mutation_scale=5, arrowstyle='->,head_width=1,head_length=2',color='green')
+    ax.add_patch(second_arrow)
+
+    ax.set_aspect('equal', adjustable='box')
+    ax.grid(True)
+    ax.legend(loc='upper left')
+
+    if(theta_fs is not None):
+        # plotting x-z and y-z projections
+        #------------------------------------
+        ax2.cla()
+        ax3.cla()
+
+        #rawz = ((toa*25+1)-ftoa*1.5625)
+        rawz = None
+        cmnt = ""
+        try:
+            rawz = ((toa*25+1)-ftoa*1.5625)*vdrift/55.
+            cmnt+="z [um]"
+        except:
+            rawz = ((toa*25+1)-ftoa*1.5625)
+            cmnt+="z [ns]"
+ 
+        centerZ = np.average(rawz, weights=charges)
+        centerZ_start = np.average(rawz[startidx.astype(int)], weights=charges[startidx.astype(int)])
+        
+        ax2.scatter(centerX, centerZ, color='red', label='Q center', marker='o', s=50)
+        ax2.scatter(centerX_start, centerZ_start, color='green', label='Abs.Point', marker='o', s=50)
+        ax2.scatter(rawposx[startidx.astype(int)], rawz[startidx.astype(int)], color='indigo', marker='s', label='start pix.', s=6)
+        ax2.scatter(rawposx[endidx.astype(int)], rawz[endidx.astype(int)], color='dimgray', marker='s', label='Bragg pix.', s=6)
+
+        ax2.set_title('track: x-z plane')
+        ax2.set_xlabel('x [pixel]')
+        #ax2.set_ylabel('z [ns]')
+        ax2.set_ylabel(cmnt)
+        ax2.legend(loc='upper left')
+        
+        x1 = centerX + line_length*np.sin(theta_fs)
+        x2 = centerX - line_length*np.sin(theta_fs)
+        y1 = centerZ - line_length*np.cos(theta_fs)
+        y2 = centerZ + line_length*np.cos(theta_fs)
+        ax2.plot([x1, x2], [y1, y2], linestyle='--', color='red')
+        ax2.grid(True)
+
+        ax3.scatter(centerY, centerZ, color='red', label='Q center', marker='o', s=50)
+        ax3.scatter(centerY_start, centerZ_start, color='green', label="Abs.Point", marker='o', s=50)
+        ax3.scatter(rawposy[startidx.astype(int)], rawz[startidx.astype(int)], color='indigo', marker='s', s=6, label='start pix.')
+        ax3.scatter(rawposy[endidx.astype(int)], rawz[endidx.astype(int)], color='dimgray', marker='s', s=6, label='Bragg pix.')
+
+        ax3.set_title('track: y-z plane')
+        ax3.set_xlabel('y [pixel]')
+        ax3.set_ylabel(cmnt)
+        ax3.legend(loc='upper left')
+        ax3.grid(True)
+
+        # same shite limits as for first plot for x-axis
+
+        if np.max(rawposx) - np.min(rawposx) > np.max(rawposy) - np.min(rawposy):
+            ax2.set_xlim(np.min(rawposx) - 20, np.max(rawposx) + 20)
+            x_range = np.max(rawposx) - np.min(rawposx)
+            ax3.set_xlim(centerY - x_range/2-20, centerY + x_range/2+20)
+        else:
+            ax3.set_xlim(np.min(rawposy) - 20, np.max(rawposy) + 20)
+            y_range = np.max(rawposy) - np.min(rawposy)
+            ax2.set_xlim(centerX - y_range/2-20, centerX + y_range/2+20)
+
+        zrange = np.max(rawz) - np.min(rawz)
+        zmin = np.min(rawz) - zrange/2
+        zmax = np.max(rawz) + zrange/2
+
+        ax2.set_ylim([zmin, zmax])
+        ax3.set_ylim([zmin, zmax])
+
+        plt.tight_layout()
+
+    #------------------------------------
+
+    plt.savefig(f"{odir}/reco-event-Moments-{picname}.png")
+    plt.close()
+
+    # PLOTTING EXTRA SCATTER PLOT TO ASSES HOW PIXELS PULL THE FIT
+    #
+    #
+    try:
+        fig, ax = plt.subplots()
+        ax.cla()
+        ax.set_title("Pixel weighting by distance to impact point")
+        ax.set_xlabel("x [pixel]")
+        ax.set_ylabel("y [pixel]")
+        ax.set_xlim([xmin,xmax]) 
+        ax.set_ylim([ymin,ymax]) 
+
+        distance = np.sqrt(np.power(coords[0] - absX, 2) + np.power(coords[1] - absY, 2))
+        Qweight = charges*np.exp(-(distance/WGHT))
+
+        ax.scatter(absX,absY, color='green', label="Absorption Point",marker='o', s=40)   
+        ax.scatter(coords[0][startidx.astype(int)], 
+                   coords[1][startidx.astype(int)], 
+                   color='royalblue', 
+                   marker='s', 
+                   #s=Qweight/50)
+                   s=50*(Qweight[startidx.astype(int)]/np.max(Qweight)))
+
+        ax.add_patch(circle_in_weight)
+        ax.add_patch(circle_out_weight)
+        ax.add_patch(first_arrow_weight)
+        ax.add_patch(second_arrow_weight)
+        ax.plot([cutX1,cutX2],[cutY1,cutY2], linestyle='--', color='red') 
+        ax.set_aspect('equal', adjustable='box')
+        ax.grid(True)
+        ax.legend(loc='upper left')
+
+        plt.savefig(f"{odir}/reco-event-ChargeWeighting-{picname}.png")
+        plt.close()
+    except Exception as ex:
+        print(f"Failed to plot weighting of pixels: {ex}")
+
+#    # PLOTTING EXTRA SCATTER PLOT FOR MODIFICATIONS TO SECOND STEP
+#    #
+#    #
+#    try:
+#        # calc shit here
+#
+#        dist = 
+#        modQ = charges
+#        phi3 = baseAngleReco(rawposx[startidx.astype(int)],
+#                             rawposy[startidx.astype(int)],
+#                             rawposz[startidx.astype(int)],
+#                             modQ, Rin, Rout) 
+#        # plot
+#        fig, ax = plt.subplots()
+#        ax.cla()
+#        ax.set_title("Pixel weighting by distance to impact point")
+#        ax.set_xlabel("x [pixel]")
+#        ax.set_ylabel("y [pixel]")
+#        ax.set_xlim([xmin,xmax]) 
+#        ax.set_ylim([ymin,ymax]) 
+#
+#        distance = np.sqrt(np.power(coords[0] - absX, 2) + np.power(coords[1] - absY, 2))
+#        Qweight = charges*np.exp(-(distance/WGHT))
+#
+#        ax.scatter(absX,absY, color='green', label="Absorption Point",marker='o', s=40)   
+#        ax.scatter(coords[0][startidx.astype(int)], 
+#                   coords[1][startidx.astype(int)], 
+#                   color='royalblue', 
+#                   marker='s', 
+#                   #s=Qweight/50)
+#                   s=50*(Qweight[startidx.astype(int)]/np.max(Qweight)))
+#
+#        ax.add_patch(circle_in_weight)
+#        ax.add_patch(circle_out_weight)
+#        ax.add_patch(first_arrow_weight)
+#        ax.add_patch(second_arrow_weight)
+#        ax.plot([cutX1,cutX2],[cutY1,cutY2], linestyle='--', color='red') 
+#        ax.set_aspect('equal', adjustable='box')
+#        ax.grid(True)
+#        ax.legend(loc='upper left')
+#
+#        plt.savefig(f"{odir}/reco-event-ChargeWeighting-{picname}.png")
+#        plt.close()
+#    except Exception as ex:
+#        print(f"Failed to plot weighting of pixels: {ex}")
+
+
+
+def getThirdCoordinate(toa,ftoa,vdrift=None):
+
+    rawz = None
+    if(vdrift is None):
+        vdrift = 3.59
+    try:
+        rawz = ((toa*25+1)-ftoa*1.5625)*vdrift/55.
+        #rawposz = ((toa*25+1)-ftoa*1.5625)*3.59/55.
+    except:
+        rawz = np.zeros(len(rawposx))
+    
+    return rawz
+
+#def baseAngleReco(rawposx,rawposy,rawposz,charges,Rin=1.6,Rout=3.5):
+def baseAngleReco(rawposx,rawposy,rawposz,charges):
+
+    # coordinates in 3d
+    coords = np.array([rawposx, rawposy, rawposz])
+    # finding charge-weight cneter of the track
+    center = np.average(coords,axis=1,weights=charges)
+    # making column vector of hit positions relative to weight center
+    X = np.vstack((rawposx-center[0],rawposy-center[1],rawposz-center[2]))
+    # making covariance matrixx for charge distro
+    M = np.dot(X*charges, X.T)
+    # get eigenvaslues and eigenvectors
+    eigenval, eigenvect = np.linalg.eig(M)
+    # get axis that maximises 2nd momentum (maximises variance-> distribution is maximally stetched out!)
+    principal_axis = eigenvect[:,np.argmax(eigenval)]
+    # projecting this axis onto XY-plane
+    projection_xy = np.array([principal_axis[0],principal_axis[1]])
+    # get angle of this axis to x 
+    # ======= this is the angle PHI1 ===========
+    angle = np.arctan2(projection_xy[1],projection_xy[0])
+#    # ==========================================
+#    ## projecting hits onto the plane of the new axis
+#    proj_xy_fit = np.dot(X[:2].T, principal_axis[:2])
+#    ## calculate skeweness
+#    skew_xy = np.sum(charges*proj_xy_fit**3)/np.sum(charges)
+#    ## project also in 3d
+#    #projection_3d = np.dot(X.T, principal_axis)
+#    ## get skeweness in 3d
+#    #skew_3d = np.sum(charges*projection_3d**3)/np.sum(charges)
+#    ## get angle of of new axis in xz-plane
+#    #proj_xz = np.array([principal_axis[0],principal_axis[2]])
+#    #proj_xz_angle = np.arctan2(proj_xz[1],proj_xz[0]) # THIS IS "angle_new_plane"
+#    ## getting list of "right/left" indices of the track
+#    left_idx = np.where(proj_xy_fit < 0)[0]
+#    right_idx = np.where(proj_xy_fit >= 0)[0]
+#    ## getting list of "upper/lower" indices for 3d case
+#    #upper_idx = np.where(projection_3d < 0)[0]
+#    #lower_idx = np.where(projection_3d >= 0)[0]
+#
+#    # looking only for start indices (beginning of the track)
+#    start_idx = None
+#    if(skew_xy <=0):
+#        startidx = left_idx
+#    else:
+#        start_idx = right_id
+#    # getting maximum of the second moment
+#    M2_max = np.sum(charges*np.power(projection_xy,2))/np.sum(charges)
+#    #calc. radii from center of weight to pixels
+#    radii_squared = np.power(coords[0]-center[0],2) + np.power(coords[1]-center[1],2)
+#    # get index of pixels outside Rin circle
+#    circ_idx_in = np.where(radii_squared > np.power(Rin*np.sqrt(M2_max),2)[0]
+#    # get index of pixels inside Rout circle
+#    circ_idx_out = np.where(radii_squared < np.power(Rout*np.sqrt(M2_max),2)[0]
+#    # get the overlap of pixel sets
+#    circ_idx = np.intersect1d(circ_idx_in, circ_idx_out)
+#    # get indices to reco absorption point (cutting supposed fluor. electron from start of track) 
+#    abs_idx = np.array(np.intersect1d(start_idx, circ_idx_out),dtype=int)
+#    #get absorption point by weighted average of pixels
+#    absX = np.average(rawposx[abs_idx], weights=charges[abs_idx])
+#    absY = np.average(rawposy[abs_idx], weights=charges[abs_idx])
+
+    #return angle, absX, absY
+    return angle
+
+#def runExplicitAngleReco(rawposx,
+#                        rawposy, 
+#                        charges, 
+#                        startidx,
+#                        endidx,
+#                        toa,
+#                        ftoa, 
+#                        radius_min=None, 
+#                        radius_max=None, 
+#                        weighting=None):
+#    """
+#    Combined two-stage reconstruction for 3D Timepix data.
+#    """
+#
+#    centerX = np.average(rawposx, weights=charges)
+#    centerY = np.average(rawposy, weights=charges)
+#    centerX_start = np.average(rawposx[startidx.astype(int)], 
+#                                weights=charges[startidx.astype(int)])
+#    centerY_start = np.average(rawposy[startidx.astype(int)], 
+#                                weights=charges[startidx.astype(int)])
+#
+#    vDrift_neco2 = 17.7867
+#    rawposz = getThirdCoordinate(toa,ftoa,vdrift_neco2)
+#   
+#    phi1, phi_3d, skew_xy, skew_3d, leftidx, rightidx, upidx, downidx = baseAngleReco(rawposx,rawposy,rawposz,charges)
+#
+#    if(skew_xy > 0):
+#        if(phi1 > 0):
+#            phi1 = -np.pi + phi1
+#        else:
+#            phi1 = np.pi + phi1
+#
+#    star_idx, end_idx = None, None   
+#
+#    if(skew_xy<=0):
+#        if(skew_3d <= 0):
+#            start_idx = np.intersect1d(left_idx,upper_idx)
+#            end_idx = np.setdiff1d(np.arange(len(rawposx)), start_idx)
+#        else:
+#            start_idx = np.intersect1d(left_idx,lower_idx)
+#            end_idx = np.setdiff1d(np.arange(len(rawposx)), start_idx)
+#    else:   
+#        if(skew_3d <= 0):
+#            start_idx = np.intersect1d(right_idx,upper_idx)
+#            end_idx = np.setdiff1d(np.arange(len(rawposx)), start_idx)
+#        else:
+#            start_idx = np.intersect1d(right_idx,lower_idx)
+#            end_idx = np.setdiff1d(np.arange(len(rawposx)), start_idx)
+#
+#    m2Max = np.sum(charges*np.power(proj))
+#    
+#
 
 def simpleScatter(xdata, ydata, labels, picname, odir):
 
@@ -637,7 +987,7 @@ def fitAndPlotModulation(nuarray, nbins, minbin, maxbin, labels, picname, odir):
     ax = plt.gca()
     miny,maxy = ax.get_ylim()
     print(f"Getting miny/maxy for histogram: {picname}")
-    print(f"miny={miny}, maxy={maxy}")
+    print(f"miny={miny:.4f}, maxy={maxy:.4f}")
 
     plt.ylim([miny, maxy*1.2])
 
@@ -650,8 +1000,6 @@ def fitAndPlotModulation(nuarray, nbins, minbin, maxbin, labels, picname, odir):
     # Paolo, Polarimetry pdf, page 27
     Q = (1/mu) * (Bp/2) * np.cos(2*phi)
     U = (1/mu) * (Bp/2) * np.sin(2*phi)  
-
-    
 
     # only walid for the caser on uncorrelated mu,phi,Bp
     # using as first estimate
@@ -669,25 +1017,9 @@ def fitAndPlotModulation(nuarray, nbins, minbin, maxbin, labels, picname, odir):
         (((np.cos(2*phi)**2)*(Bp**2)*(phi_err**2))/mu**2)
                 )
 
-    # Some publication 
-    #Q = intensity * mu * np.cos(2*phi)
-    #U = intensity * mu * np.sin(2*phi)  
-    #V = np.sqrt((P*intensity)**2 - Q**2 - U**2)
-
+    MDP = getMDP(0.28, len(nuarray))
     #---------------------------------------------------
-    # normalised modulation
-    #normQ = Q/intensity    
-    #normU = U/intensity
-    #
-    #Qr = 2/mu*normQ
-    #Ur = 2/mu*normU
-    #
-    #Qr = 2/mu*Q
-    #Ur = 2/mu*U
-    #Vr = P*intensity - Qr**2 -Ur**2
-
-    #---------------------------------------------------
-    plt.text(-3.13, maxy*1.16, r"$\Sigma$"+f"(Entries)={len(nuarray)}",fontsize=11)
+    plt.text(-3.13, maxy*1.16, r"$\Sigma$"+f"(Entries)={len(nuarray)}: MDP(99%CL)={MDP*100:.2f} %",fontsize=11)
     plt.text(-3.13 , maxy*1.10, r"$N(\phi) = A_{P} + B_{P}\cdot cos^2(\phi-\phi_{0})$", fontsize=11)
     plt.text(-3.13 , maxy*1.04, f"{G_mu}={mu*100:.2f}%"+r"$\pm$"+f"{muErr*100:.2f}%", fontsize=11)
     plt.text(-3.13 , maxy*0.98, f"I={intensity:.2f}"+r"$\pm$"+f"{intensity_err:.2f}", fontsize=11)
@@ -700,6 +1032,7 @@ def fitAndPlotModulation(nuarray, nbins, minbin, maxbin, labels, picname, odir):
     print(f"Polarization degree = {P:.2f}")
     print(f"\nStokes Parameters: \nQ(P1)={Q:.4f}, U(P2)={U:.4f}\n")
     print(f"Intensity = {intensity}")
+    print(f"{OUT_RED}{G_chi}^2/(ndof)={chired:.4f}{OUT_RST}")
     print("^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^")
 
     main_results[branch][mukey] = mu
@@ -937,7 +1270,7 @@ def simpleHist(nuarray, nbins, minbin, maxbin, labels, picname, odir,fit=None):
             print("________________________________________________________")
             print(f"Modulation factor = {mu*100.0:.2f} %")
             print(f"\nStokes Parameters: \nQ(a0)={Q:.4f}, U(a1)={U:.4f}\n")
-            print(f"Intensity = {intensity}")
+            print(f"Intensity = {intensity:.4f}")
             print("^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^")
 
         elif(fit=="gaus"):
@@ -1052,6 +1385,30 @@ def plot2DProjectionXY(matrix, labels, picname, odir):
     plt.savefig(f"{odir}/XYproj-hist-{picname}.png")
     plt.close()
 
+def simpleMultiHist3D(datalist, labels, xrange, picname, odir):                                  
+   
+     print(f"{OUT_YELLOW}[simpleMultiHist3D] --> {picname} --> {labels[0]} {OUT_RST}")
+                                                                                                  
+     fig = plt.figure(figsize=(10,10))                                                                           
+     ax = fig.add_subplot(111, projection='3d')                                                    
+     nbins = 100                                                                                  
+     offsets = np.arange(0,len(datalist))                                                                                                                                                               
+     offsets = offsets*10                                                                         
+                                                                                                  
+     for data, yoffset in zip(datalist, offsets):                                                 
+         #counts, bin_edges = np.histogram(data, bins = nbins, range=xrange, density=True)
+         counts, bin_edges = np.histogram(data, bins = nbins, range=xrange)
+         bin_width = bin_edges[1] - bin_edges[0]                 
+         xs = (bin_edges[:-1]+bin_edges[1:])/2.0                                                    
+         ax.bar(xs, counts, zs=yoffset, zdir='y', alpha=0.5, width=bin_width)
+                                                                                                  
+     ax.set_title(f'{labels[0]}')                                                                 
+     ax.set_xlabel(f'{labels[1]}')                                                                
+     ax.set_ylabel(f'{labels[2]}')                                                                
+     ax.set_zlabel(f'{labels[3]}')                                                                
+                                                                                                  
+     plt.savefig(f"{odir}/MultiHist3D-{picname}.png")                                             
+                                                                                            
 def plotDbscan(index, dblabels, ievent, nfound, odir):
 
     plt.figure(figsize=(8,6))
@@ -1278,7 +1635,7 @@ tmp_secondangles_Y, tmp_secondangles_Y_conv = [], []
 tmp_BGRangles = []
 
 tmp_theta = []
-theta_secondstage = None
+theta_secondstage, theta_firststage = None, None
 
 tmp_evtArea = []
 
@@ -1306,10 +1663,22 @@ fTiming = False
 fCharge = False
 fConverted = False
 
+now = dtime.datetime.now()
+timestamp = now.strftime("%Y-%m-%d : %H:%M:%S")
+
 freport = open(f"analReport-{plotname[:-3]}.log",'a')
 
-freport.write("===================================\n")
+freport.write(f"============={timestamp}==================\n")
 freport.write(f"ANALYZING: {recofile}")
+freport.flush()
+
+f1 = h5py.File(recofile,'r+')
+reconstruction = f1['reconstruction']   
+#startidx = f.get(base_group_name+"start_indices")
+startidx = f1.get("reconstruction/run_0/chip_0/start_indices")[:]
+#endidx = f.get(base_group_name+"end_indices")
+endidx = f1.get("reconstruction/run_0/chip_0/end_indices")[:]
+f1.close()
 
 with tb.open_file(recofile, 'r') as f:
    
@@ -1336,49 +1705,65 @@ with tb.open_file(recofile, 'r') as f:
     run_num = int(run_name[4:])
     print(f'run number is {run_num}')
     freport.write(f"\nRun number: {run_num}")
+    freport.flush()
 
     basewords = None
     # =========== gettin' shit ==================
-    ToT = f.get_node(base_group_name+"ToT")
+    ToT = f.get_node(base_group_name+"ToT")[:]
     print(f"found VLarray TOT of size {type(ToT)}")
-    centerX = f.get_node(base_group_name+"centerX")
+    centerX = f.get_node(base_group_name+"centerX")[:]
     print(f"found centerX {type(centerX)}")
-    centerY = f.get_node(base_group_name+"centerY")
+    centerY = f.get_node(base_group_name+"centerY")[:]
     print(f"found centerY {type(centerY)}")
-    hits = f.get_node(base_group_name+"hits")
+    hits = f.get_node(base_group_name+"hits")[:]
     print(f"found hits {type(hits)}")
-    excent = f.get_node(base_group_name+"eccentricity")
+    excent = f.get_node(base_group_name+"eccentricity")[:]
     print(f"found excentricity {type(excent)}")
-    FIRT = f.get_node(base_group_name+"fractionInTransverseRms")
+    FIRT = f.get_node(base_group_name+"fractionInTransverseRms")[:]
     print(f"found FIRT {type(FIRT)}")
-    kurtosisL = f.get_node(base_group_name+"kurtosisLongitudinal")
+    kurtosisL = f.get_node(base_group_name+"kurtosisLongitudinal")[:]
     print(f"found kurtsisL {type(kurtosisL)}")
-    kurtosisT = f.get_node(base_group_name+"kurtosisTransverse")
+    kurtosisT = f.get_node(base_group_name+"kurtosisTransverse")[:]
     print(f"found kurtosisT {type(kurtosisT)}")
-    length = f.get_node(base_group_name+"length")
+    length = f.get_node(base_group_name+"length")[:]
     print(f"found length {type(length)}")
-    LDRT = f.get_node(base_group_name+"lengthDivRmsTrans")
+    LDRT = f.get_node(base_group_name+"lengthDivRmsTrans")[:]
     print(f"found LDRT {type(LDRT)}")
-    RMS_L = f.get_node(base_group_name+"rmsLongitudinal")
+    RMS_L = f.get_node(base_group_name+"rmsLongitudinal")[:]
     print(f"found RMS_L {type(RMS_L)}")
-    RMS_T = f.get_node(base_group_name+"rmsTransverse")
+    RMS_T = f.get_node(base_group_name+"rmsTransverse")[:]
     print(f"found RMS_T {type(RMS_T)}")
-    rotAng = f.get_node(base_group_name+"rotationAngle")
+    rotAng = f.get_node(base_group_name+"rotationAngle")[:]
     print(f"found rotAng {type(rotAng)}")
-    skewL = f.get_node(base_group_name+"skewnessLongitudinal")
+    skewL = f.get_node(base_group_name+"skewnessLongitudinal")[:]
     print(f"found skewL {type(skewL)}")
-    skewT = f.get_node(base_group_name+"skewnessTransverse")
+    skewT = f.get_node(base_group_name+"skewnessTransverse")[:]
     print(f"found skewT {type(skewT)}")
-    sumTOT = f.get_node(base_group_name+"sumTot")
+    sumTOT = f.get_node(base_group_name+"sumTot")[:]
     print(f"found sumTOT {type(sumTOT)}")
-    width = f.get_node(base_group_name+"width")
+    width = f.get_node(base_group_name+"width")[:]
     print(f"found width {type(width)}")
-    x = f.get_node(base_group_name+"x")
+    x = f.get_node(base_group_name+"x")[:]
     print(f"found x {type(x)}")
-    y = f.get_node(base_group_name+"y")
+    y = f.get_node(base_group_name+"y")[:]
     print(f"found y {type(y)}")
-    EVENTNR = f.get_node(base_group_name+"eventNumber")
+    EVENTNR = f.get_node(base_group_name+"eventNumber")[:]
     print(f"found eventNumber {type(EVENTNR)}")
+
+    CONST = None
+    if(check_node(base_group_name+"constants",f)):
+        CONST = f.get_node(base_group_name+"constants")[:]
+        print(f"Found CONSTANTS: {CONST}")
+
+    RMIN, RMAX, VDRIFT, WEIGHT = -1,-1,-1,-1
+    if(CONST is not None):
+        RMIN = CONST[0]
+        RMAX = CONST[1]
+        VDRIFT = CONST[2]
+        WEIGHT = CONST[3]
+
+
+    freport.write(f"\nAngle-Reco-const: {RMIN},{RMAX},{VDRIFT},{WEIGHT}")
 
     #allevents = []
     ##print(np.max(EVENTNR))
@@ -1398,12 +1783,21 @@ with tb.open_file(recofile, 'r') as f:
             print(f"Found run time value [{measurement_time} seconds] for run [{item}]")
             freport.write(f"\nRun time: {measurement_time} , [{item}]")
             break
-    
+    ############################################ 
+    # detector efficiency for 10keV for NeCO2 80;20
+    detector_epsilon_neco2 = 0.027476
+    ############################################ 
+
     if(measurement_time is not None):
         n_clusters = len(hits)
         raw_rate = n_clusters/measurement_time 
         print(f"{OUT_RED_BGR} Rate = {raw_rate:.4f} [Hz] {OUT_RST}")
+        source_rate = raw_rate/detector_epsilon_neco2
+        rateNum, rateMagn = checkRateOrder(source_rate)
+        print(f"{OUT_RED_BGR} Inferred source rate = {rateNum:.2f} [{rateMagn}] {OUT_RST}")
+ 
         freport.write(f"\nRun Rate: {raw_rate}")
+        freport.write(f"\nSource Rate: {source_rate}")
 
     print("---------- CHINAZES! ------------")
 
@@ -1418,7 +1812,7 @@ with tb.open_file(recofile, 'r') as f:
 
     ################################################################
     ################################################################
-    ################################################################
+    ##############################################################
 
     TOAcomb = None
     ToA = None
@@ -1449,6 +1843,7 @@ with tb.open_file(recofile, 'r') as f:
 
     hasTheta = check_node(base_group_name+"theta_secondstage",f)
     if(hasTheta):
+        theta_firststage = f.get_node(base_group_name+"theta_firststage")
         theta_secondstage = f.get_node(base_group_name+"theta_secondstage")
         simpleSimRecoHist(theta_secondstage, 100, np.nanmin(theta_secondstage), np.nanmax(theta_secondstage) , [r'Track:$\theta$','degrees, [radian]','CTS'], plotname+"THETA", True, outdir)
 
@@ -1497,6 +1892,7 @@ with tb.open_file(recofile, 'r') as f:
         print(f"Pruned lists          : {len(ConvX)}\t{len(ConvY)}")
         freport.write(f"\nAbsorption Point Data:\nLengths = {absorp_x.shape[0]}\t{absorp_y.shape[0]}\n")
         freport.write(f"\nPruned Length = {len(ConvX)}\t{len(ConvY)}")
+        freport.flush()
 
         abs_stdx = np.std(ConvX)
         abs_stdy = np.std(ConvY)
@@ -1514,10 +1910,12 @@ with tb.open_file(recofile, 'r') as f:
         ConvX, ConvY = None, None
 
     #exit(0)
-    ntotal = ToT.shape[0]
+    #ntotal = ToT.shape[0]
+    ntotal = len(ToT)
 
     print(f"\nTOTAL nr of clusters: {ntotal}\n")
     freport.write(f"\nN_clusters = {ntotal}")
+    freport.flush()
 
     ievent, npics, mcevents = 0, 0, 0
     n_good = 0
@@ -1525,49 +1923,50 @@ with tb.open_file(recofile, 'r') as f:
 
     # definin' some global cuts
     # TEMPORARY
+    # for Vgrid variation runs
     #
-    minHits = 25
-    maxHits = 1000
-    minSumTot = 1000
-    maxSumTot = 1000
+    #minHits = 25
+    #maxHits = 1000
+    #minSumTot = 1000
+    #maxSumTot = 1000
 
-    if("450V" in recofile):
-        minHits = 10
-        naxHits = 60
-        minSumTot = 255
-        maxSumTot = 900
-    
-    if("460V" in recofile):
-        minHits = 20
-        naxHits = 75
-        minSumTot = 500
-        maxSumTot = 1750
+    #if("450V" in recofile):
+    #    minHits = 10
+    #    naxHits = 60
+    #    minSumTot = 255
+    #    maxSumTot = 900
+    #
+    #if("460V" in recofile):
+    #    minHits = 20
+    #    naxHits = 75
+    #    minSumTot = 500
+    #    maxSumTot = 1750
  
-    if("470V" in recofile):
-        minHits = 40
-        naxHits = 90
-        minSumTot = 1000
-        maxSumTot = 2500
+    #if("470V" in recofile):
+    #    minHits = 40
+    #    naxHits = 90
+    #    minSumTot = 1000
+    #    maxSumTot = 2500
  
-    if("480V" in recofile):
-        minHits = 60
-        naxHits = 115
-        minSumTot = 1500
-        maxSumTot = 3500
+    #if("480V" in recofile):
+    #    minHits = 60
+    #    naxHits = 115
+    #    minSumTot = 1500
+    #    maxSumTot = 3500
  
-    if("490V" in recofile):
-        minHits = 70
-        naxHits = 140
-        minSumTot = 2000
-        maxSumTot = 4500
+    #if("490V" in recofile):
+    #    minHits = 70
+    #    naxHits = 140
+    #    minSumTot = 2000
+    #    maxSumTot = 4500
  
-    if("500V" in recofile):
-        minHits = 90
-        naxHits = 160
-        minSumTot = 2500
-        maxSumTot = 6000
+    #if("500V" in recofile):
+    #    minHits = 90
+    #    naxHits = 160
+    #    minSumTot = 2500
+    #    maxSumTot = 6000
 
-    #----------------------------
+    ##----------------------------
 
     for event in ToT: 
 
@@ -1644,23 +2043,21 @@ with tb.open_file(recofile, 'r') as f:
         # checks/cuts:
 
         # selecting only interesting events 
-        goodLength = True if (length[ievent]<=7) else False
-
-        #goodSumTOT = True if (sumTOT[ievent]<=20000) else False
-        #goodHits = True if (hits[ievent]>=25 and hits[ievent]<1000) else False
-
-        goodSumTOT = True if (sumTOT[ievent]>=minSumTot and sumTOT[ievent]<=maxSumTot) else False
-        goodHits = True if (hits[ievent]>=minHits and hits[ievent]<maxHits) else False
-
-        goodExcent = True if (excent[ievent] < 20) else False
-        goodArea = True if (areaWL < 50) else False
+        #goodLength = True if (length[ievent]<=20) else False
+        goodSumTOT = True if (sumTOT[ievent]<=10000) else False
+        goodHits = True if (hits[ievent]>=20 and hits[ievent]<=1000) else False
+        #goodSumTOT = True if (sumTOT[ievent]>=minSumTot and sumTOT[ievent]<=maxSumTot) else False
+        #goodHits = True if (hits[ievent]>=minHits and hits[ievent]<maxHits) else False
+        #goodExcent = True if (excent[ievent] < 20) else False
+        goodExcent = True if (excent[ievent] <= 10) else False
+        #goodArea = True if (areaWL <= 50) else False
         goodConvXY = checkClusterPosition(abs_meanx, 
                                           abs_meany,
                                           conversionX[ievent],
                                           conversionY[ievent],
-                                          abs_stdx*2.5 
+                                          abs_stdx*3
                                           )  
- 
+
         # Cuts for Background run file!  
         #goodLength = True if (length[ievent]<=6) else False
         #goodSumTOT = True if (sumTOT[ievent]<=8000) else False
@@ -1670,19 +2067,27 @@ with tb.open_file(recofile, 'r') as f:
         #goodArea = True if (areaWL < 50) else False
 
         ## timing cuts
-        #goodTOA_len = True if (toaLength[ievent]<=200) else False
+        goodTOA_len = True if (toaLength[ievent]<=25) else False
         #goodTOA_rms = True if (toaRMS[ievent]<=100) else False
-        #goodTOA_mean = True if (toaMean[ievent]<=100) else False
-        ##goodTOA_skew = True if (toaSkew[ievent]<=) else False
+        goodTOA_mean = True if (toaMean[ievent]<=8.5) else False
+        #goodTOA_skew = True if (toaSkew[ievent]<=) else False
 
         # selecting Based on 200k simulation of 10.541keV photons
         # Specific to: 153kHz data 
-        #goodLength = True if (length[ievent]<=5) else False
-        #goodWidth = True if (length[ievent]<=2.8) else False
-        #goodSumTOT = True if (sumTOT[ievent]<=6000) else False
-        #goodHits = True if (hits[ievent]>40 and hits[ievent]<250) else False
-        #goodExcent = True if (excent[ievent] < 15) else False
-        #goodRMSL = True if (RMS_L[ievent] <= 1.4) else False
+        ##goodLength = True if (length[ievent] <= 4) else False
+        ##goodWidth = True if (length[ievent]<=2.8) else False
+        ##goodSumTOT = True if (sumTOT[ievent]<=8000) else False
+        #goodHits = True if (hits[ievent]>40 and hits[ievent]<1000) else False
+        ##goodHits = True if (hits[ievent]>60) else False
+        ##goodExcent = True if (excent[ievent] <= 6) else False
+        ##goodRMSL = True if (RMS_L[ievent] <= 1.4) else False
+        #goodConvXY = checkClusterPosition(abs_meanx, 
+        #                                  abs_meany,
+        #                                  conversionX[ievent],
+        #                                  conversionY[ievent],
+        #                                  abs_stdx*1.5
+        #                                  )  
+ 
 
         ## Specific to: 120Hz data 
         # 
@@ -1732,11 +2137,30 @@ with tb.open_file(recofile, 'r') as f:
         ## Specific to: 15.1 kHz data 
         #goodLength = True if (length[ievent]<=5) else False
         #goodWidth = True if (length[ievent]<=2.8) else False
-        #goodSumTOT = True if (sumTOT[ievent]<=7000) else False
-        #goodHits = True if (hits[ievent]>85 and hits[ievent]<150) else False
-        #goodExcent = True if (excent[ievent] < 20) else False
-        #goodRMSL = True if (RMS_L[ievent] <= 1.25) else False
-
+        #goodSumTOT = True if (sumTOT[ievent] >= 3000 and sumTOT[ievent]<=5100) else False
+        #goodHits = True if (hits[ievent]>=80 and hits[ievent]<=150) else False
+        #goodExcent = True if (excent[ievent]>= 1.5 and excent[ievent] <= 5) else False
+        #goodConvXY = checkClusterPosition(abs_meanx, 
+        #                                  abs_meany,
+        #                                  conversionX[ievent],
+        #                                  conversionY[ievent],
+        #                                  abs_stdx*1.5 
+        #                                  )
+ 
+        ## Specific to: 153 kHz data 
+        #goodLength = True if (length[ievent]<=5) else False
+        #goodWidth = True if (length[ievent]<=2.8) else False
+        #goodSumTOT = True if (sumTOT[ievent] >= 1000 and sumTOT[ievent]<=4000) else False
+        #goodHits = True if (hits[ievent]>=50 and hits[ievent]<120) else False
+        #goodExcent = True if (excent[ievent]>= 1.17 and excent[ievent] < 10) else False
+        #goodConvXY = checkClusterPosition(abs_meanx, 
+        #                                  abs_meany,
+        #                                  conversionX[ievent],
+        #                                  conversionY[ievent],
+        #                                  abs_stdx*1.5 
+        #                                  )
+ 
+ 
         # selecting basically everything
         #goodLength = True if (length[ievent] >= 0.1) else False
         #goodSumTOT = True if (sumTOT[ievent] >= 100) else False
@@ -1755,7 +2179,10 @@ with tb.open_file(recofile, 'r') as f:
  
         # overall cut to exclude outer part of chip
         #goodXY = True if (weightX>=3 and weightX <=252 and weightY >= 3 and weightY <= 252) else False
+
+        # disabling just once for simulation study
         goodXY = True if (weightX>=15 and weightX <=240 and weightY >= 15 and weightY <= 240) else False
+
         # cutting lower edge of matrix in BGR data
         #goodXY = True if (weightX>=3 and weightX <=252 and weightY >= 45 and weightY <= 252) else False
         # ROME DATA Cu 8keV: selecting the line of vertical scan in  the middle
@@ -1843,17 +2270,19 @@ with tb.open_file(recofile, 'r') as f:
 
         # IF EXCENTRICITY IS good :
         pol_angle = None
-        if (goodLength and 
+        if (#goodLength and 
             #goodWidth and 
             #goodArea and
-            goodXY and 
+            #goodXY and 
             #goodConvX and 
             #goodConvY and 
-            #goodConvXY and 
+            goodConvXY and 
             #not goodConvXY and 
             #goodRMSL and
             #goodSumTOT and 
             goodHits #and
+            #goodTOA_len and 
+            #goodTOA_mean and
             #goodExcent #and
              ):# improved based on length cut
 
@@ -1923,17 +2352,19 @@ with tb.open_file(recofile, 'r') as f:
             #sum_Q -= q_k
             #sum_U -= u_k
  
-        if((npics < 10 and
-           goodLength  and
+        if((npics < 30 and
+           #goodLength and
            #goodConvX and 
            #goodConvY and 
            #not goodConvXY and 
-           #goodConvXY and 
-           goodXY and
-           goodSumTOT and
+           goodConvXY and 
+           #goodXY and
+           #goodSumTOT and
+           goodHits #and
            #density < 0 #and 
-           goodHits) or # and
-           #goodExcent) or
+           #not goodHits) or # and
+           #goodExcent
+           ) or
            nhits > 5000 #or
            #toaLength[ievent]>16000 or
            #(toaRMS[ievent]>1000 and toaRMS[ievent<4000]) or
@@ -1948,23 +2379,49 @@ with tb.open_file(recofile, 'r') as f:
             # this block is for plotting photoelectron tracks: -------------------------
             if(fConverted):
                 plot2dEvent(matrix, characs, f"cluster-{ievent}-{plotname}", outdir, [conversionX[ievent],conversionY[ievent]])
+
+                event_charges = None
+                if(fCharge):
+                    event_charges = electrons[ievent]
+                else:
+                    event_charges = event
+                try:
+                    examineTrack(x[ievent],
+                                 y[ievent],
+                                 event_charges,
+                                 firstangles[ievent],
+                                 secondangles[ievent],
+                                 startidx[ievent],                             
+                                 endidx[ievent],
+                                 ToA[ievent],
+                                 fTOA[ievent],
+                                 conversionX[ievent],
+                                 conversionY[ievent],
+                                 f"{ievent}-{plotname}",
+                                 outdir, Rin=RMIN, Rout=RMAX, WGHT=WEIGHT)
+                                 #outdir, theta_fs=theta_firststage[ievent])
+                except Exception as ex:
+                    print(f"failed to plot event {ievent}: [{ex}]")
+
+                                                          
             else:
                 plot2dEvent(matrix, characs, f"cluster-{ievent}-{plotname}", outdir, [weightX,weightY])
 
+            matrix = np.zeros((256,256),dtype=np.uint16)
             #------------------------------------------------------------------
             # for viewing 3D tracks
-            if(toaLength is not None and npics < 5):
-                zpos = []
-                vdrift_NeCO2 = 17.7867
-                for toa, ftoa in zip(ToA[ievent], fTOA[ievent]):
-                    zpos.append(calculateZpos(toa,ftoa,vdrift_NeCO2))
+            #if(toaLength is not None and npics < 50):
+            #    zpos = []
+            #    vdrift_NeCO2 = 17.7867
+            #    for toa, ftoa in zip(ToA[ievent], fTOA[ievent]):
+            #        zpos.append(calculateZpos(toa,ftoa,vdrift_NeCO2))
 
-                plotInteractive3D(x[ievent],
-                                y[ievent],
-                                zpos,
-                                [f"Reconstructed Track {ievent}", "x","y","z"], 
-                                f"3D-Track-{ievent}-"+plotname, 
-                                outdir)
+            #    plotInteractive3D(x[ievent],
+            #                    y[ievent],
+            #                    zpos,
+            #                    [f"Reconstructed Track {ievent}", "x","y","z"], 
+            #                    f"3D-Track-{ievent}-"+plotname, 
+            #                    outdir)
             #------------------------------------------------------------------
 
             #try: 
@@ -1974,7 +2431,6 @@ with tb.open_file(recofile, 'r') as f:
          
             #plotDbscan(nz_index, labels, ievent, nfound, outdir)
             npics+=1
-            matrix = np.zeros((256,256),dtype=np.uint16)
             #matrixTOA = np.zeros((256,256),dtype=np.uint16)
             #matrixTOAcom = np.zeros((256,256),dtype=np.uint16)
 
@@ -1984,6 +2440,9 @@ with tb.open_file(recofile, 'r') as f:
             #   ylist = y[ievent]
             #   zlist = (ToA[ievent]*25+1)/55.0
             #   plotInteractive3D(xlist,ylist,zlist,f"Event-{ievent}", f"-Evt-{ievent}-"+plotname, outdir)
+
+       # if(ievent==10000):
+       #     exit(0)
  
         progress(ntotal, ievent)
         ievent+=1
@@ -1998,6 +2457,7 @@ with tb.open_file(recofile, 'r') as f:
 print(f"\nFOUND <{n_good}> events\n")
 
 freport.write(f"\nData after cuts: {n_good}")
+freport.flush()
 
 fitAndPlotModulation(np.array(tmp_secondangles),
                      100,
@@ -2014,6 +2474,13 @@ fitAndPlotModulation(np.array(tmp_BGRangles),
                      ["Reconstructed Angle Distribution (Pruned by XY position)", "Angle [radian]", r"$N_{Entries}$"],
                      "STOLEN-XpolSecondStage-CutOnPosition-BGRangles",
                      outdir)
+
+simpleMultiHist3D([tmp_secondangles, tmp_BGRangles],
+                ["Second Stage Angle Decomposition", r"$\phi$,[rad]","offset", "Rate"],
+                (-np.pi,np.pi),
+                plotname,
+                outdir
+                )
 
 plot2dEvent(matrixTotal, "", "OCCUPANCY-total-run", outdir)
 plot2dEvent(matrixTotal_TOT, "", "TOT-total-run", outdir)
@@ -2112,13 +2579,21 @@ print("Writing Modulation fit results to reoprt file...")
 freport.write("\nModulation factor Calculations:\n")
 outstring = ""
 for branch in main_results.keys():
-    outstring+=f"{branch}:\n"
+    outstring+=f"{branch}:"
     subset = main_results[branch]
+    nkeys = 0
+    nsubset = len(subset)
     for key in subset.keys():
-        outstring+=f"{key}={main_results[branch][key]}\n"
+        outstring+=f"{key}={main_results[branch][key]:.4f}"
+        nkeys+=1
+        if(nkeys==nsubset):
+            outstring+="\n"
+        else:
+            outstring+=","
     outstring+="\n"
 
 freport.write(outstring)
+freport.flush()
 freport.close()
 #pL = 2*0.2*np.sqrt(sum_Q**2 + sum_U**2)
 #direction_psi = 0.5*math.atan(normU/normQ)

@@ -2,53 +2,14 @@ import numpy as np
 import sys
 
 target_vgrid = float(sys.argv[1])
-#target_vande = float(sys.argv[2])
-#target_vcathode = float(sys.argv[3])
-
-#min_increase = 50.0
-#min_inc_grid = 10.0
-#cathode_step = int(np.floor(target_vcathode / min_increase))
-#vCat_list = []
-#
-#for i in range(cathode_step+1):
-#    vCat_list.append(i*min_increase)
-#
-#print(f"Part 1:")
-#print(vCat_list)
-#
-#print("Grid, Anode: Beginning")
-#
-#grid_ramp_range = np.floor(target_vgrid - 200.0)
-#grid_ramp_step = int(grid_ramp_range / 10.0)
-#grid_V = []
-#V_crit = 200.0
-#
-#for i in range(grid_ramp_step+1):
-#    iV = V_crit+i*min_inc_grid
-#    grid_V.append(iV)
-#
-##print(grid_V)
-#
-#n_initialV = int(np.floor(len(grid_V)/2))
-#grid_V_1 = grid_V[0:int(np.floor(len(grid_V)/2))]
-##print(grid_V_1)
-##print(grid_V_1[0::2])
-#gridV_fast = grid_V_1[0::2]
-##print(grid_V[n_initialV:])
-#gridV_slow = grid_V[n_initialV:]
-#gridV_fast.extend(gridV_slow)
-#print(gridV_fast)
-#
-#Vanode = []
-#for i in gridV_fast:
-
 Vdiff = float(sys.argv[2])
+
 min_increase = 50.0
 min_inc_grid = 10.0
 
 L_diff = 2 # cm
 
-Vanode = Vdiff/10.0 + target_vgrid
+Vanode = Vdiff/100.0 + target_vgrid
 Vcath = Vdiff*2+Vanode
 
 print(f"V_grid    = {target_vgrid}")

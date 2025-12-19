@@ -2294,6 +2294,16 @@ with tb.open_file(filename, 'r') as f:
         else:
             print(f"File {filename} either has no /interpreted/ data branch or has no /interpreted/hit_data/ node!")
 
+     elif("dump" in option):
+      
+        bname = getBaseGroupName(f)[0]
+        print(f"BASE GROUP NAME: {bname}")
+        checkNode = option.split(":")[1]
+        print(f"Looking for {checkNode} <{type(checkNode)}>")
+        #data = f.get_node(bname+checkNode)
+        data = f.get_node(bname+checkNode).astype(int)[0:25]
+        print(data)       
+
      else:
         print("------- File Structure --------")
         for group in f.walk_groups("/"):

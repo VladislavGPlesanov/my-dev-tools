@@ -7,6 +7,8 @@ from lmfit import Model
 from scipy.special import gamma
 from scipy.optimize import curve_fit
 
+import ROOT as r
+
 ###GREEK LETTERS###
 
 G_mu = '\u03bc'
@@ -52,7 +54,10 @@ def chargeperpixel(charge, picname, electrons):
     fit_range = (bin_centers <= charge_cap*4)
     fit_range_end = len(bin_centers[fit_range])-1
 
-    params, params_covariance = curve_fit(polya_MG, bin_centers[fit_range], hist[fit_range], p0=[10000, 2000, 1])
+    initAmp, initMean, initStd = 1000, 2000, 1
+
+    #params, params_covariance = curve_fit(polya_MG, bin_centers[fit_range], hist[fit_range], p0=[10000, 2000, 1])
+    params, params_covariance = curve_fit(polya_MG, bin_centers[fit_range], hist[fit_range], p0=[initAmp, initMean, initStd])
     params_errors = np.sqrt(np.diag(params_covariance))
     #x_values = np.linspace(fit_range_start, max(bin_edges), 1000)
     x_values = np.linspace(fit_range_start, fit_range_end, 1000)
@@ -61,14 +66,82 @@ def chargeperpixel(charge, picname, electrons):
     residuals = hist[fit_range] - polya_MG(bin_centers[fit_range], *params)
     reduced_chi_squared = np.sum((residuals ** 2) / polya_MG(bin_centers[fit_range], *params)) / (len(hist[fit_range]) - len(params))
 
+    # -----------------------------------------------------
+
+    r.gROOT.SetBatch(True) # so it does not try to show anything....
+
+    rbins = len(bin_edges) - 1 
+    roothist = r.TH1D("hcharge", "Charge per Pixel", rbins, bin_edges)
+
+    for q in charge:
+        roothist.Fill(q)
+
+    polya_expr = ("([0]/[1])"
+    "* ( pow( ( ([1]*[1]) / ([2]*[2]) ), ( ([1]*[1]) / ([2]*[2]) ) ) / TMath::Gamma( ( [1]*[1] ) / ( [2]*[2] ) ) )"
+    "* pow( x/[1], ( ( [1]*[1] ) / ( [2]*[2] ) - 1 ) )"
+    "* exp( - ( ( [1]*[1] ) / ( [2]*[2] ) ) * ( x / [1] ) )" 
+    )
+
+    polya_expr = (
+    "([0] / [1]) * "
+    "TMath::Power([1]/[2], [1]/[2]) / TMath::Gamma([1]/[2]) * "
+    "TMath::Power(x/[1], [1]/[2] - 1) * "
+    "TMath::Exp(-( [1]/[2] ) * (x/[1]))"
+    )
+
+    #rootpolya = r.TF1("polya",
+    #          "([0] / [1]) *(((([1]*[1])/([2]*[2]))^(([1]*[1])/([2]*[2]))) /(TMath::Gamma((([1]*[1])/([2]*[2]))))) * ((x /[1])^((([1]*[1])/([2]*[2]))-1)) * exp(-(([1]*[1])/([2]*[2])) *(x / [1])))",
+    #          bin_edges[0], bin_edges[-1])
+
+
+    xmin = np.nanmin(charge)
+    xmax = np.nanmax(charge)
+    #rootpolya = r.TF1("polya", polya_expr, bin_edges[0], bin_edges[-1])
+    rootpolya = r.TF1("polya", polya_expr, xmin, xmax)
+
+    #amp_scaling = initAmp
+    #amp_gain = initMean
+    #amp_width = initStd
+    amp_scaling = charge.size * 0.1
+    amp_gain = np.median(charge)
+    amp_width = 0.5
+
+    rootpolya.SetParameter(0,amp_scaling)
+    rootpolya.SetParameter(1,amp_gain)
+    rootpolya.SetParameter(2,amp_width)
+
+    r.gStyle.SetOptFit(1)
+    fit_result = roothist.Fit(rootpolya, "S")
+
+    scaling_fit = rootpolya.GetParameter(0)
+    gain_fit = rootpolya.GetParameter(1)
+    width_fit = rootpolya.GetParameter(2)
+
+    scaling_err = rootpolya.GetParError(0)
+    gain_err = rootpolya.GetParError(1)
+    width_err = rootpolya.GetParError(2)
+
+    rootpolya.SetParLimits(0, 0.0, 1e9)
+    rootpolya.SetParLimits(1, 1e-6, 1e9)
+    rootpolya.SetParLimits(2, 1e-6, 1e9)
+
+    print("===========================================================================")
+    print("ROOT fit:")
+    print(f"Amplification scale: {scaling_fit:.4f}"+r" $\pm$ "+f"{scaling_err:.4f}")
+    print(f"Amplification gain: {gain_fit:.4f}"+r" $\pm$ "+f"{gain_err:.4f}")
+    print(f"Amplification width: {width_fit:.4f}"+r" $\pm$ "+f"{width_err:.4f}")
+    print("===========================================================================")
+
+    # -----------------------------------------------------
+
     info_K = f"K = {params[0]:.3f}"+" $\pm$ "+f"{params_errors[0]:.3f}\n"
     info_G = f"G = {params[1]:.3f}"+" $\pm$ "+f"{params_errors[1]:.3f}\n"
     info_theta = r"$\theta$ = "+f"{params[2]:.3f} "+r"$\pm$"+f" {params_errors[2]:.3f}\n"
     info_chired = ""
     if(reduced_chi_squared>1e5):
         info_chired += r"$\chi^2_{{\mathrm{{red}}}}$ > 1e5"
-    elif(reduced_chi_squared<1e5):
-        info_chired += r"$\chi^2_{{\mathrm{{red}}}}$ < 1e5"
+    elif(reduced_chi_squared<0.0):
+        info_chired += r"$\chi^2_{{\mathrm{{red}}}}$ < 0"
     else:
         info_chired += r"$\chi^2_{{\mathrm{{red}}}}$"+f" = {reduced_chi_squared:.3f}"
 
