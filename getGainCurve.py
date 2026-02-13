@@ -584,10 +584,13 @@ for file in inputlist:
         if("LabRuns" in location):
             hits_mean = ref_hits_lab[str(Vgrid)][0]
             hits_sigma = ref_hits_lab[str(Vgrid)][1]
-        if("P09" in location):
+        elif("P09" in location):
             hits_mean = ref_hits_p09[str(Vgrid)][0]
             hits_sigma = ref_hits_p09[str(Vgrid)][1]
-    
+        else:    
+            hits_mean = 120
+            hits_sigma = 120
+
         hits_min = hits_mean - hits_sigma
         hits_max = hits_mean + hits_sigma
         for ts, h in zip(sumTOT, hits):
