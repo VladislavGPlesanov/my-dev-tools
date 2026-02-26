@@ -211,6 +211,16 @@ def SearchEllipse(matrix, centerX, centerY, stdevX, stdevY, nsigma=2):
     return n_pixels, sumQ, elipse_mask
 
 
+def rebin_matrix(matrix, factor):
+
+    h,w = matrix.shape
+    assert h % factor == 0 and w % factor == 0 
+
+    new_h = h//factor
+    new_w = w//factor
+    
+    return matrix.reshape(new_h, factor, new_w, factor).sum(axis=(1,3))
+
 ############################################################################
 
 main_path = sys.argv[1]
@@ -314,17 +324,14 @@ for file in inputlist:
 
     ## tryna' DBSCAN
     masked_array = np.ma.masked_array(tmp_array, np.zeros_like(tmp_array, dtype=bool))
-    #masked_array[0:10, 249:256] = np.ma.masked  # mask region
-    #masked_array[0:256, 249:256] = np.ma.masked  # mask region
     border = 5 #pixels
     masked_array[:border, :]  = np.ma.masked # masking top
     masked_array[-border: , :]= np.ma.masked # masking bottom
     masked_array[:, :border]  = np.ma.masked # masking left
     masked_array[:, -border:] = np.ma.masked # maskign right
 
-    # in the masked array need to find out-of-cluster pixels that are maxed-out
-    #
-    #
+    rescaled_mat = rebin_matrix(masked_array,4)
+    nhits_resc = np.count_nonzero(rescaled_mat)
 
     # definin' some parameters
 
@@ -333,28 +340,12 @@ for file in inputlist:
     iframe_time = cnt*t_dead+t_frame
     insta_time.append(iframe_time)
 
-    #incident_area = 2*xdiv * 2*ydiv # taking area of 2 sigmas of data spread in matrix
-
-    #rect_area = patch.Rectangle((xcenter-2*xdiv, ycenter-2*ydiv), 2*xdiv, 2*ydiv, linewidth=1.5, edgecolor='r', facecolor='none')
-  
-    #start_x = getPatchStartPoint(xcenter, xdiv, 2)
-    #start_y = getPatchStartPoint(ycenter, ydiv, 2)
-
-    #xend, yend = getPatchSides(start_x, start_y, xdiv, ydiv, 4, 4)
-    #print(f"\nFrame: {cnt}")
-    #xend, yend = getPatchSides(start_y, start_x, ydiv, xdiv, 4, 4)
-    #xend, yend = getPatchSides(start_x, start_y, xdiv, ydiv, 3, 3)
-
     #start_x, start_y, width, height = getRectangleParams(tmp_array, 1500)
     THR = iframe_occupancy * np.nanmax(masked_array)
     #if(iframe_occupancy>0.25):
     #    THR = 3000
     start_x, start_y, width, height = getRectangleParams(masked_array, THR)
-
-    #rect_area = patch.Rectangle((start_y, start_x), 4*ydiv, 4*xdiv, linewidth=1.5, edgecolor='r', facecolor='none')
-    #rect_area = patch.Rectangle((start_y, start_x), 4*xdiv, 4*ydiv, linewidth=1.5, edgecolor='r', facecolor='none')
-    rect_area = patch.Rectangle((start_y, start_x), height, width,  linewidth=1.5, edgecolor='r', facecolor='none')
-    #rect_area = patch.Rectangle((start_x, start_y), start_x - xend, start_y - yend, linewidth=1.5, edgecolor='r', facecolor='none')
+    #rect_area = patch.Rectangle((start_y, start_x), height, width,  linewidth=1.5, edgecolor='r', facecolor='none')
 
     incident_area = height * width
 
@@ -383,8 +374,28 @@ for file in inputlist:
     n_neigh = 2
     labels, eps, min_samples, mean_neigh_dist = dynamic_dbscan(points, min_samples_scale, eps_scale, n_neigh)
 
-    #db = DBSCAN(eps=min_distance, min_samples=min_cluster_size).fit(points)
-    #labels = db.labels_ # -2=noise, 0...N-1 clusters  
+    ##############################################################################
+    # trying dynamic DBscan on downscaled matrix data
+    min_samples_scale_down = 0.001
+    eps_scale_down = 1
+
+    trans_rebined_array = rescaled_mat.T 
+    resc_totcut = 400
+    res_y, res_x = np.where(trans_rebined_array>=resc_totcut)
+    res_points = np.column_stack((res_y,res_x))
+
+    try:
+        Dlabels, Deps, Dmin_samples, Dmean_neigh_dist = dynamic_dbscan(res_points, min_samples_scale_down, eps_scale_down, n_neigh)
+    except Exception as ex:
+        print(f"FAiled to do DBscan: {ex}")
+        Dlabels = [-1]
+        Deps = -1 
+        Dmin_samples = -1
+        Dmean_neigh_dist = -1        
+
+
+    points_surv = len(res_points)
+    unq_res_labels = set(Dlabels)
     ##############################################################################
 
     unq_labels = set(labels)
@@ -426,17 +437,17 @@ for file in inputlist:
 
     nell_hits, sumq, elmask = SearchEllipse(trans_masked_array, xcenter, ycenter, xdiv, ydiv)
 
-    nsig =2    
-    ellipse = Ellipse(
-        #(xcenter, ycenter),          # center coordinates
-        (ycenter, xcenter),          # center coordinates
-        width=2 * nsig * xdiv,       # total width (2a)
-        height=2 * nsig * ydiv,      # total height (2b)
-        edgecolor='green',            # ellipse outline color
-        facecolor='none',            # transparent fill
-        linewidth=2,
-        linestyle='--'
-    )
+#    nsig =2    
+#    ellipse = Ellipse(
+#        #(xcenter, ycenter),          # center coordinates
+#        (ycenter, xcenter),          # center coordinates
+#        width=2 * nsig * xdiv,       # total width (2a)
+#        height=2 * nsig * ydiv,      # total height (2b)
+#        edgecolor='green',            # ellipse outline color
+#        facecolor='none',            # transparent fill
+#        linewidth=2,
+#        linestyle='--'
+#    )
 
     if(xdiv < 7 and ydiv < 7 and xcenter > 15 and ycenter > 40 and ycenter < 220):
         fSingle = True
@@ -510,6 +521,35 @@ for file in inputlist:
         plt.savefig(f"{outdir}DBSCAN-{cnt}.png")
         plt.close()
 
+        # plotting DBscan using rescaled matrix
+        res_noise_hits = 0
+        plt.figure(figsize=(8,8))
+    
+        for dlab, col in zip(unq_res_labels, colors):
+            cmask = Dlabels == lab
+            if(lab==-1):
+                col='k'
+                res_noise_hits+=1
+            plt.scatter(res_points[cmask,0], res_points[cmask, 1],marker='.', s=1, c=[col], label=f'Clust={lab}')
+        
+        plt.title(f"DBSCAN 64x64 - found {len(unq_res_labels)-1} clusters")
+        plt.xlabel("x, [pix]")
+        plt.ylabel("y, [pix]")
+
+        minx, _ = getAxisRange(plt,0)
+        _, maxy = getAxisRange(plt,1)
+ 
+        plt.text(minx*1.1, maxy-20 , f"TOT threshold = {resc_totcut}")
+        plt.text(minx*1.1, maxy-25 , f"{points_surv} out of {nhits_resc} survived cut")
+        plt.text(minx*1.1, maxy-30 , f"EPS={Deps}, mean.neigh.dist.={Dmean_neigh_dist}, minimal cluster size = {Dmin_samples} ")
+        plt.legend()
+
+        plt.xlim([-2,66])
+        plt.ylim([-2,66])
+
+        plt.savefig(f"{outdir}DBSCAN-RESC-{cnt}.png")
+        plt.close()
+
         # ===============================================
         fig,ax = plt.subplots(figsize=(8,8))
         cax = fig.add_axes([0.86,0.1,0.05,0.8])
@@ -528,18 +568,20 @@ for file in inputlist:
         #if(fSingle):
             comment+=f", xdiv={xdiv:.2f}, ydiv={ydiv:.2f}"
         ax.text(10, -23, comment, fontsize=10,color='black' )
-        ax.add_patch(rect_area)
-        ax.add_patch(ellipse)
-        # this ain't work cuz for matshow x,y  are inverted
-        #ax.scatter(xcenter,ycenter, c='m', marker='*')
+
+        #ax.add_patch(rect_area)
+        #ax.add_patch(ellipse)
+
         # this works
         ax.scatter(ycenter, xcenter, c='m', marker='*')
 
         ax.invert_yaxis()
-        plt.savefig(f"{outdir}FRAME-{cnt}-{picname}.png")
+        plt.savefig(f"{outdir}MAT-FRAME-{cnt}-{picname}.png")
         plt.close()
+        ms = None
         fig, ax = None, None
         rect_area = None
+        ellipse = None
 
         # ===============================================
         CTS, EDG = np.histogram(np.ravel(masked_array), bins=100, range=(0,1000)) 
@@ -550,6 +592,17 @@ for file in inputlist:
         plt.ylabel(r"$N_{Hits}$")
         plt.yscale('log') 
         plt.savefig(f"{outdir}TOAHIST-FRAME-{cnt}.png")
+        plt.close()
+
+        fig,ax = plt.subplots(figsize=(8,7))
+        
+        ms = ax.matshow(rescaled_mat, cmap='viridis', norm=LogNorm(vmin=1,vmax=12000))
+        fig.colorbar(ms,cax=cax, orientation='vertical', label='TOT counts')
+        ax.set_xlabel("x")
+        ax.set_ylabel("y")
+        ax.set_title(f"Rescaled Matrix FRAME-{cnt}")
+        ax.invert_yaxis()
+        plt.savefig(f"{outdir}REMAT-FRAME-{cnt}.png")
         plt.close()
 
         npics+=1

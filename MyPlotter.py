@@ -2,7 +2,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 import h5py
 from matplotlib import colors, cm
-import tables as tb
+from matplotlib.colors import LogNorm
+import tables as tb 
 
 
 class myPlotter:
@@ -29,21 +30,51 @@ class myPlotter:
                    minbin, 
                    maxbin, 
                    labels, 
-                   picname, 
+                   picname,
+                   outdir=None,
+                   figsize=None,
+                   getStats=False, 
+                   savePDF=False,
                    ylog=False):
 
-        plt.figure()
-    
+        fig = None
+        if(figsize is not None):
+            fig = plt.figure(figsize=figsize)
+        else:
+            fig = plt.figure(figsize=(8,7))
+
+
         plt.hist(data, nbins, range=(minbin,maxbin), histtype='step', facecolor='b')
-    
+        if(getStats):
+            mean = np.mean(data)
+            median = np.median(data)
+            stdevx = np.std(data)
+            ymin,ymax = plt.gca().get_ylim()
+            xmin,xmax = plt.gca().get_xlim()
+            plt.vlines(mean, 0, ymax*0.9, linestyles=":", colors="darkblue", label=f"mean={mean:.2f}")
+            plt.vlines(median, 0, ymax*0.9, linestyles=":", colors="darkgreen", label=f"median={median:.2f}")
+            plt.vlines(mean+stdevx, 0, ymax*0.9, linestyles=":", colors="orange",label=r"$\sigma=$"+f"{stdevx:.2f}")
+            plt.vlines(mean-stdevx, 0, ymax*0.9, linestyles=":", colors="orange")
+            plt.legend()            
+
         plt.title(labels[0])
         plt.xlabel(labels[1])
         plt.ylabel(labels[2])
     
         if(ylog):
             plt.yscale('log')
-    
-        plt.savefig("simpleHist-"+picname+".png")
+
+        basename = f"simpleHist-{picname}"
+        if(outdir is not None):
+            basename = outdir+basename   
+        
+        fig.savefig(basename+".png")
+        if(savePDF):
+            fig.savefig(basename+".pdf")
+
+        fig = None
+        plt.close()
+
 
     def plotScatter(self, xdata, ydata, title, plotname, label, axisnames):
 
@@ -87,6 +118,111 @@ class myPlotter:
                    #cmap="Greens")
         ax1.plot()
         fig.savefig(plotname+".png")
+
+    def plot2Dhist(self, 
+                    x, # numpy array
+                    y, # numpy array
+                    nbins, # number of bins
+                    labels, # list of strings
+                    picname, # string
+                    odir=None, # string
+                    figsize=None,
+                    cutx=None,
+                    cuty=None,
+                    cmap=None,
+                    fCutXgeq=False,
+                    fCutYgeq=False,
+                    fLogNorm=False,
+                    fDebug=False):
+     
+        nentries_x = x.shape[0] 
+        nentries_y = y.shape[0]
+    
+        if(fDebug):
+            print(f"[plot2Dhist]--> {picname} --> {labels[0]} ({nentries_x},{nentries_y})")
+        if(nentries_x==0 or nentries_y==0):    
+            print(f"[ERROR::EMPTY_DATA] --> {picname} MISSING DATA")
+            return 0
+    
+        mismatch = 0
+        idx_stop = None
+        if(nentries_x > nentries_y):
+            idx_stop = nentries_y-1
+            mismatch = nentries_y/nentries_x
+            print(f"  MISMATCH in {picname} x={nentries_x}, y={nentries_y} -> {mismatch*100:.2f}%")
+        elif(nentries_y > nentries_x):
+            idx_stop = nentries_x-1
+            mismatch = nentries_x/nentries_y
+            print(f"  MISMATCH in {picname} x={nentries_x}, y={nentries_y} -> {mismatch*100:.2f}%")
+        else:
+            if(fDebug):
+                print(f"  Data arrays equal") 
+    
+        if(mismatch>0.1):
+            print(f"[plot2Dhist]: mismatch of {mismatch*100:.2f}% of data sets for {labels[0]}")
+   
+        fig = None
+        if(figsize is not None):
+            fig = plt.figure(figsize=figsize)
+        else:
+            fig = plt.figure(figsize=(8,6))
+
+        idx, idy = None, None    
+        if(cutx is not None):
+            if(fCutXgeq):
+                idx = np.where(x>=cutx)
+            else:
+                idx = np.where(x<cutx)
+
+        if(cuty is not None):
+            if(fCutYgeq):
+                idy = np.where(y>=cuty)
+            else:
+                idy = np.where(y<cuty)
+
+        usecmap = 'jet'
+        if(cmap is not None):
+            usecmap = cmap
+
+        if(cutx is not None and cuty is None):
+            if(fLogNorm): 
+                plt.hist2d(x[idx], y[idx], bins=nbins, norm=LogNorm(), cmap=usecmap)
+            else:
+                plt.hist2d(x[idx], y[idx], bins=nbins, cmap=usecmap)
+
+        elif(cuty is not None and cutx is None):
+            if(fLogNorm):
+                plt.hist2d(x[idy], y[idy], bins=nbins, norm=LogNorm(), cmap=usecmap)
+            else:
+                plt.hist2d(x[idy], y[idy], bins=nbins, cmap=usecmap)
+
+        elif(cutx is not None and cutx is not None):
+            x, y = x[idx], y[idx]
+            if(fLogNorm):
+                plt.hist2d(x[idy], y[idy], bins=nbins, norm=LogNorm(), cmap=usecmap)
+            else:
+                plt.hist2d(x[idy], y[idy], bins=nbins, cmap=usecmap)
+    
+        else:
+            if(fLogNorm):
+                plt.hist2d(x[0:idx_stop], y[0:idx_stop], bins=nbins, norm=LogNorm(), cmap="jet")
+            else:
+                plt.hist2d(x[0:idx_stop], y[0:idx_stop], bins=nbins, cmap="jet")
+            
+
+        plt.colorbar(label=r"$N_{Entries}$")
+    
+        plt.title(labels[0])
+        plt.xlabel(labels[1])
+        plt.ylabel(labels[2])
+
+        basename = f"2DHist-{picname}.png"
+        if(odir is not None):
+            basename = odir+basename        
+
+        plt.savefig(basename)
+        plt.close()
+
 
 
     def plot_2dim(self, nuarray, parlist, title, axlabels, plotname):
@@ -132,6 +268,111 @@ class myPlotter:
     
         plt.plot()
         fig.savefig("pixelMap-"+plotname+".png")
+
+    def plotMatrix(self,
+                    nuarray, # numpy array (should be SQUARE)
+                    picname, # string
+                    outdir=None, # string 
+                    figtype=None, # string
+                    plotMarker=None, # list
+                    info=None,      #string, separated by ":"
+                    infopos=None,  # list with 2 elements -> [x_start,y_start] 
+                    figsize=None,  # tuple (i,j)
+                    cmap=None,    # string
+                    cbarname=None, # string
+                    labels=None, # list of strings [str,str,str]
+                    geomshapes=None, # list of matplotlib patches
+                    fLognorm=False, 
+                    fGrid=False,
+                    fDebug=False):  
+        
+        if(fDebug):
+            print(f"[plotMatrix]--> {picname} ({len(nuarray)})")
+     
+        if(np.sum(nuarray)==0):
+            print(f"[ERROR::EMPTY_DATA] {picname} matrix all zeros!")
+            return 0
+    
+        # ---- matrix 2d hist ----
+        fig, ax  = None, None
+        if(figsize is not None):
+            fig, ax = plt.subplots(figsize=figsize)
+        else:
+            fig, ax = plt.subplots(figsize=(8,7))
+        cax = fig.add_axes([0.86,0.1,0.05,0.8])
+        # ---------------------------------
+
+        ms = None
+            
+        deftitle, deflabelx, deflabely = "Matrix", "x, [pixel]", "y, [pixel]"
+        
+        defcmap = 'jet'
+        if(cmap is not None):
+            defcmap = cmap
+        
+        defcbarname = 'TOT'
+
+        if(fLognorm):
+            #ms = ax.matshow(nuarray.T, cmap=defcmap, norm=LogNorm(vmin=1,vmax=np.nanmax(nuarray)))
+            ms = ax.matshow(nuarray, cmap=defcmap, norm=LogNorm(vmin=1,vmax=np.nanmax(nuarray)))
+        else:
+            #ms = ax.matshow(nuarray.T, cmap=defcmap)
+            ms = ax.matshow(nuarray, cmap=defcmap)
+            ax.set_title("Pixel occupancy (Beam profile)")
+        if(cbarname is not None):
+            fig.colorbar(ms,cax=cax,orientation='vertical',label=cbarname)
+        else:
+            fig.colorbar(ms,cax=cax,orientation='vertical',label=defcbarname)
+
+        if(labels is not None):
+            ax.set_title(labels[0])
+            ax.set_xlabel(labels[1])
+            ax.set_ylabel(labels[2])
+        else:
+            ax.set_title(deftitle)
+            ax.set_xlabel(defxlabel)
+            ax.set_ylabel(defylabel)
+        if(fGrid):
+            ax.grid(c='black', ls=':',lw=0.4)
+            
+        startx, starty = -90, 123
+        if(infopos is not None):
+            startx, starty = infopos[0],infopos[1]
+
+        if(info is not None):
+            comments = info.split(":")
+            iline = 0
+            hspace = 8
+            for com in comments:
+                ax.text(startx, starty+iline*hspace, com, fontsize=9,color='black' )    
+                iline+=1
+        if(plotMarker is not None):
+            markx = plotMarker[0]
+            marky = plotMarker[1]
+            ax.scatter([markx],[marky],c='red', marker='+',s=80)
+        if(geomshapes is not None):
+            for shape in geomshapes:    
+                ax.add_patch(shape)
+    
+        ax.invert_yaxis()
+        ax.set_xlim([0,256])
+        ax.set_ylim([0,256])
+
+        basename = f"MATRIX-{picname}."
+        pictype = None
+        if(figtype is not None):
+            pictype = figtype
+        else:
+            pictype = "png"
+
+        if(outdir is not None):
+            basename = outdir+basename+pictype
+
+        fig.savefig(f"{basename}")
+      
+        plt.close()
+
+
 
 class myUtils:
 

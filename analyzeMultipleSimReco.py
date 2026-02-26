@@ -272,6 +272,15 @@ def checkNANTheta(theta):
     else:
         return theta
 
+
+def safe_call(func, *args, **kwargs):
+    try:
+        return func(*args, **kwargs)
+    except Exception as ex:
+        print(f"{OUT_RED}[ERROR]: {ex}")
+    else:
+        return 0
+
 def checkRateOrder(rate):
 
     number = rate
@@ -519,6 +528,8 @@ def simpleScatter(xdata, ydata, labels, picname, odir):
     plt.title(labels[0])
     plt.grid(which='both')
     #plt.legend(loc='upper right')
+    if("GHOSTS" in picname):
+        plt.yscale('log')
     plt.savefig(f"{odir}/1D-SCAT-{picname}.png")
     plt.close()
 
@@ -923,6 +934,37 @@ def simpleHist(nuarray, nbins, minbin, maxbin, labels, picname, odir, debug, fit
     if(debug):
         print(f"Got {datasize} events selected for figure {picname}")
 
+    residual_evt = 0
+    cutoff = 0
+    if("densityRMS" in picname):
+        cutoff = 5000
+    elif("tmp_excent" in picname):
+        cutoff = 20
+    elif("tmp_hits" in picname):
+        cutoff = 2000
+    elif("tmp_sumTOT" in picname):
+        cutoff = 30000
+    else:
+        cutoff = 20e3
+
+    if("GHOSTS" in picname):
+       if("tmp_sumTOT" in picname):
+            cutoff = 4000
+       if("tmp_hits" in picname):
+            cutoff = 100
+   
+
+    goodval = np.where(nuarray<=cutoff) 
+    residual_evt = len(np.where(nuarray>cutoff))
+    if(debug):
+        print(f"[simpleHist]-->{picname}-->{labels[0]}: cutting away {residual_evt} events above {cutoff}")
+
+    nuarray = nuarray[goodval]
+
+    if(residual_evt>0):
+        minbin = 0
+        maxbin = cutoff
+
     counts, bin_edges = np.histogram(nuarray, bins=nbins, range=(minbin,maxbin))
 
     Q, U = None, None
@@ -1043,6 +1085,8 @@ def simpleHist(nuarray, nbins, minbin, maxbin, labels, picname, odir, debug, fit
         hist_comment += r"$\Sigma(Entries)$="+f"{sum_entries:.2f}\n"
         hist_comment += f"Mean={mean_entries:.2f}\n"
         hist_comment += r"$\sigma$="+f"{stdev_entries:.2f}"
+        if(residual_evt>0):
+            hist_comment += "\n"+r"$N_{Overflow}=$"+f"{residual_evt}"
 
         plt.text(xmax*0.8,maxy*0.95, hist_comment)
 
@@ -1088,14 +1132,10 @@ def plot2Dhist(x,y, labels, picname, odir, debug):
 
     plt.figure(figsize=(8,6))
 
-    #if(nentries_x == nentries_y):
-    #    plt.hist2d(x, y, bins=100, norm=LogNorm(), cmap="jet")
-    #    print("option [A]")
     if("Theta" in picname or "theta" in labels[0]):
         idx = np.where(y>-999)
         plt.hist2d(x[idx], y[idx], bins=100, norm=LogNorm(), cmap="jet")
         #print("option [B]")
-    #elif("ToA Mean" in labels[0] or "TOAMean" in picname):
     elif("AbsPointY" in picname and "sumTOT" in picname):
         idx = np.where(x>-1)
         if(debug):
@@ -1110,19 +1150,37 @@ def plot2Dhist(x,y, labels, picname, odir, debug):
         plt.hist2d(x[idx], y[idx], bins=100, norm=LogNorm(), cmap="jet")
         #print("option [D]")
     elif("ToA RMS" in labels[0]):
-        idx = np.where(y<30)
+        toa_cut = None
+        if("GHOSTS" in picname):
+            toa_cut = 40000
+        else:
+            toa_cut = 30
+        idx = np.where(y<toa_cut)
         plt.hist2d(x[idx], y[idx], bins=100, norm=LogNorm(), cmap="jet")
         #print("option [E]")
     elif("ToA Length" in labels[0]):
-        idx = np.where(y<140)
+        toa_cut = None
+        if("GHOSTS" in picname):
+            toa_cut = 40000
+        else:
+            toa_cut = 140
+        idx = np.where(y<toa_cut)
         plt.hist2d(x[idx], y[idx], bins=100, norm=LogNorm(), cmap="jet") 
         #print("option [F]")
-    #elif("angle" in labels[0] or "Ang" in picname):
     elif("weightX-SecAng" in picname or "weightY-SecAng" in picname):
         idx = np.where(y<10)
         plt.hist2d(x[idx], y[idx], bins=100, norm=LogNorm(), cmap="jet") 
         #print("option [G]")
+    elif("Epsilon-Length" in picname):
+        idx = np.where(x<50)
+        plt.hist2d(x[idx], y[idx], bins=100, norm=LogNorm(), cmap="jet") 
+        #print("option [G]")
+    elif("Hits-vs-Epsilon" in picname):
+        idy = np.where(y<50)
+        plt.hist2d(x[idy], y[idy], bins=100, norm=LogNorm(), cmap="jet") 
+        #print("option [G]")
     else:
+        #plt.hist2d(x[0:idx_stop], y[0:idx_stop], bins=100, norm=LogNorm(), cmap="jet")
         plt.hist2d(x[0:idx_stop], y[0:idx_stop], bins=100, norm=LogNorm(), cmap="jet")
         #print("option [else]")
     plt.colorbar(label=r"$N_{Entries}$")
@@ -1200,8 +1258,7 @@ def plotDbscan(index, dblabels, ievent, nfound, odir):
     plt.colorbar(label='Cluster Label')
     plt.savefig(f"{odir}/DBSCAN-{ievent}.png")
 
-#def plot2dEvent(nuarray, info, picname, odir, plotMarker=None):
-def plot2dEvent(nuarray, info, picname, odir, figtype=None, plotMarker=None):  
+def plot2dEvent(nuarray, info, picname, odir, debug, figtype=None, plotMarker=None):  
     
     if(debug):
         print(f"{OUT_YELLOW} [plot2dEvent]--> {picname} ({len(nuarray)}) {OUT_RST}")
@@ -1465,16 +1522,17 @@ def getMatrixProfile(matrix):
 #####################################################################
 
 parser = ap.ArgumentParser()
-parser.add_argument("-n", "--name", type=str, default="TEST")
-parser.add_argument("-d", "--dir", type=str, default=None)
-parser.add_argument("-f", "--files", nargs="+")
-parser.add_argument("--debug", action='store_true')
-parser.add_argument("--timing", action='store_true')
-parser.add_argument("--beamscan", action='store_true')
-parser.add_argument("--plotevents", action='store_true')
-parser.add_argument("--combinedTOT", action='store_true')
-parser.add_argument("--stokes", action='store_true')
-parser.add_argument("--plotroot", action='store_true')
+parser.add_argument("-n", "--name", type=str, default="TEST", help="name for plots (suffix)")
+parser.add_argument("-d", "--dir", type=str, default=None, help="Custom directory name")
+parser.add_argument("-f", "--files", nargs="+", help="list of files ala ~/TPA/reco-weighted*\nCan be single file.")
+parser.add_argument("--debug", action='store_true', help="Enable debug output")
+parser.add_argument("--nocuts", action='store_true', help="Disable all cuts")
+parser.add_argument("--timing", action='store_true', help="PLot Timinig-related histos")
+parser.add_argument("--beamscan", action='store_true', help="Apply to Beam scan data")
+parser.add_argument("--plotevents", action='store_true', help="Plot Individual events")
+parser.add_argument("--combinedTOT", action='store_true', help="Plopt combined sumTOT plot for all data sets")
+parser.add_argument("--stokes", action='store_true', help="Plot Stokes parameter realted data")
+parser.add_argument("--plotroot", action='store_true', help="Plot ROOT histograms")
 args = parser.parse_args()
 
 plotname = args.name
@@ -1495,7 +1553,6 @@ fancytext = ["Resolving Input:",
 makeFancySection(fancytext+recofiles, color=OUT_CYAN_BGR)
 
 print("\n")
-
 outdir = ""
 if(custom_directory is not None):
     outdir += custom_directory
@@ -1543,7 +1600,7 @@ tmp_BGRangles = []
 tmp_theta = []
 theta_secondstage = None
 
-tmp_evtArea = []
+#tmp_evtArea = []
 
 # defining lists for rejected events
 
@@ -1600,6 +1657,7 @@ glob_absorption_points = np.zeros((256,256),dtype=int)
 ####################################################
 # flags for data here:
 hasTheta = False
+fNocuts = False
 fTiming = False
 fCharge = False
 fConverted = False
@@ -1608,6 +1666,7 @@ fLongData = False
 ####################################################
 # flags to enable certain plots
 fBeamScan = args.beamscan
+fNocuts = args.nocuts
 fPlotSingleEvents = args.plotevents
 fPlotROOT = args.plotroot
 fPlotStokes = args.stokes
@@ -1615,14 +1674,22 @@ fPlotTiming = args.timing
 fPlotCombinedTOT = args.combinedTOT
 # ----
 fPlotGlobalSumTOT = False
-fPlotGlobalAngles = False
+fPlotGlobalAngles = True
 fPlotGlobalCenters = True
 fPlotGlobalStokes = True
 fPlotGlobalLineScan = False
 
+if(len(recofiles)==1):
+    fPlotGlobalSumTOT = False
+    fPlotGlobalAngles = False
+    fPlotGlobalCenters = False
+    fPlotGlobalStokes = False
+    fPlotGlobalLineScan = False
+
 print("Flag Status:")
 
 flagbox = [
+    f"NoCuts = {fNocuts}",
     f"BeamScan = {fBeamScan}",
     f"PlotSingleEvents = {fPlotSingleEvents}",
     f"PlotROOT = {fPlotROOT}",
@@ -1919,9 +1986,14 @@ for file in recofiles:
             freport.flush()
 
             absorp_x, absorp_y = None, None
+
+            ConvX.clear()
+            ConvY.clear()
+
             if(debug):
                 print(f"Deviation in absorption x and y are:\n{OUT_BLUE} sigma_x={abs_stdx:.4f}, sigma_y={abs_stdy:.4f} {OUT_RST}")
     
+
         #exit(0)
         ntotal = ToT.shape[0]
         freport.write(f"\nN_clusters = {ntotal}")
@@ -1934,8 +2006,168 @@ for file in recofiles:
         # global cuts fro soem parameters
         gMaxHits, gMinHits = 25, 5000
 
-        for event in ToT: 
+        # checks/cuts:
     
+        Rx0,Ry0 = None, None
+        Rcut = abs_stdx if abs_stdx<=abs_stdy else abs_stdy
+        minSumTOT, maxSumTOT = 100, 10000
+        minHits, maxHits = 25, 1000
+        minExcent, maxExcent = 0, 15 #1.5, 15
+        maxLength = 5          
+ 
+        maxToaLen = 50
+        maxToaRms = 10
+        maxToaMean = 100
+
+        if("GHOSTS" in file):
+            maxToaLen = 1e6
+            maxToaRms = 1e3
+            maxToaMean = 1e5
+
+        #checking data based on reconstructed angle
+        minPhi, maxPhi = 0.35, 0.69
+
+        # weighted center boarder restriction
+        wx_min, wx_max = 3, 252
+        wy_min, wy_max = 3, 252
+
+        if("DB" in file):                    
+            Rcut = Rcut*2
+            if("120Hz" in file):
+                Rx0, Ry0 = 127.0, 145.0
+                minSumTOT, maxSumTOT = 3900, 6700
+            if("1260Hz" in file):
+                minSumTOT, maxSumTOT = 3500, 6100
+                if("-0deg" in file):
+                    Rx0, Ry0 = 127.94, 151.76 
+                elif("-30deg" in file):
+                    Rx0, Ry0 = 82.18, 96.11 
+                elif("-60deg" in file):
+                    Rx0, Ry0 = 157.24, 153.27
+                else:
+                    Rx0, Ry0 = 82.82, 167.07  
+            elif("15100Hz" in file):
+                Rcut = Rcut*0.8 # common
+                minSumTOT, maxSumTOT = 2500, 5600
+                if("-0deg" in file):
+                    Rx0, Ry0 = 128.62, 149.27 
+                elif("-30deg" in file):
+                    Rcut = Rcut*0.8
+                    Rx0, Ry0 = 83.92, 92.29 
+                elif("-60deg" in file):
+                    Rx0, Ry0 = 154.79, 153.23 
+                else:
+                    Rx0, Ry0 = 81.76, 166.46
+            elif("153000Hz" in file):
+                if("-0deg" in file):
+                    Rx0, Ry0 = 129.0, 148.0
+                elif("-30deg" in file):
+                    Rcut = Rcut*0.75
+                    Rx0, Ry0 = 82.0, 92.0 
+                elif("-60deg" in file):
+                    Rcut = Rcut*0.6
+                    Rx0, Ry0 = 159.0, 153.0 
+                else: 
+                    Rcut = Rcut*0.5
+                    Rx0, Ry0 = 80.0, 175.0
+            elif("1490000Hz" in file): # have only one for [0 deg]
+                Rcut = Rcut*3
+                Rx0, Ry0 = abs_meanx, abs_meany
+                maxLength = 3.0
+                maxSumTOT = 2200    
+                minHits, maxHits = 10, 70
+            else:
+                Rx0, Ry0 = abs_meanx, abs_meany
+        elif("MP" in file):
+            if("MP2" in file or
+               "MP1" in file or
+                "MP3" in file or 
+                "MP4" in file): # 0 deg
+                Rx0, Ry0 = 105.0, 102.28 
+                Rcut = abs_stdx*0.75
+            elif("MP5" in file): # 90 deg
+                Rx0, Ry0 = 107.0, 78.13 
+                Rcut = abs_stdx*0.75
+            elif("MP6" in file): # 60 deg
+                Rx0, Ry0 = 122.84, 78.38 
+                Rcut = abs_stdx*0.75
+            elif("MP7" in file): # 30 deg
+                Rx0, Ry0 = 125.0, 95.0
+                Rcut = abs_stdx*0.75
+            elif("MP-" in file and "400Vcm" in file):# drift field 400 Vcm
+                Rcut = abs_stdx*0.9
+                Rx0, Ry0 = 105.38, 112.95
+            elif("MP-" in file and "450Vcm" in file):# 450 Vcm
+                Rcut = abs_stdx*0.9
+                Rx0, Ry0 = 105.38, 112.95
+            elif("MP-" in file and "500Vcm" in file):# 500 Vcm
+                Rcut = abs_stdx*0.9
+                Rx0, Ry0 = 105.38, 112.95
+            elif("pre-MP-" in file and "18-36-37" in file):
+                Rcut = abs_stdx*3 if abs_stdx >= abs_stdy else abs_stdy*3
+                Rx0, Ry0 = 107.0, 105.41
+            else:
+                Rx0, Ry0 = abs_meanx, abs_meany
+        elif("CP" in file):
+            Rcut = abs_stdx*2
+            if("CP0" in file):
+                minSumTOT, maxSumTOT = 2300, 5600 
+                minHits, maxHits = 80, 150 
+                Rx0, Ry0 = 123.50, 132.44  
+            elif("CP2p5" in file):
+                minSumTOT, maxSumTOT = 2300, 5800 
+                minHits, maxHits = 75, 150 
+                Rx0, Ry0 = 123.68, 132.51  
+            elif("CP1" in file): #  0 deg
+                minSumTOT, maxSumTOT = 450, 3200
+                minHits, maxHits = 20, 90
+                Rx0, Ry0 = 118.71, 137.28
+            elif("CP3" in file): # 30 deg
+                minSumTOT, maxSumTOT = 1950, 5150
+                minHits, maxHits = 60,160
+                Rx0, Ry0 = 125.44, 126.32 
+            elif("CP4" in file): # 60 deg
+                minSumTOT, maxSumTOT = 1950, 5300
+                minHits, maxHits = 60, 160
+                Rx0, Ry0 = 136.16, 135.11
+            elif("CP5" in file): # 90 deg
+                Rcut = Rcut*0.25
+                minSumTOT, maxSumTOT = 2250, 5390
+                minHits, maxHits = 70, 160
+                Rx0, Ry0 = 109.21, 80.95 
+            elif("CP6" in file): # 0deg, 11.950 keV ok rate 
+                minSumTOT, maxSumTOT = 2600, 6200 
+                minHits, maxHits = 85, 170 
+                Rx0, Ry0 = 117.64, 128.96
+            elif("CP7" in file): # 0deg, 11.950 keV rate++
+                Rx0, Ry0 = 115.59, 126.72 
+            else:
+                Rx0, Ry0 = abs_meanx, abs_meany
+
+        elif("gainVar" in file):
+            Rx0, Ry0 = abs_meanx, abs_meany
+            Rcut = abs_stdy*2
+        elif("ROME" in file or "BeamScan-bottom-Vanode" in file):
+            minSumTOT, maxSumTOT = 100, 32000
+        else:
+            Rx0, Ry0 = abs_meanx, abs_meany
+
+        if("SIM-TPX3" in file):
+            Rcut = Rcut*3
+
+        # defining flags to enable/disable them in single call in the event loop
+
+        goodXY, goodConvXY = True, True
+        goodLength, goodSumTOT, goodHits, goodExcent, = True, True, True, True
+        goodTOA_len, goodTOA_rms, goodTOA_mean = True, True, True
+
+        # BEGINNING EVENT LOOP
+        for event in ToT: 
+
+            if("after-0deg-1p46MHz" in file and EVENTNR[ievent]>245000):
+                print("BREAKING loop!")
+                break
+
             isumElec = 0
             if(fCharge):
                 isumElec = np.sum(electrons[ievent])
@@ -1972,177 +2204,6 @@ for file in recofiles:
                     np.add.at(matrixTotal, (xpos,ypos), 1)
                     np.add.at(matrixTotal_TOT, (xpos,ypos), tot)
     
-            # checks/cuts:
-    
-            Rx0,Ry0 = None, None
-            Rcut = abs_stdx if abs_stdx<=abs_stdy else abs_stdy
-            minSumTOT, maxSumTOT = 100, 10000
-            minHits, maxHits = 25, 1000
-            minExcent, maxExcent = 0, 15 #1.5, 15
-            maxLength = 5          
- 
-            maxToaLen = 50
-            maxToaRms = 10
-            maxToaMean = 100
-
-            #checking data based on reconstructed angle
-            minPhi, maxPhi = 0.35, 0.69
-
-            # weighted center boarder restriction
-            wx_min, wx_max = 3, 252
-            wy_min, wy_max = 3, 252
-
-            if("DB" in file):                    
-                Rcut = Rcut*2
-                if("120Hz" in file):
-                    Rx0, Ry0 = 127.0, 145.0
-                    minSumTOT, maxSumTOT = 3900, 6700
-                if("1260Hz" in file):
-                    minSumTOT, maxSumTOT = 3500, 6100
-                    if("-0deg" in file):
-                        Rx0, Ry0 = 127.94, 151.76 
-                    elif("-30deg" in file):
-                        Rx0, Ry0 = 82.18, 96.11 
-                    elif("-60deg" in file):
-                        Rx0, Ry0 = 157.24, 153.27
-                    else:
-                        Rx0, Ry0 = 82.82, 167.07  
-                elif("15100Hz" in file):
-                    Rcut = Rcut*0.8 # common
-                    minSumTOT, maxSumTOT = 2500, 5600
-                    if("-0deg" in file):
-                        Rx0, Ry0 = 128.62, 149.27 
-                    elif("-30deg" in file):
-                        Rcut = Rcut*0.8
-                        Rx0, Ry0 = 83.92, 92.29 
-                    elif("-60deg" in file):
-                        Rx0, Ry0 = 154.79, 153.23 
-                    else:
-                        Rx0, Ry0 = 81.76, 166.46
-                elif("153000Hz" in file):
-                    if("-0deg" in file):
-                        Rx0, Ry0 = 129.0, 148.0
-                    elif("-30deg" in file):
-                        Rcut = Rcut*0.75
-                        Rx0, Ry0 = 82.0, 92.0 
-                    elif("-60deg" in file):
-                        Rcut = Rcut*0.6
-                        Rx0, Ry0 = 159.0, 153.0 
-                    else: 
-                        Rcut = Rcut*0.5
-                        Rx0, Ry0 = 80.0, 175.0
-                else:
-                    Rx0, Ry0 = abs_meanx, abs_meany
-            elif("MP" in file):
-                if("MP2" in file or
-                   "MP1" in file or
-                    "MP3" in file or 
-                    "MP4" in file): # 0 deg
-                    Rx0, Ry0 = 105.0, 102.28 
-                    Rcut = abs_stdx*0.75
-                elif("MP5" in file): # 90 deg
-                    Rx0, Ry0 = 107.0, 78.13 
-                    Rcut = abs_stdx*0.75
-                elif("MP6" in file): # 60 deg
-                    Rx0, Ry0 = 122.84, 78.38 
-                    Rcut = abs_stdx*0.75
-                elif("MP7" in file): # 30 deg
-                    Rx0, Ry0 = 125.0, 95.0
-                    Rcut = abs_stdx*0.75
-                elif("MP-" in file and "400Vcm" in file):# drift field 400 Vcm
-                    Rcut = abs_stdx*0.9
-                    Rx0, Ry0 = 105.38, 112.95
-                elif("MP-" in file and "450Vcm" in file):# 450 Vcm
-                    Rcut = abs_stdx*0.9
-                    Rx0, Ry0 = 105.38, 112.95
-                elif("MP-" in file and "500Vcm" in file):# 500 Vcm
-                    Rcut = abs_stdx*0.9
-                    Rx0, Ry0 = 105.38, 112.95
-                elif("pre-MP-" in file and "18-36-37" in file):
-                    Rcut = abs_stdx*0.9 if abs_stdx >= abs_stdy else abs_stdy*0.9
-                    Rx0, Ry0 = 107.0, 105.41
-                else:
-                    Rx0, Ry0 = abs_meanx, abs_meany
-            elif("CP" in file):
-                Rcut = abs_stdx*2
-                if("CP0" in file):
-                    minSumTOT, maxSumTOT = 2300, 5600 
-                    minHits, maxHits = 80, 150 
-                    Rx0, Ry0 = 123.50, 132.44  
-                elif("CP2p5" in file):
-                    minSumTOT, maxSumTOT = 2300, 5800 
-                    minHits, maxHits = 75, 150 
-                    Rx0, Ry0 = 123.68, 132.51  
-                elif("CP1" in file): #  0 deg
-                    minSumTOT, maxSumTOT = 450, 3200
-                    minHits, maxHits = 20, 90
-                    Rx0, Ry0 = 118.71, 137.28
-                elif("CP3" in file): # 30 deg
-                    minSumTOT, maxSumTOT = 1950, 5150
-                    minHits, maxHits = 60,160
-                    Rx0, Ry0 = 125.44, 126.32 
-                elif("CP4" in file): # 60 deg
-                    minSumTOT, maxSumTOT = 1950, 5300
-                    minHits, maxHits = 60, 160
-                    Rx0, Ry0 = 136.16, 135.11
-                elif("CP5" in file): # 90 deg
-                    minSumTOT, maxSumTOT = 2250, 5390
-                    minHits, maxHits = 70, 160
-                    Rx0, Ry0 = 109.21, 80.95 
-                elif("CP6" in file): # 0deg, 11.950 keV ok rate 
-                    minSumTOT, maxSumTOT = 2600, 6200 
-                    minHits, maxHits = 85, 170 
-                    Rx0, Ry0 = 117.64, 128.96
-                elif("CP7" in file): # 0deg, 11.950 keV rate++
-                    Rx0, Ry0 = 115.59, 126.72 
-                else:
-                    Rx0, Ry0 = abs_meanx, abs_meany
-
-            elif("gainVar" in file):
-                Rx0, Ry0 = abs_meanx, abs_meany
-                Rcut = abs_stdy*2
-            elif("ROME" in file or "BeamScan-bottom-Vanode" in file):
-                minSumTOT, maxSumTOT = 100, 32000
-            else:
-                Rx0, Ry0 = abs_meanx, abs_meany
-
-            if("SIM-TPX3" in file):
-                Rcut = Rcut*3
-
-            goodConvXY = None
-            if("ROME" in file or "BeamScan-bottom-Vanode" in file):
-                goodConvXY = True if ((conversionX[ievent] >= wx_min) and 
-                                      (conversionX[ievent] <= wx_max) and 
-                                      (conversionY[ievent] >= wy_min) and 
-                                      (conversionY[ievent] <= wy_max)) else False
-            else:
-                goodConvXY = checkClusterPosition(Rx0, 
-                                                  Ry0,
-                                                  conversionX[ievent],
-                                                  conversionY[ievent],
-                                                  Rcut
-                                                  )  
-            # selecting only interesting events 
-            goodLength = True if (length[ievent]<=maxLength) else False
-            goodSumTOT = True if (sumTOT[ievent]>= minSumTOT and sumTOT[ievent]<=maxSumTOT) else False
-            goodHits = True if (hits[ievent]>=minHits and hits[ievent]<=maxHits) else False
-            goodExcent = True if (excent[ievent]>= minExcent and excent[ievent] < maxExcent) else False
-            #goodArea = True if (areaWL < 50) else False
-
-            # Cuts for Background run file!  
-            #goodLength = True if (length[ievent]<=6) else False
-            #goodSumTOT = True if (sumTOT[ievent]<=10000) else False
-            #goodHits = True if (hits[ievent]>=25 and hits[ievent]<1000) else False
-            #goodHits = True if (hits[ievent]<600) else False
-            #goodExcent = True if (excent[ievent] < 15) else False
-            #goodArea = True if (areaWL < 50) else False
-    
-            ## timing cuts
-            goodTOA_len = True if (toaLength[ievent]<=maxToaLen) else False
-            goodTOA_rms = True if (toaRMS[ievent]<=maxToaRms) else False
-            goodTOA_mean = True if (toaMean[ievent]<=maxToaMean) else False
-            ##goodTOA_skew = True if (toaSkew[ievent]<=) else False
-       
             sum_TOTX, sum_TOTY = 0,0
             for itot, ix, iy in zip(event, x[ievent], y[ievent]):
                 sum_TOTX += itot*ix
@@ -2154,19 +2215,39 @@ for file in recofiles:
             np.add.at(weightCenters, (int(np.round(weightX)), int(np.round(weightY))), 1)
             if(fPlotGlobalCenters):
                 np.add.at(weightCenters_GLOB, (int(np.round(weightX)), int(np.round(weightY))), 1)
-     
-            # overall cut to exclude outer part of chip
-            #goodXY = True if (weightX>=3 and weightX <=252 and weightY >= 3 and weightY <= 252) else False
-            goodXY = True if (weightX >= wx_min and weightX <= wx_max and weightY >= wy_min and weightY <= wy_max) else False
-               
-            pol_angle = None
+            
+            if(not fNocuts):               
+                if("ROME" in file or fBeamScan):
+                    goodConvXY = True if ((conversionX[ievent] >= wx_min) and 
+                                          (conversionX[ievent] <= wx_max) and 
+                                          (conversionY[ievent] >= wy_min) and 
+                                          (conversionY[ievent] <= wy_max)) else False
+                else:
+                    goodConvXY = checkClusterPosition(Rx0, 
+                                                      Ry0,
+                                                      conversionX[ievent],
+                                                      conversionY[ievent],
+                                                      Rcut)
+
+                # selecting only interesting events 
+                goodLength = True if (length[ievent]<=maxLength) else False
+                goodSumTOT = True if (sumTOT[ievent]>= minSumTOT and sumTOT[ievent]<=maxSumTOT) else False
+                goodHits = True if (hits[ievent]>=minHits and hits[ievent]<=maxHits) else False
+                goodExcent = True if (excent[ievent]>= minExcent and excent[ievent] < maxExcent) else False
+    
+                ## timing cuts
+                goodTOA_len = True if (toaLength[ievent]<=maxToaLen) else False
+                goodTOA_rms = True if (toaRMS[ievent]<=maxToaRms) else False
+                goodTOA_mean = True if (toaMean[ievent]<=maxToaMean) else False
+           
+                # overall cut to exclude outer part of chip and tracks
+                # with bragg peak at the chip edges
+                goodXY = True if (weightX >= wx_min and weightX <= wx_max and weightY >= wy_min and weightY <= wy_max) else False
+
             if (goodLength and 
-                #goodWidth and 
-                #goodArea and
-                #goodXY and 
+                goodXY and 
                 goodConvXY and 
                 #not goodConvXY and 
-                #goodRMSL and
                 goodSumTOT and 
                 goodHits and
                 goodTOA_mean and 
@@ -2183,7 +2264,7 @@ for file in recofiles:
                 if(hasTheta):
                     tmp_theta.append(checkNANTheta(theta_secondstage[ievent]))
     
-                tmp_densityRMS.append(checkNAN(densityRMS))
+                #tmp_densityRMS.append(checkNAN(densityRMS))
                 tmp_excent.append(checkNAN(excent[ievent]))
                 tmp_hits.append(checkNAN(hits[ievent]))
                 tmp_sumTOT.append(checkNAN(sumTOT[ievent]))
@@ -2196,7 +2277,7 @@ for file in recofiles:
                 tmp_width.append(checkNAN(width[ievent]))
                 tmp_RMST.append(checkNAN(RMS_T[ievent]))
                 tmp_RMSL.append(checkNAN(RMS_L[ievent]))
-                tmp_evtArea.append(areaWL)
+                #tmp_evtArea.append(areaWL)
 
                 if(fPlotGlobalSumTOT):
                     GLOB_sumTOT.append(checkNAN(sumTOT[ievent]))
@@ -2263,13 +2344,10 @@ for file in recofiles:
             if(fPlotSingleEvents and 
                (npics < 5 and
                #goodLength  and
-               #goodConvX and 
-               #goodConvY and 
                #not goodConvXY and 
                goodConvXY and 
-               #goodXY and
+               goodXY and
                goodSumTOT and
-               #density < 0 #and 
                #goodHits and
                goodExcent) or
                nhits > 10000 
@@ -2285,9 +2363,9 @@ for file in recofiles:
                     np.add.at(matrix, (k,l), m)               
      
                 if(fConverted):
-                    plot2dEvent(matrix, characs, f"cluster-{nfile}-{ievent}-{plotname}", outdir, [conversionX[ievent],conversionY[ievent]])
+                    plot2dEvent(matrix, characs, f"cluster-{nfile}-{ievent}-{plotname}", outdir, debug, [conversionX[ievent],conversionY[ievent]])
                 else:
-                    plot2dEvent(matrix, characs, f"cluster-{nfile}-{ievent}-{plotname}", outdir, [weightX,weightY])
+                    plot2dEvent(matrix, characs, f"cluster-{nfile}-{ievent}-{plotname}", outdir, debug, [weightX,weightY])
 
                 characs = None
                 matrix = np.zeros((256,256),dtype=np.uint16)
@@ -2333,41 +2411,42 @@ for file in recofiles:
     ifilename = file.split("/")[-1].split(".")[0]
     isuffix = clearString(ifilename, '-', '-', ommit)
 
-    fitAndPlotModulation(np.array(tmp_secondangles),
-                         100,
-                         -np.pi,
-                         np.pi,
-                         ["Reconstructed Angle Distribution (Pruned by XY position)", "Angle [radian]", r"$N_{Entries}$"],
-                         f"STOLEN-XpolSecondStage-CutOnPosition-{nfile}-{isuffix}",
-                         outdir,
-                         debug)
+    if(len(tmp_secondangles)>0):
+        fitAndPlotModulation(np.array(tmp_secondangles),
+                             100,
+                             -np.pi,
+                             np.pi,
+                             ["Reconstructed Angle Distribution (Pruned by XY position)", "Angle [radian]", r"$N_{Entries}$"],
+                             f"STOLEN-XpolSecondStage-CutOnPosition-{nfile}-{isuffix}",
+                             outdir,
+                             debug)
     tmp_secondangles.clear() 
 
-    fitAndPlotModulation(np.array(tmp_BGRangles),
-                         100,
-                         -np.pi,
-                         np.pi,
-                         ["Reconstructed Angle Distribution (Pruned by XY position)", "Angle [radian]", r"$N_{Entries}$"],
-                         f"STOLEN-XpolSecondStage-CutOnPosition-BGRangles-{nfile}-{isuffix}",
-                         outdir,
-                         debug)
+
+    if(len(tmp_BGRangles)>0):
+        fitAndPlotModulation(np.array(tmp_BGRangles),
+                             100,
+                             -np.pi,
+                             np.pi,
+                             ["Reconstructed Angle Distribution (Pruned by XY position)", "Angle [radian]", r"$N_{Entries}$"],
+                             f"STOLEN-XpolSecondStage-CutOnPosition-BGRangles-{nfile}-{isuffix}",
+                             outdir,
+                             debug)
     tmp_BGRangles.clear()    
 
-    plot2dEvent(matrixTotal, "", f"OCCUPANCY-total-run-{nfile}-{isuffix}", outdir)
-    plot2dEvent(matrixTotal_TOT, "", f"TOT-total-run-{nfile}-{isuffix}", outdir)
-    #plot2DProjectionXY(matrixTotal, ["Occupancy X projection", "X [pixel]", r"$N_{Entries}$","Occupancy Y projection", "Y [pixel]", r"$N_{Entries}$"], plotname, outdir)
-    #plot2dEvent(matrixTotal, "", f"OCCUPANCY-total-run-{nfile}-{isuffix}", outdir, figtype="pdf")
+    plot2dEvent(matrixTotal, "", f"OCCUPANCY-total-run-{nfile}-{isuffix}", outdir, debug)
+    plot2dEvent(matrixTotal_TOT, "", f"TOT-total-run-{nfile}-{isuffix}", outdir, debug)
 
     matrixTotal = np.zeros((256,256),dtype=np.uint16)
     matrixTotal_TOT = np.zeros((256,256),dtype=np.uint16)
     
-    plot2dEvent(weightCenters, "title:Weight Centers of All tracks", f"weight-centers-{nfile}-{isuffix}", outdir)
+    plot2dEvent(weightCenters, "title:Weight Centers of All tracks", f"weight-centers-{nfile}-{isuffix}", outdir, debug)
 
     if(fPlotGlobalLineScan):
         weight_plotdata = getMatrixProfile(weightCenters)
         weight_matrixList.append([weight_plotdata,f"{isuffix}"])
     if(np.sum(weightCenters_cut)>0):
-        plot2dEvent(weightCenters_cut, "title:Weight Centers of All tracks (CUT)", f"weight-centers-cut-{nfile}-{isuffix}", outdir)
+        plot2dEvent(weightCenters_cut, "title:Weight Centers of All tracks (CUT)", f"weight-centers-cut-{nfile}-{isuffix}", outdir, debug)
 
     weightCenters = np.zeros((256,256),dtype=int)
     weightCenters_cut = np.zeros((256,256),dtype=int)
@@ -2376,24 +2455,30 @@ for file in recofiles:
         if(fPlotGlobalLineScan):
             plotdata = getMatrixProfile(absorption_points_pruned)
             abs_matrixList.append([plotdata, f"{isuffix}"])
-        plot2dEvent(absorption_points_pruned, "title:Absorption Points Pruned", f"AbsPointsPruned-{nfile}-{isuffix}",outdir)
+        plot2dEvent(absorption_points_pruned, "title:Absorption Points Pruned", f"AbsPointsPruned-{nfile}-{isuffix}",outdir, debug)
 
     absorption_points = np.zeros((256,256),dtype=int)
     absorption_points_pruned = np.zeros((256,256),dtype=int)
     
     print("[MAIN]: Making Matrix plots")    
-    try:
-        plot2dEvent(matrix_cut, "title:Occupancy, Cut on Position", f"OCCUPANCY-CUT-ON-position-{nfile}-{isuffix}",outdir)
-    except:
-        print("Failed to plot matrix_cut")
-        pass
-    matrix_cut = np.zeros((256,256),dtype=int)
 
-    try:
-        plot2dEvent(cut_TOTMAP, "title:", f"TOT-map-cut-{nfile}-{isuffix}", outdir)
-    except:
-        print("Failed to plot cut_TOTMAP")
-        pass
+    # safe call wraps try:except block basically...
+    #
+    safe_call(plot2dEvent,
+              matrix_cut, 
+              "title:Occupancy, Cut on Position", 
+              f"OCCUPANCY-CUT-ON-position-{nfile}-{isuffix}",
+              outdir,
+              debug)
+
+    safe_call(plot2dEvent, 
+            cut_TOTMAP, 
+            "title:", 
+            f"TOT-map-cut-{nfile}-{isuffix}", 
+            outdir, 
+            debug)
+   
+    matrix_cut = np.zeros((256,256),dtype=int)
     cut_TOTMAP = np.zeros((256,256),dtype=int)
     
     # ---------- plotting parameters after cuts ----------------------
@@ -2403,56 +2488,88 @@ for file in recofiles:
         eventplot_title+=" (Every 100th Event)"
 
     simpleScatter(tmp_evtnr,tmp_sumTOT,[r"$\Sigma$(TOT) vs Event Number","EvtNr",r"$\Sigma$(TOT)"],f"sumTOT-vs-EventNumber-{nfile}-{isuffix}",outdir)
+    if("GHOSTS" in file):
+        if(fTiming):
+            simpleScatter(tmp_evtnr,tmp_toaMean,["Mean Cluster TOA vs Event Number","EvtNr",r"$\overline{TOA}$, [nCLK]"],f"TOAmean-vs-EventNumber-{nfile}-{isuffix}",outdir)
+            simpleScatter(tmp_evtnr,tmp_toaLength,["Cluster Length (TOA) vs Event Number","EvtNr","Length, [nCLK]"],f"TOAlength-vs-EventNumber-{nfile}-{isuffix}",outdir)
+            simpleScatter(tmp_evtnr,tmp_toaRMS,["Cluster RMS (TOA) vs Event Number","EvtNr",r"RMS(TOA), [nCLK]"],f"TOArms-vs-EventNumber-{nfile}-{isuffix}",outdir)
+        
+        simpleScatter(tmp_evtnr,tmp_sumTOT,[r"$\Sigma$(TOT) vs Event Number","EvtNr",r"$\Sigma$(TOT), [nCLK]"],f"sumTOT-vs-EventNumber-{nfile}-{isuffix}",outdir)        
 
-    try:
-        simpleHist(np.array(tmp_excent), 100, np.nanmin(tmp_excent), np.nanmax(tmp_excent), ["Excentricity","Excentricity","Events,[N]"], f"tmp_excent-{nfile}-{isuffix}", outdir, debug, yaxisscale='log') 
-    except Exception as ex:
-        print(f"[simpleHist] failed: {ex}")
-        pass    
-    try:
-        simpleHist(np.array(tmp_hits), 100, np.nanmin(tmp_hits), np.nanmax(tmp_hits), ["Hits per Cluster",r"$N_{hits}$","Events,[N]"], f"tmp_hits-{nfile}-{isuffix}", outdir, debug) 
-    except Exception as ex:
-        print(f"[simpleHist] failed: {ex}")
-        pass    
-    try:
-        simpleHist(np.array(tmp_sumTOT), 100, np.nanmin(tmp_sumTOT), np.nanmax(tmp_sumTOT), [r"$\Sigma$(TOT) per Cluster",r"$\Sigma$(TOT)","Events,[N]"], f"tmp_sumTOT-{nfile}-{isuffix}", outdir, debug) 
-    except Exception as ex:
-        print(f"[simpleHist] failed: {ex}")
-        pass    
-    try:
-        simpleHist(np.array(tmp_densityRMS), 100, np.nanmin(tmp_densityRMS), np.nanmax(tmp_densityRMS), ["Cluster Density RMS Ratios",r"$RMS_{T}/RMS_{L}$","Events,[N]"], f"tmp_densityRMS-{nfile}-{isuffix}", outdir, debug, yaxisscale='log') 
-    except Exception as ex:
-        print(f"[simpleHist] failed: {ex}")
-        pass    
-    #try:
-    #    simpleHist(np.array(tmp_densityWL), 100, np.nanmin(tmp_densityWL), np.nanmax(tmp_densityWL), ["Cluster Density Width/Length","width/length","Events,[N]"], f"tmp_densityWL-{nfile}-{isuffix}", outdir, yaxisscale='log') 
-    #except Exception as ex:
-    #    print(f"[simpleHist] failed: {ex}")
-    #    pass    
-    #try:
-    #    simpleHist(np.array(tmp_evtArea), 100, np.nanmin(tmp_evtArea), np.nanmax(tmp_evtArea), ["Cluster Area",r"$width \cdot length$","Events,[N]"], f"tmp_evtArea-{nfile}-{isuffix}", outdir, yaxisscale='log') 
-    #except Exception as ex:
-    #    print(f"[simpleHist] failed: {ex}")
-    #    pass    
+    safe_call(simpleHist, 
+            np.array(tmp_excent), 
+            100, 
+            np.nanmin(tmp_excent), 
+            np.nanmax(tmp_excent), 
+            ["Excentricity","Excentricity","Events,[N]"], 
+            f"tmp_excent-{nfile}-{isuffix}", 
+            outdir,
+            debug, 
+            yaxisscale='log') 
+    
+    safe_call(simpleHist,
+            np.array(tmp_hits), 
+            100, 
+            np.nanmin(tmp_hits), 
+            np.nanmax(tmp_hits), 
+            ["Hits per Cluster",r"$N_{hits}$","Events,[N]"], 
+            f"tmp_hits-{nfile}-{isuffix}", 
+            outdir, 
+            debug) 
+    safe_call(simpleHist,
+            np.array(tmp_sumTOT), 
+            100, 
+            np.nanmin(tmp_sumTOT), 
+            np.nanmax(tmp_sumTOT), 
+            [r"$\Sigma$(TOT) per Cluster",r"$\Sigma$(TOT)","Events,[N]"], 
+            f"tmp_sumTOT-{nfile}-{isuffix}", 
+            outdir, 
+            debug) 
+    
+    #safe_call(simpleHist, 
+    #         np.array(tmp_densityRMS),
+    #         100,
+    #         np.nanmin(tmp_densityRMS),
+    #         np.nanmax(tmp_densityRMS), 
+    #         ["Cluster Density RMS Ratios",r"$RMS_{T}/RMS_{L}$","Events,[N]"], 
+    #         f"tmp_densityRMS-{nfile}-{isuffix}", 
+    #         outdir, 
+    #         debug, 
+    #         yaxisscale='log') 
 
     if(hasTheta):
-        try:
-            simpleHist(np.array(tmp_theta), 100, -np.pi, np.pi, [r"Cluster $\theta$",r"$\theta$, [radian]","Events,[N]"], f"tmp_theta-{nfile}-{isuffix}", outdir, debug) 
-        except Exception as ex:
-            print(f"[simpleHist] failed: {ex}")
-            pass    
+        
+        safe_call(simpleHist,
+             np.array(tmp_theta),
+             100, 
+             -np.pi, 
+             np.pi, 
+             [r"Cluster $\theta$",r"$\theta$, [radian]","Events,[N]"], 
+             f"tmp_theta-{nfile}-{isuffix}", 
+             outdir, 
+             debug) 
    
     if(fCharge):
-        try:
-            simpleHist(np.array(tmp_sumElec), 100, np.nanmin(tmp_sumElec), np.nanmax(tmp_sumElec), ["Cluster Charge (electrons)",r"$\Sigma (e^{-})$,","Events,[N]"], f"tmp_sumElec-{nfile}-{isuffix}", outdir, debug) 
-        except Exception as ex:
-            print(f"[simpleHist] failed: {ex}")
-            pass    
-        try:
-            simpleHist(np.array(tmp_elecPerHit), 100, np.nanmin(tmp_elecPerHit), np.nanmax(tmp_elecPerHit), ["Electrons per Hit",r"$N_{e^{-}}/N_{Hits}$,","Events,[N]"], f"tmp_elecPerHit-{nfile}-{isuffix}", outdir, debug) 
-        except Exception as ex:
-            print(f"[simpleHist] failed: {ex}")
-            pass    
+ 
+        safe_call(simpleHist,
+            np.array(tmp_sumElec),
+            100, 
+            np.nanmin(tmp_sumElec), 
+            np.nanmax(tmp_sumElec), 
+            ["Cluster Charge (electrons)",r"$\Sigma (e^{-})$,","Events,[N]"], 
+            f"tmp_sumElec-{nfile}-{isuffix}", 
+            outdir, 
+            debug) 
+
+        safe_call(simpleHist, 
+            np.array(tmp_elecPerHit), 
+            100, 
+            np.nanmin(tmp_elecPerHit), 
+            np.nanmax(tmp_elecPerHit), 
+            ["Electrons per Hit",r"$N_{e^{-}}/N_{Hits}$,","Events,[N]"], 
+            f"tmp_elecPerHit-{nfile}-{isuffix}", 
+            outdir, 
+            debug) 
 
     if(fPlotROOT):
         print("[MAIN]: Making ROOT plots")    
@@ -2522,13 +2639,13 @@ for file in recofiles:
 
 
     print("[MAIN]: Making Python 2D hists")    
-    plot2Dhist(np.array(tmp_hits), np.array(tmp_densityRMS), [r"Cluster Hits Vs Cluster Density (RMS)", "Hits", r"$RMS_{T}/RMS_{L}$"], f"2D-DesityRMS-vs-Hits-{nfile}-{isuffix}", outdir, debug)
+    #plot2Dhist(np.array(tmp_hits), np.array(tmp_densityRMS), [r"Cluster Hits Vs Cluster Density (RMS)", "Hits", r"$RMS_{T}/RMS_{L}$"], f"2D-DesityRMS-vs-Hits-{nfile}-{isuffix}", outdir, debug)
     #plot2Dhist(np.array(tmp_hits), np.array(tmp_densityWL), [r"Cluster Hits Vs Cluster Density (WL)", "Hits", "width/length"], f"2D-DesityWL-vs-Hits-{nfile}-{isuffix}", outdir)
     plot2Dhist(np.array(tmp_hits), np.array(tmp_excent), [r"Cluster $\epsilon$ vs Hits", "Hits", r"$\epsilon$"], f"2D-Hits-vs-Epsilon-{nfile}-{isuffix}", outdir, debug)
     plot2Dhist(np.array(tmp_hits), np.array(tmp_sumTOT), [r"$\Sigma$(TOT) vs Hits", "Hits", r"$\Sigma$(TOT)"], f"2D-Hits-vs-sumTOT-{nfile}-{isuffix}", outdir, debug)
     plot2Dhist(np.array(tmp_sumTOT), np.array(tmp_length), [r"Cluster Length $\Sigma$(TOT)s", r"$\Sigma$(TOT)", "Cluster Length"], f"2D-sumTOT-vs-Length-{nfile}-{isuffix}", outdir, debug)
-    plot2Dhist(np.array(tmp_sumTOT), np.array(tmp_evtArea), [r"Cluster Area vs $\Sigma$(TOT)s", r"$\Sigma$(TOT)", r"Cluster ($width\cdot length$)"], f"2D-ClusterArea-vs-sumTOT-{nfile}-{isuffix}", outdir, debug)
-    plot2Dhist(np.array(tmp_sumTOT), np.array(tmp_densityRMS), [r"Cluster Density vs $\Sigma$(TOT)", r"$\Sigma$(TOT)", r"$RMS_{T}/RMS_{L}$"], f"2D-sumTOT-vs-density-{nfile}-{isuffix}", outdir, debug)
+    #plot2Dhist(np.array(tmp_sumTOT), np.array(tmp_evtArea), [r"Cluster Area vs $\Sigma$(TOT)s", r"$\Sigma$(TOT)", r"Cluster ($width\cdot length$)"], f"2D-ClusterArea-vs-sumTOT-{nfile}-{isuffix}", outdir, debug)
+    #plot2Dhist(np.array(tmp_sumTOT), np.array(tmp_densityRMS), [r"Cluster Density vs $\Sigma$(TOT)", r"$\Sigma$(TOT)", r"$RMS_{T}/RMS_{L}$"], f"2D-sumTOT-vs-density-{nfile}-{isuffix}", outdir, debug)
     plot2Dhist(np.array(tmp_excent), np.array(tmp_length), ["Cluster Length vs Cluster Epsilon", r"$\epsilon$", "Cluster Length"], f"2D-Epsilon-Length-{nfile}-{isuffix}", outdir, debug)
     #plot2Dhist(np.array(tmp_width), np.array(tmp_length), ["Cluster length vs Cluster width", "Cluster Width", "Cluster Length"], f"2D-Width-Length-{nfile}-{isuffix}", outdir)
     #plot2Dhist(np.array(tmp_RMSL), np.array(tmp_RMST), ["Transversal vs Longitudinal cluster RMS", r"$RMS_{L}$", r"$RMS_{T}$"], f"2D-RMSL-RMST-{nfile}-{isuffix}", outdir)
@@ -2543,18 +2660,18 @@ for file in recofiles:
         if(fPlotStokes): 
             print("[MAIN]: Plotting Stokes...")    
             # thhis one is mostly for MAgnetic peak data sets....
-            plot2dEvent(matrix_I, "title:Stokes I for individual Tracks in 64x64 map", f"STOKES-I-{isuffix}", outdir)
-            plot2dEvent(matrix_Q/matrix_I, "title:Stokes Q for individual Tracks in 64x64 map", f"STOKES-Q-{isuffix}", outdir)
-            plot2dEvent(matrix_U/matrix_I, "title:Stokes U for individual Tracks in 64x64 map", f"STOKES-U-{isuffix}", outdir)
+            plot2dEvent(matrix_I, "title:Stokes I for individual Tracks in 64x64 map", f"STOKES-I-{isuffix}", outdir, debug)
+            plot2dEvent(matrix_Q/matrix_I, "title:Stokes Q for individual Tracks in 64x64 map", f"STOKES-Q-{isuffix}", outdir,debug)
+            plot2dEvent(matrix_U/matrix_I, "title:Stokes U for individual Tracks in 64x64 map", f"STOKES-U-{isuffix}", outdir, debug)
            
             if(fPlotGlobalStokes):
                 glob_matrix_I += matrix_I
                 glob_matrix_Q += matrix_Q
                 glob_matrix_U += matrix_U
             # plotting stokes for weight centers
-            plot2dEvent(matrix_wI, "title:Stokes I for individual Weight Centers in 64x64 map", f"STOKES-I-weights-{isuffix}", outdir)
-            plot2dEvent(matrix_wQ/matrix_wI, "title:Stokes Q for individual Weight Centers in 64x64 map", f"STOKES-Q-weights-{isuffix}", outdir)
-            plot2dEvent(matrix_wU/matrix_wI, "title:Stokes U for individual Weight Centers in 64x64 map", f"STOKES-U-weights-{isuffix}", outdir)
+            plot2dEvent(matrix_wI, "title:Stokes I for individual Weight Centers in 64x64 map", f"STOKES-I-weights-{isuffix}", outdir,debug)
+            plot2dEvent(matrix_wQ/matrix_wI, "title:Stokes Q for individual Weight Centers in 64x64 map", f"STOKES-Q-weights-{isuffix}", outdir,debug)
+            plot2dEvent(matrix_wU/matrix_wI, "title:Stokes U for individual Weight Centers in 64x64 map", f"STOKES-U-weights-{isuffix}", outdir,debug)
 
             matrix_I = np.zeros((64,64),dtype=float)
             matrix_Q = np.zeros((64,64),dtype=float)
@@ -2620,9 +2737,9 @@ for file in recofiles:
     tmp_sumTOT.clear()
     tmp_excent.clear()
     tmp_hits.clear()
-    tmp_densityRMS.clear()
+    #tmp_densityRMS.clear()
     #tmp_densityWL.clear()
-    tmp_evtArea.clear()
+    #tmp_evtArea.clear()
     tmp_theta.clear()
     tmp_width.clear() 
     tmp_length.clear() 
@@ -2672,35 +2789,36 @@ if(fPlotCombinedTOT):
                     debug,   # enable print()
                     fNorm=True) # enabling normalized plotting 
 if(fPlotGlobalAngles):
-    fitAndPlotModulation(np.array(tmp_secondangles_glob),
-                         100,
-                         -np.pi,
-                         np.pi,
-                         ["Reconstructed Angle Distribution (Cut)", "Angle [radian]", r"$N_{Entries}$"],
-                         f"STOLEN-XpolSecondStage-CutOnPosition-GLOB",
-                         outdir,    
-                         debug)
+    if(len(tmp_secondangles_glob)>0):
+        fitAndPlotModulation(np.array(tmp_secondangles_glob),
+                             100,
+                             -np.pi,
+                             np.pi,
+                             ["Reconstructed Angle Distribution (Cut)", "Angle [radian]", r"$N_{Entries}$"],
+                             f"STOLEN-XpolSecondStage-CutOnPosition-GLOB",
+                             outdir,    
+                             debug)
     tmp_secondangles_glob.clear() 
-    
-    fitAndPlotModulation(np.array(tmp_BGRangles_glob),
-                         100,
-                         -np.pi,
-                         np.pi,
-                         ["Reconstructed Angle Distribution (Cut)", "Angle [radian]", r"$N_{Entries}$"],
-                         f"STOLEN-XpolSecondStage-CutOnPosition-BGRangles-GLOB",
-                         outdir,
-                         debug)
+    if(len(tmp_BGRangles_glob)>0): 
+        fitAndPlotModulation(np.array(tmp_BGRangles_glob),
+                             100,
+                             -np.pi,
+                             np.pi,
+                             ["Reconstructed Angle Distribution (Cut)", "Angle [radian]", r"$N_{Entries}$"],
+                             f"STOLEN-XpolSecondStage-CutOnPosition-BGRangles-GLOB",
+                             outdir,
+                             debug)
     tmp_BGRangles_glob.clear() 
 
-if(debug):
-    print(f"angles counted:\n{countangles.keys()}\n{countangles.values()}")
-    print(f"Have data for {nangles} angles")
 
 # checking here if i have only one type of angles or soemthing else
 # don't print fof a set of different angles
 # then the following global plots dont make sense
 
-fAbortGlobal = sum(val != 0 for val in countangles.values()) <= 1
+fAbortGlobal = sum(val != 0 for val in countangles.values()) > 1
+
+if(debug):
+    print(f"angles counted:\n{countangles.keys()}\n{countangles.values()}")
 
 if(fAbortGlobal):
     fPlotGlobalCenters = False
@@ -2709,16 +2827,16 @@ if(fAbortGlobal):
         print(f"Detecting run with data for multiple angle settings: Ommiting GLobal cummulative matrix plots")
 
 if(fPlotGlobalCenters):
-    plot2dEvent(weightCenters_GLOB, "title:Weight Centers of All tracks (GLOBAL)", f"weight-centers-GLOBAL-{isuffix}", outdir)
-    plot2dEvent(absorption_points_pruned_GLOB, "title:Absorption Points Pruned (GLOBAL)", f"AbsPointsPruned-GLOB-{isuffix}",outdir)
+    plot2dEvent(weightCenters_GLOB, "title:Weight Centers of All tracks (GLOBAL)", f"weight-centers-GLOBAL-{isuffix}", outdir, debug)
+    plot2dEvent(absorption_points_pruned_GLOB, "title:Absorption Points Pruned (GLOBAL)", f"AbsPointsPruned-GLOB-{isuffix}",outdir, debug)
     weightCenters_GLOB = None
 
 # plotting global I/Q/U parameter matrix 
 
 if(fPlotGlobalStokes):
-    plot2dEvent(glob_matrix_I, "title:Stokes I for individual Tracks in 64x64 map (All data sets)", f"GLOB-STOKES-I-{isuffix}", outdir)
-    plot2dEvent(glob_matrix_Q/glob_matrix_I, "title:Stokes Q for individual Tracks in 64x64 map (All data sets)", f"GLOB-STOKES-Q-{isuffix}", outdir)
-    plot2dEvent(glob_matrix_U/glob_matrix_I, "title:Stokes U for individual Tracks in 64x64 map (All data sets)", f"GLOB-STOKES-U-{isuffix}", outdir)
+    plot2dEvent(glob_matrix_I, "title:Stokes I for individual Tracks in 64x64 map (All data sets)", f"GLOB-STOKES-I-{isuffix}", outdir, debug)
+    plot2dEvent(glob_matrix_Q/glob_matrix_I, "title:Stokes Q for individual Tracks in 64x64 map (All data sets)", f"GLOB-STOKES-Q-{isuffix}", outdir, debug)
+    plot2dEvent(glob_matrix_U/glob_matrix_I, "title:Stokes U for individual Tracks in 64x64 map (All data sets)", f"GLOB-STOKES-U-{isuffix}", outdir, debug)
  
 # plotting some shite about HSCANs
 if(fPlotGlobalLineScan):

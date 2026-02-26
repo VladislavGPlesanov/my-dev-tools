@@ -522,6 +522,8 @@ negbin_mean, negbin_var = [], []
 negbin_mean_err, negbin_var_err = [], []
 
 Vgrid_list = []
+suffixes = []
+suflabels = []
 
 totHistList = []
 
@@ -566,10 +568,19 @@ for file in inputlist:
         basewords = None
         #Gettin voltage
         fname = str(inputlist[fcnt])
-        words = fname.split("-")
+        fname_pruned = fname.split("/")[-1]
+        words = fname_pruned.split("-")
+        anonolist = ['reco', 'weighted']
         #print(words)
-        Vgrid = int(words[len(words)-1][:-4])# removin V.h5 from voltage number
-        print(f"Found Vgrid={Vgrid} V")
+        isuff = None
+        if("GHOSTS" in file):
+            words[len(words)-1] = words[len(words)-1][:-3]
+            for ano in anonolist:
+                words.remove(ano)
+            isuff = " ".join(words)
+        else:
+            Vgrid = int(words[len(words)-1][:-4])# removin V.h5 from voltage number
+            print(f"Found Vgrid={Vgrid} V")
 
         ###############################################
         rawTOT = f.get_node(base_group_name+"ToT") 
@@ -593,11 +604,16 @@ for file in inputlist:
 
         hits_min = hits_mean - hits_sigma
         hits_max = hits_mean + hits_sigma
+        
+        icyc = 0
         for ts, h in zip(sumTOT, hits):
             if(h <= hits_max and h >= hits_min):
                 TOT.append(ts)
             #TOT.append(ts)
             HITS.append(h)
+            icyc+=1
+            if("1p46MHz" in file and icyc == 75000):
+                break
 
         nevt, cnt = len(x), 0
         
@@ -611,8 +627,14 @@ for file in inputlist:
         sumTOT = None
         hits = None
 
-        charge = np.concatenate(rawTOT) 
-        chpp_name = f"{str(Vgrid)}V-"+picname
+        charge = np.concatenate(rawTOT)
+        chpp_name = None
+        if("GHOSTS" in file):
+            reass_name = "-".join(words)
+            suflabels.append(reass_name)
+            chpp_name = f"{reass_name}-"+picname
+        else:
+            chpp_name = f"{str(Vgrid)}V-"+picname
         chargeperpixel(charge, chpp_name, False) 
 
     #print(f"--------------------DONE----------------------")
@@ -622,12 +644,18 @@ for file in inputlist:
     print(f"Accumulated: {len(HITS)} hits, {len(TOT)} sumTOT entries")   
     print("=============== FITTING TOT ================================")
     #peak_info = simpleHist(TOT, 100,0, 6000, [f"TOT per event (Vgrid={Vgrid}[V])", "TOT cycles", "N"], f"TOT-{Vgrid}-"+picname)
-    peak_info = simpleHist(TOT, 100, [f"TOT per event (Vgrid={Vgrid}[V])", "TOT cycles", "N"], f"TOT-{Vgrid}-"+picname)
+    if("GHOSTS" in file): 
+        peak_info = simpleHist(TOT, 100, [f"TOT per event ({isuff})", "TOT cycles", "N"], f"TOT-{isuff}-"+picname)
+    else:
+        peak_info = simpleHist(TOT, 100, [f"TOT per event (Vgrid={Vgrid}[V])", "TOT cycles", "N"], f"TOT-{Vgrid}-"+picname)
 
     print("=============== FITTING TOT (NegBinDist) ===================")
     #peak_info = simpleHist(TOT, 100,0, 6000, [f"TOT per event (Vgrid={Vgrid}[V])", "TOT cycles", "N"], f"TOT-{Vgrid}-"+picname)
     #gain_info = simpleGainPlot(TOT, 100, [f"TOT per event (Vgrid={Vgrid}[V])", "TOT cycles", "N"], f"TOT-{Vgrid}-"+picname)
-    gain_info = simpleGainPlot(np.array(pruned_tot), 100, [f"TOT per event (Vgrid={Vgrid}[V])", "TOT cycles", "N"], f"TOT-{Vgrid}-"+picname)
+    if("GHOSTS" in file):
+        gain_info = simpleGainPlot(np.array(pruned_tot), 100, [f"TOT per event ({isuff})", "TOT cycles", "N"], f"TOT-{isuff}-"+picname)
+    else:
+        gain_info = simpleGainPlot(np.array(pruned_tot), 100, [f"TOT per event (Vgrid={Vgrid}[V])", "TOT cycles", "N"], f"TOT-{Vgrid}-"+picname)
     #gain_info = simpleGainPlot(rawTOT, 100, [f"TOT per event (Vgrid={Vgrid}[V])", "TOT cycles", "N"], f"TOT-{Vgrid}-"+picname)
 
     #print("CHINAZES!")
@@ -635,12 +663,19 @@ for file in inputlist:
     
     print("=============== FITTING HITS ===============================")
     #hit_info = simpleHist(HITS, 50,0, 150, [f"Hits per event (Vgrid={Vgrid}[V])", r"$N_{HITS}$", "N"], f"HITS-{Vgrid}-"+picname)
-    hit_info = simpleHist(HITS, 100, [f"Hits per event (Vgrid={Vgrid}[V])", r"$N_{HITS}$", "N"], f"HITS-{Vgrid}-"+picname)
+    if("GHOSTS" in file):
+        hit_info = simpleHist(HITS, 100, [f"Hits per event ({isuff})", r"$N_{HITS}$", "N"], f"HITS-{isuff}-"+picname)
+    else:
+        hit_info = simpleHist(HITS, 100, [f"Hits per event (Vgrid={Vgrid}[V])", r"$N_{HITS}$", "N"], f"HITS-{Vgrid}-"+picname)
 
-    totHistList.append([TOT,Vgrid])
-    hitHistList.append([HITS,Vgrid])
-
-    Vgrid_list.append(Vgrid)
+    if("GHOSTS" in file):
+        totHistList.append([TOT,isuff])
+        hitHistList.append([HITS,isuff])
+        suffixes.append(isuff)
+    else:
+        totHistList.append([TOT,Vgrid])
+        hitHistList.append([HITS,Vgrid])
+        Vgrid_list.append(Vgrid)
 
     peak_amp.append(peak_info[0])
     peak_amp_err.append(peak_info[1])
@@ -670,10 +705,20 @@ for file in inputlist:
 
     fcnt+=1
 
+
+fSuffix = False
+if(len(suffixes)>0):
+    fSuffix = True
 print("======================================================")
 print("Hit peak positions per voltage")
-for vg, peak, sig in zip(Vgrid_list, hit_peak_mu, hit_peak_sigma):
-    print(f"{vg} -> {peak} +- {sig}")
+if(fSuffix):
+    print("Hit peak positions per data set")
+    for suf, peak, sig in zip(suffixes, hit_peak_mu, hit_peak_sigma):
+        print(f"{suf} -> {peak} +- {sig}")
+else:
+    print("Hit peak positions per voltage")
+    for vg, peak, sig in zip(Vgrid_list, hit_peak_mu, hit_peak_sigma):
+        print(f"{vg} -> {peak} +- {sig}")
 print("======================================================")
 cminbin = 0
 cmaxbin = 6000
@@ -687,7 +732,7 @@ for data in totHistList:
     #plt.hist(bin_edges[:-1], weights=counts, bins=101, range=(0,10000), align='left', histtype='stepfilled', alpha=0.2, label=f"{data[1]} [V]")
     plt.hist(bin_edges[:-1], weights=weights, bins=cnbins, range=(cminbin, cmaxbin), align='left', histtype='stepfilled', alpha=0.2, label=f"{data[1]} [V]")
     
-plt.title("Fe55 Energy Spectrum")
+plt.title("Energy Spectrum")
 plt.xlabel("TOT cycles (charge)")
 plt.ylabel(r"$N_{events}$")
 plt.legend(loc='upper right')
@@ -715,26 +760,39 @@ plt.grid(True)
 plt.savefig(f"HITS-Fe55-gainScan-Combined-{picname}.png")
 
 #============================================================
+xmin, xmax = None, None
 
-print(len(Vgrid_list))
+if(fSuffix):
+    print(len(Vgrid_list))
+else:
+    print(len(Vgrid_list))
+    xmin = int(Vgrid_list[0])-10
+    xmax = int(Vgrid_list[len(Vgrid_list)-1])+10
+
 print(len(peak_mu))
 print(len(peak_mu_err))
-
-xmin = int(Vgrid_list[0])-10
-xmax = int(Vgrid_list[len(Vgrid_list)-1])+10
 
 plt.figure(figsize=(8,8))
 
 fig, ax = plt.subplots()
 
-ax.errorbar(Vgrid_list, peak_mu, peak_mu_err, fmt='o', mfc='green', linewidth=2, capsize=6, label="Gauss means")
-ax.scatter(Vgrid_list, negbin_mean, marker='x', c='m', label="Neg.Bin.Dist. means")
+if(fSuffix):
+    ax.errorbar([int(i) for i in range(len(suffixes))], peak_mu, peak_mu_err, fmt='o', mfc='green', linewidth=2, capsize=6, label="Gauss means")
+    ax.scatter([int(i) for i in range(len(suffixes))], negbin_mean, marker='x', c='m', label="Neg.Bin.Dist. means")
+else:
+    ax.errorbar(Vgrid_list, peak_mu, peak_mu_err, fmt='o', mfc='green', linewidth=2, capsize=6, label="Gauss means")
+    ax.scatter(Vgrid_list, negbin_mean, marker='x', c='m', label="Neg.Bin.Dist. means")
 
-ax.set_title(r"GridPix3 - $^{55}$Fe - TOT peak position vs. $\mathrm{V}_{\mathrm{Grid}}$")
-ax.set_xlabel("Grid voltage, [V]")
+#ax.set_title(r"GridPix3 - $^{55}$Fe - TOT peak position vs. $\mathrm{V}_{\mathrm{Grid}}$")
+if(fSuffix):
+    ax.set_title(r"GridPix3 - TOT peak position for Different Data Sets$")
+    ax.set_xlabel("Data Set")
+else:
+    ax.set_title(r"GridPix3 - $^{55}$Fe - TOT peak position vs. $\mathrm{V}_{\mathrm{Grid}}$")
+    ax.set_xlabel("Grid voltage, [V]")
 ax.set_ylabel(r"Fit $\mu$, [$\Sigma$(TOT) per Event]")
-ax.set_xlim([xmin, xmax])
-#ax.set_ylim([13000, 28000])
+if(not fSuffix):
+    ax.set_xlim([xmin, xmax])
 ax.grid(True)
 plt.legend(loc='upper left')
 plt.savefig(f"GainCurve-{picname}.png",dpi=400)
@@ -744,13 +802,22 @@ plt.close()
 # combined hit histogram means of the fits
 plt.figure(figsize=(8,8))
 
-fig, ax = plt.subplots()
-
-ax.errorbar(Vgrid_list, hit_peak_mu, hit_peak_mu_err, fmt='o', mfc='red', linewidth=2, capsize=6)
-ax.set_title(r"GridPix3 - $^55$Fe - Hit peak position vs. $\mathrm{V}_{\mathrm{Grid}}$")
-ax.set_xlabel("Grid voltage, [V]")
+fig, ax = plt.subplots(figsize=(10,8))
+if(fSuffix):
+    ax.errorbar([int(i) for i in range(len(suffixes))], hit_peak_mu, hit_peak_mu_err, fmt='o', mfc='red', linewidth=2, capsize=6)
+    ax.set_title(r"GridPix3 - Hit peak position$")
+    indexes = [int(i) for i in range(len(suffixes))]
+    for su, idx in zip(suffixes, indexes):
+        ax.scatter([],[],color='white',label=f"{idx}: {su}")
+    ax.set_xlabel("Data Set")
+    ax.legend()
+else:
+    ax.errorbar(Vgrid_list, hit_peak_mu, hit_peak_mu_err, fmt='o', mfc='red', linewidth=2, capsize=6)
+    ax.set_title(r"GridPix3 - $^55$Fe - Hit peak position vs. $\mathrm{V}_{\mathrm{Grid}}$")
+    ax.set_xlabel("Grid voltage, [V]")
 ax.set_ylabel(r"Fit ($\mu$), [$\mathrm{N}_{\mathrm{Hits}}$]")
-ax.set_xlim([xmin, xmax])
+if(not fSuffix):
+    ax.set_xlim([xmin, xmax])
 #ax.set_ylim([13000, 28000])
 ax.grid(True)
 plt.savefig(f"HitsCurve-{picname}.png",dpi=400)
@@ -796,22 +863,31 @@ for mu in peak_mu:
 #print(len(Vgrid_list))
 #print(Vgrid_list)
 
-print("=============================================")
-for v, res, eres in zip(Vgrid_list,E_res,E_res_err):
-    print(f"Vgrid={v} | {res:.2f}% +- {eres:.2f}%")
-print("=============================================")
+if(fSuffix):
+    print("=============================================")
+    for suf, res, eres in zip(suffixes,E_res,E_res_err):
+        print(f"{suf} | {res:.2f}% +- {eres:.2f}%")
+    print("=============================================")
+else:
+    print("=============================================")
+    for v, res, eres in zip(Vgrid_list,E_res,E_res_err):
+        print(f"Vgrid={v} | {res:.2f}% +- {eres:.2f}%")
+    print("=============================================")
 
 plt.figure(figsize=(8,8))
 
 fig, ax = plt.subplots()
-
-ax.errorbar(Vgrid_list, E_res, E_res_err, fmt='o', linewidth=2, capsize=6)
-ax.set_xlabel("Grid voltage, [V]")
+if(fSuffix):
+    ax.errorbar([int(i) for i in range(len(suffixes))], E_res, E_res_err, fmt='o', linewidth=2, capsize=6)
+    ax.set_xlabel("Data Set")
+    ax.set_title("Energy Resolution")
+else:
+    ax.errorbar(Vgrid_list, E_res, E_res_err, fmt='o', linewidth=2, capsize=6)
+    ax.set_xlabel("Grid voltage, [V]")
+    ax.set_title("Energy resolution vs Grid voltage")
 ax.set_ylabel(f"{G_delta}E/E, [%]")
-ax.set_title("Energy resolution vs Grid voltage")
-
-#ax.set_ylim([0,20])
-ax.set_xlim([xmin, xmax])
+if(not fSuffix):
+    ax.set_xlim([xmin, xmax])
 plt.grid()
 plt.savefig(f"Energy_resolutions-{picname}.png")
 
