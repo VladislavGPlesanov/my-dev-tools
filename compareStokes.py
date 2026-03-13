@@ -18,12 +18,21 @@ AnalyzerQ_err, AnalyzerU_err = [0.03752109044786], [0.03509137717815376]
 PolarQ, PolarU = [0.9903],[-0.1391]
 PolarQ_err, PolarU_err = [0.02],[0.0129]
 
+# rerun of CPmain2H data with correlated uncertainty case, ~1e6 events
+PolarQ, PolarU = [0.9915],[-0.1304]
+PolarQ_err, PolarU_err = [0.0023],[0.0003]
+
 # Direct beam data 
 AnalDB_0_Q, AnalDB_0_Qerr = [0.978512314947401], [0.010527069843376625]
 AnalDB_0_U, AnalDB_0_Uerr = [0.005452992210846639], [0.009862157795284005]
 
-PolarDB_0_Q, PolarDB_0_Qerr = [0.9976], [0.0016]
-PolarDB_0_U, PolarDB_0_Uerr = [-0.0690], [0.0170]
+## unknown run
+#PolarDB_0_Q, PolarDB_0_Qerr = [0.9976], [0.0016]
+#PolarDB_0_U, PolarDB_0_Uerr = [-0.0690], [0.0170]
+
+# direct beam 15kHz, 0 degrees
+PolarDB_0_Q, PolarDB_0_Qerr = [0.9986], [0.0035]
+PolarDB_0_U, PolarDB_0_Uerr = [-0.0533], [0.0002]
 
 # Magnetic Peak data 
 # !!! fro now, WEEEERY preliminary data
@@ -36,8 +45,13 @@ AnalMP_U, AnalMP_Uerr = [-0.19042628692040245], [0.03860217416190682]
 #PolarMP_U, PolarMP_Uerr = [-0.1545], [0.0294]
 
 # from fit of MP-500Vcm +MP2 + MP3 + MP4
-PolarMP_Q, PolarMP_Qerr = [-0.9911],[0.0055]
-PolarMP_U, PolarMP_Uerr = [-0.1329], [0.0208]
+#PolarMP_Q, PolarMP_Qerr = [-0.9911],[0.0055]
+#PolarMP_U, PolarMP_Uerr = [-0.1329], [0.0208]
+
+# from fit of MP-500Vcm +MP2 + MP3 + MP4 - rerun with correlated uncertainties
+PolarMP_Q, PolarMP_Qerr = [-0.9904],[0.0066]
+PolarMP_U, PolarMP_Uerr = [-0.1380], [0.0009]
+
 
 ##################################################
 

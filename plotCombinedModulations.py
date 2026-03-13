@@ -3,40 +3,83 @@ import sys
 import matplotlib.pyplot as plt
 from matplotlib.gridspec import GridSpec
 import re
+import argparse as ap
 
-logfile = sys.argv[1]
-picname = sys.argv[2]
-xvalues = sys.argv[3]
-#piclabels = sys.argv[4]
 
+parser = ap.ArgumentParser()
+parser.add_argument("-p", "--picname", type=str, default="ALALA")
+parser.add_argument("-l","--logfile",type=str,default="")
+parser.add_argument("-x","--xval",type=str,default="")
+parser.add_argument("-t","--type",type=str.lower,
+                    choices=["rate","angles","gain","weights"],
+                    help="Enter type of run (angles,rate,weights,gain)",
+                    required=True)
+parser.add_argument("--single",action='store_true')
+parser.add_argument("--custom_title",type=str,default="")
+parser.add_argument("--custom_xlab",type=str,default="")
+parser.add_argument("--custom_ylab",type=str,default="")
+
+args = parser.parse_args()
+
+#logfile = sys.argv[1]
+#picname = sys.argv[2]
+#xvalues = sys.argv[3]
+
+logfile = args.logfile
+picname = args.picname
+xvalues = args.xval
+fSingle = args.single
+runtype = args.type
+cuTitle = args.custom_title
+cuXlabel = args.custom_xlab
+cuYlabel = args.custom_ylab
+
+fCustomData = False
+if(len(cuTitle)>0 and len(cuXlabel)>0 and len(cuYlabel)>0):
+    print("Custom data flag set...")
+    fCustomData = True
+    if(len(xvalues)==0):
+        print("Input from option -x / --xval is required!")
+        
 f=open(logfile,'r')
 
-xvalues = xvalues.split(",")
-xtype = xvalues[0]
-xdata = [float(i) for i in xvalues[1:]]
-print(f"xvalues:{xdata}, plotting {xtype}, where ith member is [{type(xdata[0])}]")
+xdata = None
+if(len(xvalues)>0):
+    xdata = [float(i) for i in xvalues.split(",")]
 
+datacheckstr = f"xvalues:{xdata}, plotting {runtype}"
+if(fCustomData):
+    datacheckstr+=f"[CUSTOM DATA]"
+print(f"{datacheckstr}")
 fRate, fAngles, fGain = False, False, False
 fweight = False
 
 voltages, rates = [], []
-weights  = []
+weights, angles  = [], []
 #weights = [0.2,0.4,0.6,0.8,1.0,1.2,1.4,1.6,1.8,2.0,2.2,2.4,2.6,2.8,3.0,3.2,3.4,3.6,3.8,4.0]
 
-if("rate" in xtype):
+if(runtype=="rate"):
     fRate = True
-if("angles" in xtype):
+if(runtype=="angles"):
     fAngles = True
-if("gain" in xtype):
+if(runtype=="gain"):
     fGain = True
-if("weights" in xtype):
+if(runtype=="weights"):
     fweight = True
 
-plotlabels = []
-if(not fRate and not fAngles and not fGain and not fweight):
-    labels = xtype.split(":")
-    for lab in labels:
-        plotlabels.append(re.sub("-"," ",lab))
+if(len(cuTitle)>0):
+    print("USing custom labels and data\nsetting other run type flags to [FALSE]")
+    fweight = False
+    fAngles = False
+    fGain = False
+    fRate = False
+
+#plotlabels = []
+##if(not fRate and not fAngles and not fGain and not fweight):
+#if(len(customlab)>0):
+#    labels = customlab.split(":")
+#    for lab in labels:
+#        plotlabels.append(re.sub("-"," ",lab))
 
 mu, muErr = [],[]
 muCut, muCutErr = [], []
@@ -55,6 +98,8 @@ Q, Qmod, Qerr, Qmoderr = [], [], [], []
 
 phi, phierr = [], []
 phiCut, phiCutErr = [], []
+
+isSimulation = []
 
 mu_cnt = 0
 muErr_cnt = 0
@@ -77,6 +122,12 @@ for line in f:
         recodata = line.split(":")[1].split(",")
         weights.append(float(recodata[-1]))
 
+    if("Current file:" in line):
+        if("SIM" in line.split(":")[1]):
+            isSimulation.append(1)
+        else:
+            isSimulation.append(0)
+
     if(fGain and "Current file:" in line):
         cutChar = -1
         fname = line.split(":")[1].split(".")[0]
@@ -95,6 +146,15 @@ for line in f:
             print(f"Cant' find rate in the file name {fname}!")
             exit(0)
         
+    if(fAngles and "Current file" in line):
+        fname = line.split(":")[1].split(".")[0]
+        if("deg" in fname):
+            iangle = fname.split("-")[-1][:-3] # getting xxxxHz and removing "Hz" part
+            angles.append(int(iangle))
+        else:
+            print(f"Cant' find rate in the file name {fname}!")
+            exit(0)
+ 
 
     if("N_clusters" in line):
         ndata.append(float(line.split("=")[1]))
@@ -182,6 +242,8 @@ if(fRate):
     xdata = rates
 if(fweight):
     xdata = weights
+if(fAngles):
+    xdata = angles
 
 print(f"ndata:\n{ndata}")
 print(f"ndatacut:\n{ndatacut}")
@@ -190,7 +252,8 @@ print(f"xdata:\n{xdata}")
 ############################################################
 # tryna plot things with second chisquare plot underneath
 ############################################################
-fig = plt.figure(figsize=(8,8))
+
+fig = plt.figure(figsize=(10,8))
 #gs = GridSpec(2,1, width_ratios=[2,1,0.2], height_ratios=[4,1], hspace=0.05, wspace=0.05)
 gs = GridSpec(3,1, width_ratios=[1], height_ratios=[3,1,1], hspace=0.02, wspace=0.05)
 ax_top = fig.add_subplot(gs[0,0])
@@ -209,8 +272,9 @@ if(fRate):
 if(fweight):
     ax_top.set_title("Modulation Factors vs Charge Weighting in Reconstruction")
 if(not fRate and not fAngles and not fGain and not fweight):
-    ax_top.set_title(plotlabels[1])
-    #ax_top.set_ylabel(plotlabels[3])
+    ax_top.set_title(f"Modulation Factors vs {cuTitle}")
+
+ax_top.set_ylim([0,max(xdata[0:len(mu)])*1.1])
 ax_top.grid(which='major', color='grey', linestyle='-',linewidth=0.5)
 ax_top.grid(which='minor', color='grey', linestyle='--',linewidth=0.25)
 ax_top.tick_params(labelbottom=False)
@@ -236,20 +300,18 @@ elif(fGain):
     ax_bot2.bar(np.array(xdata[0:len(mu)])-1, ndata, color='blue', width=2, edgecolor='gray', label='Before cuts')
     ax_bot2.bar(np.array(xdata[0:len(mu)])+1, ndatacut, color='red', width=2, edgecolor='gray', label='After cuts')
 elif(fAngles):
-    #mean_step = np.mean(np.diff(xdata))
-    #xrange = np.max(xdata) - np.min(xdata)
     ax_bot2.bar(np.array(xdata[0:len(mu)])-2.5, ndata, color='blue', width=5, edgecolor='gray', label = 'Before cuts')
     ax_bot2.bar(np.array(xdata[0:len(mu)])+2.5, ndatacut, color='red', width=5, edgecolor='gray', label='After cuts')
-elif(len(plotlabels)!=0):
+elif(len(cuTitle)>0):
     print("ALLEEEGG")
-    xdata_width = int(xdata[0])/50
-    ax_bot2.bar(np.array(xdata[0:len(mu)]), ndata, color='blue', width=xdata_width, edgecolor='gray', label='Before cuts')
-    ax_bot2.bar(np.array(xdata[0:len(mu)]), ndatacut, color='red', width=xdata_width, edgecolor='gray', label='After cuts')
+    xdata_width = np.sum(np.diff(xdata))/(len(xdata)-1)/4
+    ax_bot2.bar(np.array(xdata[0:len(mu)])+xdata_width/4, ndata, color='blue', width=xdata_width/2, edgecolor='gray', label='Before cuts')
+    ax_bot2.bar(np.array(xdata[0:len(mu)])-xdata_width/4, ndatacut, color='red', width=xdata_width/2, edgecolor='gray', label='After cuts')
 else:
-    #xdata_width = np.diff(xdata[0:1])
-    xdata_width = 0.2
-    ax_bot2.bar(np.array(xdata[0:len(mu)]), ndata, color='blue', width=xdata_width/2, edgecolor='gray', label = 'Before cuts')
-    ax_bot2.bar(np.array(xdata[0:len(mu)]), ndatacut, color='red', width=xdata_width/2, edgecolor='gray', label='After cuts')
+    #xdata_width = 0.2
+    xdata_width = np.sum(np.diff(xdata))/(len(xdata)-1)/4
+    ax_bot2.bar(np.array(xdata[0:len(mu)])+xdata_width/4, ndata, color='blue', width=xdata_width/2, edgecolor='gray', label = 'Before cuts')
+    ax_bot2.bar(np.array(xdata[0:len(mu)])-xdata_width/4, ndatacut, color='red', width=xdata_width/2, edgecolor='gray', label='After cuts')
 
 ax_bot2.grid(which='major', color='grey', linestyle='-',linewidth=0.5)
 ax_bot2.set_ylabel(r'$N_{clusters}$')
@@ -264,39 +326,86 @@ if(fGain):
 if(fweight):
     ax_bot2.set_xlabel(r'$w_{Q}$, [a.u]')
 if(not fRate and not fAngles and not fGain and not fweight):
-    ax_bot2.set_xlabel(plotlabels[2])
+    ax_bot2.set_xlabel(cuXlabel)
 ax_bot2.legend()
 
 plt.tight_layout()
 plt.savefig(f"ModFacs-IMPROVED-{picname}.png")
 plt.close()
 
-## separate, modulations only single  plot
-#
-#fig = plt.figure(figsize=(10,6))
-#
-#ax = fig.add_subplot(111)
-#
-#ax.text(120,29,"WORK IN PROGRESS", color='red', backgroundcolor='lightgray', fontweight='semibold', fontsize=12)
-#ax.errorbar(xdata[0:len(mu)], mu, yerr=muErr, color='forestgreen', ecolor='black', fmt='*',capsize=4, label=r"$\mu$ Before cuts")
-#ax.errorbar(xdata[0:len(mu)], muCut, yerr=muCutErr, color='orange', ecolor='black', fmt='*',capsize=4, label=r"$\mu$ After cuts")
-#ax.set_title("Modulation Factors VS Xray Beam Polarization Angle")
-#ax.set_ylabel(r"Reconstructed $\mu$")
-#if(fGain):
-#    ax.set_title("Modulation Factors vs Grid Voltage")
-#if(fRate):
-#    ax.set_title("Modulation Factors vs Incident X-ray Beam Rate")
-#    ax.set_xscale('log')
-#    ax.set_xlabel("X-ray Beam Rate, [Hz]")
-#if(not fRate and not fAngles and not fGain):
-#    ax.set_title(plotlabels[1])
-#    #ax.set_ylabel(plotlabels[3])
-#ax.grid(which='major', color='grey', linestyle='-',linewidth=0.5)
-#ax.grid(which='minor', color='grey', linestyle='--',linewidth=0.25)
-#ax.legend()
-#
-#plt.savefig(f"ModFacs-SINGLE-{picname}.png", dpi=400)
-#plt.close()
+######################################################################################
+#  plotting simlified data for MODULATION FACTORS without auxiliary plots
+######################################################################################
+if(fSingle):
+    # separate, modulations only single  plot
+   
+    # pre-firing the error bar case where they exceed modulation by 100%
+    # first for original mod factors (before cuts)
+
+    mu_ylow = np.array(muErr)
+    mu_yhigh = []
+    for mc, mce in zip(mu, muErr):
+        if(mc+mce>=100):
+            mu_yhigh.append(mce-(mc+mce-100.0))
+        else:
+            mu_yhigh.append(mce)
+    mc,mce = None, None
+    
+    asym_muErr = np.array([mu_ylow, mu_yhigh])
+
+    print(mu_ylow)
+    print(muErr)
+    print(mu_yhigh)
+
+    # same for the mod factors after cuts
+    mucut_ylow = np.array(muCutErr)
+    mucut_yhigh = []
+    for mc, mce in zip(muCut, muCutErr):
+        if(mc+mce>=100):
+            mucut_yhigh.append(mce-(mc+mce-100.0))
+        else:
+            mucut_yhigh.append(mce)
+    print(mucut_ylow)
+    print(muCutErr)
+    print(mucut_yhigh)
+    asym_muCutErr = np.array([mucut_ylow, mucut_yhigh])
+
+    #  
+    fig = plt.figure(figsize=(8,7))
+    
+    ax = fig.add_subplot(111)
+    
+    #ax.text(120,29,"WORK IN PROGRESS", color='red', backgroundcolor='lightgray', fontweight='semibold', fontsize=12)
+    #ax.errorbar(xdata[0:len(mu)], mu, yerr=muErr, color='forestgreen', ecolor='black', fmt='*',capsize=4, label=r"$\mu$ Before cuts")
+    #ax.errorbar(np.array(xdata[0:len(mu)]) +2.5, mu, yerr=asym_muErr, color='forestgreen', ecolor='black', fmt='*',capsize=4, label=r"$\mu$ Before cuts")
+    ax.errorbar(xdata[0:len(mu)], mu, yerr=asym_muErr, color='forestgreen',ms=8, ecolor='darkgreen', fmt='*',capsize=6, label=r"$\mu$ Before cuts")
+    #ax.errorbar(xdata[0:len(mu)], muCut, yerr=muCutErr, color='orange', ecolor='black', fmt='*',capsize=4, label=r"$\mu$ After cuts")
+    ax.errorbar(xdata[0:len(mu)], muCut, yerr=asym_muCutErr, color='orange',ms=8,  ecolor='darkgoldenrod', fmt='*',capsize=6, label=r"$\mu$ After cuts")
+    ax.set_ylabel(r"Reconstructed $\mu$")
+
+    if(fAngles):
+        ax.set_title("Modulation Factors VS Xray Beam Polarization Angle")
+        ax.set_xlabel(r"Angle of Detector Rotation, [$^{\circ}$]")
+    if(fGain):
+        ax.set_title("Modulation Factors vs Grid Voltage")
+        ax.set_xlabel(r"$V_{\mathrm{grid}}$, [V]")
+    if(fRate):
+        ax.set_title("Modulation Factors vs Incident X-ray Beam Rate")
+        ax.set_xscale('log')
+        ax.set_xlabel("X-ray Beam Rate, [Hz]")
+    if(not fRate and not fAngles and not fGain):
+        ax.set_title(f"Modulation Factors vs {cuTitle}")
+        ax.set_title(cuXlabel)
+
+    ax.minorticks_on()
+    ax.grid(which='major', color='grey', linestyle='-',linewidth=0.5)
+    ax.grid(which='minor', color='grey', linestyle='--',linewidth=0.25)
+    ax.set_ylim([0,110])
+    ax.legend()
+    
+    plt.savefig(f"ModFacs-SINGLE-{picname}.png", dpi=400)
+    plt.close()
+
 #########################################
 # plotting Stokes params for each rate
 #########################################
@@ -338,7 +447,7 @@ ax.hlines(Qanal, np.min(xdata), np.max(xdata), label=f"Q={Qanal:.4f}", linestyle
 
 if(fAngles):
     ax.set_title("Normalized Stokes Parameters for Reconstructed Angles")
-    ax.set_xlabel(r"Plane Angle, [$\circ$]")
+    ax.set_xlabel(r"Incident Angle, [$\circ$]")
     
     # plotting ref to Q/U development along progression 
     lineQ, lineU = [], []
@@ -363,8 +472,9 @@ if(fweight):
     ax.set_title("Normalized Stokes Parameters for Chosen Weights in Reconstruction")
     ax.set_xlabel(r"$w_{Q}$, [a.u.]")
 if(not fRate and not fGain and not fAngles and not fweight):
-    ax.set_title(plotlabels[1])
-    ax.set_xlabel(plotlabels[2])
+    ax.set_title(f"Stokes Parameters vs {cuTitle}")
+    ax.set_xlabel(cuXlabel)
+
 ax.set_ylabel(r"Stokes Parameters Normalized by Intensity")
 
 ax.grid(which='major', color='grey', linestyle='-',linewidth=0.5)
@@ -408,13 +518,15 @@ if(fGain):
 if(fweight):
     ax_top.set_title("Reconstructed Polarization Angle vs Chosen Charge Weighting")
 
-ax_top.set_ylabel(f'Reconstruced $\phi$')
 if(not fRate and not fAngles and not fGain and not fweight):
-    ax_top.set_title(plotlabels[1])
-    #ax_top.set_ylabel(plotlabels[3])
+    ax_top.set_title("Reconstructed Polarization Angle VS {cuTitle}")
+    ax_top.set_title(cuXlabel)
+
+ax_top.set_ylim([0,max(phi_deg)*1.1])
 ax_top.grid(which='major', color='grey', linestyle='-',linewidth=0.5)
 ax_top.grid(which='minor', color='grey', linestyle='--',linewidth=0.25)
 ax_top.tick_params(labelbottom=False)
+ax_top.minorticks_on()
 ax_top.legend()
 if(fRate):
     ax_top.legend(loc='upper left')
@@ -425,10 +537,11 @@ if(fAngles):
 ax_bot.scatter(xdata[0:len(mu)], chired, color='forestgreen', marker='+', s=44, label=r"$\chi^{2}_{reduced} (Original)$")
 ax_bot.scatter(xdata[0:len(mu)], chiredmod, color='orange', marker='+', s=44, label=r"$\chi^{2}_{reduced} (After cuts)$")
 ax_bot.set_ylabel(r'$\chi^{2}_{reduced}$')
-#ax_bot.set_ylim([1e-1,np.max([np.max(chired),np.max(chiredmod)])])
 ax_bot.set_ylim([1e-1,np.max([np.max(chired),np.max(chiredmod)])*1.5])
 ax_bot.set_yscale('log')
 ax_bot.grid(which='major', color='grey', linestyle='-',linewidth=0.5)
+ax_bot.grid(which='minor', color='grey', linestyle='--',linewidth=0.25)
+ax_bot.minorticks_on()
 ax_bot.tick_params(labelbottom=False)
 
 # adding statistics plot even more bottom
@@ -444,19 +557,19 @@ elif(fGain):
 elif(fAngles):
     ax_bot2.bar(np.array(xdata[0:len(mu)])-2.5, ndata, color='blue', width=5, edgecolor='gray', label='Before cuts')
     ax_bot2.bar(np.array(xdata[0:len(mu)])+2.5, ndatacut, color='red', width=5, edgecolor='gray', label='After cuts')
-#elif(len(plotlabels)!=0 and "Attenuation " in plotlabels[1]):
-elif(len(plotlabels)!=0):
+elif(len(cuTitle)>0):
     print("ALLEEEGG")
-    xdata_width = int(xdata[0])/50
-    ax_bot2.bar(np.array(xdata[0:len(mu)]), ndata, color='blue', width=xdata_width, edgecolor='gray', label='Before cuts')
-    ax_bot2.bar(np.array(xdata[0:len(mu)]), ndatacut, color='red', width=xdata_width, edgecolor='gray', label='After cuts')
+    xdata_width = np.sum(np.diff(xdata))/(len(xdata)-1)/4
+    ax_bot2.bar(np.array(xdata[0:len(mu)])+xdata_width/4, ndata, color='blue', width=xdata_width/2, edgecolor='gray', label='Before cuts')
+    ax_bot2.bar(np.array(xdata[0:len(mu)])-xdata_width/4, ndatacut, color='red', width=xdata_width/2, edgecolor='gray', label='After cuts')
 else:
-    #xdata_width = np.diff(xdata[0:1])
-    xdata_width = 0.2
-    ax_bot2.bar(np.array(xdata[0:len(mu)]), ndata, color='blue', width=xdata_width/2, edgecolor='gray', label='Before cuts')
-    ax_bot2.bar(np.array(xdata[0:len(mu)]), ndatacut, color='red', width=xdata_width/2, edgecolor='gray', label='After cuts')
+    xdata_width = np.sum(np.diff(xdata))/(len(xdata)-1)/4
+    ax_bot2.bar(np.array(xdata[0:len(mu)])+xdata_width/4, ndata, color='blue', width=xdata_width/2, edgecolor='gray', label='Before cuts')
+    ax_bot2.bar(np.array(xdata[0:len(mu)])-xdata_width/4, ndatacut, color='red', width=xdata_width/2, edgecolor='gray', label='After cuts')
 
 ax_bot2.grid(which='major', color='grey', linestyle='-',linewidth=0.5)
+ax_bot2.grid(which='minor', color='grey', linestyle='--',linewidth=0.25)
+ax_bot2.minorticks_on()
 ax_bot2.set_ylabel(r'$N_{clusters}$')
 if(fGain):
     ax_bot2.set_xlabel(r'$V_{Grid}$, [V]') 
@@ -470,12 +583,53 @@ if(fweight):
     ax_bot2.set_xlabel(r'$w_{Q}$, [a.u.]')
 
 if(not fRate and not fAngles and not fGain and not fweight):
-    ax_bot2.set_xlabel(plotlabels[2])
+
+    ax_bot2.set_xlabel(cuXlabel)
 ax_bot2.legend()
 
 plt.tight_layout()
 plt.savefig(f"RecoAngles-IMPROVED-{picname}.png")
 plt.close()
+
+######################################################################################
+#  plotting simlified data for MODULATION FACTORS without auxiliary plots
+######################################################################################
+if(fSingle):
+    # separate, modulations only single  plot
+    
+    fig = plt.figure(figsize=(8,7))
+    
+    ax = fig.add_subplot(111)
+    
+    #ax.text(120,29,"WORK IN PROGRESS", color='red', backgroundcolor='lightgray', fontweight='semibold', fontsize=12)
+    ax.errorbar(xdata[0:len(mu)], phi_deg, yerr=phierr_deg, color='forestgreen', ecolor='black', ms=8, fmt='*',capsize=4, label=r"$\phi$ Before cuts")
+    ax.errorbar(xdata[0:len(mu)], phiCut_deg, yerr=phiCutErr_deg, color='orange', ecolor='black', ms=8, fmt='*',capsize=4, label=r"$\phi$ After cuts")
+    ax.set_ylabel(r"$\phi_{\mathrm{Reconstructed}}$,"+r"[$^{\circ}$]")
+    if(fAngles):
+        ax.plot(xdata[0:len(phi)],xdata[0:len(phi)],color='firebrick', linestyle='--', label=r"$\phi(\mathrm{reco})=\phi(\mathrm{expected})$")
+        ax.set_title("Reconstructed Polarization Angles VS X-ray Beam Polarization Angle")
+        ax.set_xlabel(r"$\phi_{\mathrm{Expected}}$, [$^{\circ}$]")
+    if(fGain):
+        ax.set_title("Recosntructed Polarization Angles vs Grid Voltage")
+        ax.set_xlabel(r"$V_{\mathrm{Grid}}$, [V]")
+    if(fRate):
+        ax.set_title("Reconstructed Polarization Angles vs X-ray Beam Rate")
+        ax.set_xscale('log')
+        ax.set_xlabel("X-ray Beam Rate, [Hz]")
+    if(fweight):
+         ax.set_xlabel(r'$w_{Q}$, [a.u.]')
+    if(not fRate and not fAngles and not fGain and not fweight):
+        custom_xlabel = input("Proivide xlabel: ")
+        ax.set_title(custom_xlabel)
+
+    ax.minorticks_on()
+    ax.grid(which='major', color='grey', linestyle='-',linewidth=0.5)
+    ax.grid(which='minor', color='grey', linestyle='--',linewidth=0.25)
+    ax.set_ylim([0,100])
+    ax.legend()
+    
+    plt.savefig(f"RecoSngles-SINGLE-{picname}.png", dpi=400)
+    plt.close()
 
 
 

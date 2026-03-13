@@ -7,6 +7,8 @@ picname = sys.argv[2]
 
 Ibeam, time = [],[]
 
+pth, sumcts = [], []
+
 nWords = []
 
 f = open(logfile,'r')
@@ -24,6 +26,8 @@ for line in f:
         words = line.split(" ")
         #print(len(words))
         nWords.append(len(words))
+        pth.append(float(words[1]))
+        sumcts.append(float(words[7]))
         Ibeam.append(float(words[8]))
         time.append(float(words[17]))
 
@@ -47,4 +51,15 @@ plt.savefig(f"PetraCurrent-{runnr}-{picname}.png",dpi=400)
 total_runtime = max(time)
 
 print(f"Total runtime = {total_runtime:.4f} [s]")
+
+#####################################################
+# checking something
+
+plt.figure(figsize=(8,7))
+plt.scatter(pth,sumcts,marker="s",color='darkgreen')
+plt.savefig(f"pth-vs-sumcts-{runnr}-{picname}.png")
+
+
+
+
 

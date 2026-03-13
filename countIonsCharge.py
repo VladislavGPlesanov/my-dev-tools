@@ -1,7 +1,8 @@
 import numpy as np
 import numpy.ma as ma
-
 import argparse as ap
+
+import json
 
 import matplotlib
 matplotlib.use('Agg')
@@ -17,6 +18,14 @@ import os
 
 from MyPlotter import myPlotter 
 from MyPlotter import myUtils 
+from MyPlotter import myColors
+
+# shite for detecting ion track blobs
+from scipy.ndimage import distance_transform_edt, gaussian_filter
+from skimage import filters, measure, morphology
+from skimage.feature import peak_local_max
+from skimage.segmentation import watershed
+from skimage.color import label2rgb
 
 def initMatrix(size, dtype):
     return np.zeros((size,size),dtype=dtype)
@@ -40,6 +49,13 @@ def countIons(nx, ny):
         #nmin = ny if ny<nx else nx
         return nmax
 
+
+def estimateDeadTime(tframe, nframes, trun):
+
+    # lets use seconds here...
+    tdead = trun/nframes - tframe
+    return tdead
+    
 
 def getClusterCenter(matrix):
 
@@ -92,6 +108,7 @@ def getClusterCircleArea(radius):
 
 def plotDetailedEvent(matrix,
                     picname,
+                    debug=False,
                     outdir=None,
                     comment=None,
                     geometry=None,
@@ -151,13 +168,14 @@ def plotDetailedEvent(matrix,
                         distance=min_distance,
                         width=peak_width)
 
-    print(f"Npeaks_x={len(xpeaks)}, Npeaks_y={len(ypeaks)} ")
-    xpromin = xprops["prominences"]
-    xwidths = xprops['widths']
-    ypromin = yprops["prominences"]
-    ywidths = yprops['widths']
-    print(f"xpeak: prominences = {xpromin}, widths={xwidths}")#, plateaus={xplateu}")
-    print(f"ypeak: prominences = {ypromin}, widths={ywidths}")#, plateaus={yplateu}")
+    if(debug):
+        print(f"Npeaks_x={len(xpeaks)}, Npeaks_y={len(ypeaks)} ")
+        xpromin = xprops["prominences"]
+        xwidths = xprops['widths']
+        ypromin = yprops["prominences"]
+        ywidths = yprops['widths']
+        print(f"xpeak: prominences = {xpromin}, widths={xwidths}")#, plateaus={xplateu}")
+        print(f"ypeak: prominences = {ypromin}, widths={ywidths}")#, plateaus={yplateu}")
 
     ax_xproj.bar(np.arange(len(xhist)), xhist, width=1.0, color='darkblue', align='center')
     ax_xproj.scatter(xpeaks, xhist[xpeaks],marker="x",color='red')
@@ -190,8 +208,7 @@ def hasSparks(matrix,
     projectionY = down_matrix.sum(axis=1)
     differences = np.diff(projectionY)
 
-  
-    
+    # TODO: finish this one later
 
     return false
 
@@ -232,20 +249,260 @@ def getFramePeaks(matrix,        # matrix (original or pruned)
 
     return xpeaks, ypeaks, xprops, yprops
 
+
+# simple version of blob detection
+#def detectBlobs(matrix):
+#
+#    # setting threshold
+#    thr = filters.threshold_otsu(matrix)
+#    binary = matrix > thr
+#
+#    # removing noise
+#    binary = morphology.remove_small_objects(binary, min_size=30)
+#
+#    # labeling connected regions
+#    labels = measure.label(binary)
+#    regions = measure.regionprops(labels, intensity_image=matrix)
+#    
+#    good_blobs = []
+#
+#    for reg in regions:
+#
+#        width = reg.bbox[3] - reg.bbox[1]
+#        height = reg.bbox[2] - reg.bbox[0]
+#
+#        aspect_ratio = height/width if width > 0 else 0 
+#
+#        # filter fro compact blobs
+#        if(
+#            10<=width<=40 and 
+#            reg.area>100 and 
+#            aspect_ratio < 2.5 and
+#            reg.eccentricity < 0.85
+#        ):
+#            good_blobs.append(reg)
+#
+#    return good_blobs
+
+# same, but with "watersheding" and plotting
+
+def detectBlobs(matrix,
+                outdir,
+                picname,
+                min_blob_width = 10,
+                max_blob_width = 40,
+                min_area = 100,
+                aspect_ratio_thr = 2.5,
+                excent_thr = 2.5,
+                show_separation = True
+                ):
+
+    # getting threshold
+    thr = filters.threshold_otsu(matrix)
+    binmatrix = matrix > thr
+
+    # removing "noise"
+    binmatrix = morphology.remove_small_objects(binmatrix, min_size=30)
+
+    # distance transform
+    distances = distance_transform_edt(binmatrix)
+
+    # smoothing
+    distances = gaussian_filter(distances,sigma=1)
+
+    # finding local maxima (peaks of the blobs)
+    # min_distance -> controls separation sensitivity
+    coords = peak_local_max(distances,min_distance=5,labels=binmatrix)
+    markers = np.zeros_like(matrix, dtype=int)
+    for i, (r,c) in enumerate(coords):
+        markers[r,c] = i+1
+
+    # watersheding 
+    labels = watershed(-distances, markers, mask=binmatrix)
+
+    # filtering regions
+    regions = measure.regionprops(labels, intensity_image=matrix)
+
+    good_regs = []
+    spark = False
+    spark_regions = []
+
+    for reg in regions:
+        
+        w = reg.bbox[3] - reg.bbox[1]
+        h = reg.bbox[2] - reg.bbox[0]
+        aspect_ratio = h / w if w > 0 else 0 
+        
+        # tryna' detect BLOBS       
+        if(
+            min_blob_width <= w <= max_blob_width and
+            reg.area >=min_area and
+            aspect_ratio < aspect_ratio_thr and 
+            reg.eccentricity < excent_thr
+          ):
+
+            good_regs.append(reg)
+
+        # tryna' detect SPARKS
+        if(w<=5 and h>50 and reg.eccentricity > 0.98):
+            spark = True
+            spark_regions.append(reg)
+
+    # optionally plot separation shite
+    if(show_separation):
+
+        #fig, axes = plt.subplots(1,3, figsize = (15,6))
+        fig, axes = plt.subplots(1,4, figsize = (20,6))
+
+        # original frame
+        ax0 = axes[0]
+        ax0.imshow(matrix, cmap='jet')
+        ax0.set_title("Original Frame")
+        ax0.set_axis_off()
+        
+        # bounding boxes
+        ax1 = axes[1]
+        ax1.imshow(matrix, cmap='jet')
+        ax1.set_title("Detected Blobs")
+        ax1.set_axis_off()
+
+        for r in good_regs:
+
+            minr, minc, maxr, maxc = r.bbox
+            rect = plt.Rectangle(
+                    (minc,minr),
+                    maxc - minc,
+                    maxr - minr,
+                    fill=False,
+                    edgecolor='red',
+                    linewidth=1.5 
+            )
+            ax1.add_patch(rect)
+
+        if(spark):
+            for sp in spark_regions:
+
+                minr, minc, maxr, maxc = sp.bbox
+                rect = plt.Rectangle(
+                        (minc,minr),
+                        maxc - minc,
+                        maxr - minr,
+                        fill=False,
+                        edgecolor='firebrick',
+                        linewidth=1 
+                )
+                ax1.add_patch(rect)
+                ax1.text(maxc+1,maxr+1,"Spark",textcolor='white')
+
+        # watershed shite
+        ax2 = axes[2]
+        colored_labels = label2rgb(labels,bg_label=0)
+        ax2.imshow(colored_labels)
+        ax2.set_title("Watershed Segmentation")
+        ax2.set_axis_off()
+
+        ax3 = axes[3]
+        ax3.hist(matrix.ravel(),bins=64)
+        ax3.axvline(thr,color='r')
+        ax3.set_xlim([np.nanmin(matrix),np.nanmax(matrix)])
+        ax3.set_yscale('log')
+        
+        #for ax in axes:
+        #    ax.set_axis_off()
+
+        plt.tight_layout()
+        plt.savefig(f"{outdir}ION-SEPARATION-{picname}.png")
+        plt.close()
+
+
+    return good_regs, labels, spark
+
+
+def simpleCountBlobs(matrix,
+                    min_bwidth = 5,
+                    max_bwidth = 40,
+                    min_area = 50,
+                    max_aspect_ratio = 2.5,
+                    max_excent = 3
+                    ):
+
+    # getting threshold
+    #thr = filters.threshold_otsu(matrix)
+
+    thr = None
+    binmatrix = None
+
+    if(np.ma.isMaskedArray(matrix)):
+        matrix =  matrix.filled(0)
+        binmatrix = matrix > 0 
+    else:
+        thr = filters.threshold_otsu(matrix)
+        binmatrix = matrix > thr 
+
+    # removing "noise"
+    binmatrix = morphology.remove_small_objects(binmatrix, min_size=15)
+
+    # distance transform
+    distances = distance_transform_edt(binmatrix)
+
+    # smoothing
+    distances = gaussian_filter(distances,sigma=1)
+
+    # finding local maxima (peaks of the blobs)
+    # min_distance -> controls separation sensitivity
+    coords = peak_local_max(distances,min_distance=5,labels=binmatrix)
+    markers = np.zeros_like(matrix, dtype=int)
+    for i, (r,c) in enumerate(coords):
+        markers[r,c] = i+1
+
+    # watersheding 
+    labels = watershed(-distances, markers, mask=binmatrix)
+
+    # filtering regions
+    regions = measure.regionprops(labels, intensity_image=matrix)
+
+    nblobs = 0
+ 
+    for reg in regions:
+        
+        w = reg.bbox[3] - reg.bbox[1]
+        h = reg.bbox[2] - reg.bbox[0]
+        aspect_ratio = h / w if w > 0 else 0 
+        
+        # tryna' detect BLOBS       
+        if(
+            min_bwidth <= w <= max_bwidth and
+            reg.area >=min_area and
+            aspect_ratio < max_aspect_ratio and 
+            reg.eccentricity < max_excent
+          ):
+
+            nblobs+=1
+
+    return nblobs
+
 ############################################################
 # MAIN
 ############################################################
+
+#####################################
+# instantiating MyPlotter
+MU = myUtils()
+MP = myPlotter()
+MC = myColors()
+#######################
 
 parser = ap.ArgumentParser()
 parser.add_argument("-d", "--dir", type=str, default='', help="loaction ofr the data runs")
 parser.add_argument('-n', "--name", type=str, default='EBALA', help="suffix of the plots")
 parser.add_argument("-SR", "--srbit", type=int, default=1, help="SR bits")
 parser.add_argument("-ST", "--stbit", type=int, default=15, help="ST bits")
-parser.add_argument("--nframes", type=int, default=10, help="Number of frames to plot")
+parser.add_argument("--runtime", type=int, default=-1, help="recorded run time of the measurement (enter n minutes,\ndefault:-1, in this case using t_dead=44ms)")
+parser.add_argument("--nframes", type=int, default=-1, help="Number of frames to plot (Default=-1), Enter positive integer")
 parser.add_argument("--cutnoise", action='store_true' , help="cut noisy frames out")
 parser.add_argument("--plotglobal", action='store_true' , help="Plot global parametere histograms")
-parser.add_argument("--plotframes", action='store_true' , help="Plot single frames")
-parser.add_argument("--makedir", action='store_true' , help="Dump plots in a custom directory")
+#parser.add_argument("--plotframes", action='store_true' , help="Plot single frames")
+parser.add_argument("--makedir", action='store_true' , help="Dump plots in a custom-named directory")
 parser.add_argument("--hitrate", action='store_true' , help="Plot hits vs time for a run")
 parser.add_argument("--countTOT", action='store_true' , help="Count ions based on the average TOT in a single cluster events")
 parser.add_argument("--countBS", action='store_true' , help="Also count bullshit frames. One frame = one ion")
@@ -257,21 +514,28 @@ picname = args.name
 SR = args.srbit
 ST = args.stbit
 nframes = args.nframes
+t_run = args.runtime
+
+if(not os.path.isdir(directory)):
+    print(f"Directory {directory} does not exist, nahuy....")
+    exit(0)
 
 fPlotGlobalHists = args.plotglobal
 fCutNoise = args.cutnoise
-fPlotFrames = args.plotframes
+#fPlotFrames = args.plotframes
 fMakeDir = args.makedir
 fPlotHitRate = args.hitrate
 fCountBS = args.countBS
 fCIT = args.countTOT
 fSingle = False
 
+fPlotFrames = True if nframes > 0 else False
 nSingleIons = 0
 print("Flag check:")
-print(f"GlobalPlots: {fPlotGlobalHists}")
-print(f"CutNoise: {fCutNoise}")
-print(f"MakeDir: {fMakeDir}")
+print(f"Global Plots: {fPlotGlobalHists}")
+print(f"Cut Noise: {fCutNoise}")
+print(f"Count Bullshit Frames: {fCountBS}")
+print(f"Make New Directory: {fMakeDir}")
 
 if(fPlotFrames):
     print(f"PlotFrames: {fPlotFrames} : NEED {nframes}")
@@ -288,12 +552,51 @@ if (fMakeDir):
 
 filelist = glob.glob(directory+"*.txt")
 nfiles = len(filelist)
+print(f"Directory: {directory} has <{nfiles}> files.")
+
+###################
+# pulling data from DB json for current run 
+run_base_dir_name = directory.split("/")[-2]
+print(run_base_dir_name)
+run_numb = run_base_dir_name.split("_")[1]
+run_label = "Run_"+run_numb
+print(f"Run number is: {MC.BLUE} {run_numb} {MC.RST}")
+
+fsr_data = None
+
+with open("fsr_parameters.json") as jfile:
+    runDB = json.load(jfile)
+    try:
+        fsr_data = runDB[run_label]
+    except Exception as ex:
+        print(f"Could not load json for {run_numb}: {ex}")
+        exit(0)
+
+jfile.close()
+jfile=None
+
+#for key, val in fsr_data.items():
+#    print(f"{key}-->{val}")
+#
+#exit(0)
+##################
 
 matrix = initMatrix(256,int)
 totmatrix = initMatrix(256,int)
 
 t_dead = 0.048 # deadtime in seconds
 t_frame = getFrameTime(ST,SR)
+fEstimatedTdead = False
+
+if(t_run > 0):
+    fEstimatedTdead = True
+    t_dead = estimateDeadTime(t_frame, nfiles, t_run*60) # since my input times are in minutes...
+    print(f"Run time specified--> using estimated t_dead={t_dead:.4f} [s]")
+else:
+    t_run = fsr_data["t_run"]
+    fEstimatedTdead = True
+    t_dead = estimateDeadTime(t_frame, nfiles, t_run)
+    print(f"Run time based on JSON data --> using estimated t_dead={t_dead:.4f} [s]")
 
 # lists for first step in gathering global characteristics of frames
 
@@ -301,6 +604,7 @@ runtime = []
 hitrate = []
 fucked_hitrate = []
 
+all_frame_hits = []
 frame_hits, frame_sumTOT = [], []
 frame_avg_noise = []
 frame_stdx, frame_stdy = [], []
@@ -330,12 +634,14 @@ yprominences, ywidths = [], []
 
 nSparks = 0
 nIonPeaks = 0
+nIonBlobs = 0
+total_blob_tot = 0
+avg_blob_tots = []
 
 occ_matrix = initMatrix(256,int)
-#####################################
-# instantiating MyPlotter
-MU = myUtils()
-MP = myPlotter()
+occ_matrix_nonoise = initMatrix(256,int)
+maxout_matrix = initMatrix(256,int)
+
 ##########################
 NPIXELS =256*256
 #### attributes for "find_peaks" shit.. ..
@@ -348,6 +654,7 @@ diff_traces = []
 sum_traces = np.zeros((63,), dtype=int)
 ifile = 0 
 nskipped = 0
+low_nhits, high_nhits = 0, 0
 npics = 0
 for file in filelist:
 
@@ -358,6 +665,7 @@ for file in filelist:
     nhits = np.count_nonzero(tmp_matrix)
     sumTOT = np.sum(tmp_matrix)
 
+    all_frame_hits.append(nhits)
     time_iframe = None
     if(fPlotHitRate):
         time_iframe = ifile*0.048
@@ -366,12 +674,19 @@ for file in filelist:
     if(fCutNoise and (nhits > 30000 or nhits < 500)):
         if(nhits>30000 and fPlotHitRate):
             fucked_hitrate.append([time_iframe, nhits])
+        if(nhits>3e4):
+            high_nhits+=1
+        if(nhits<500):
+            low_nhits+=1
         nskipped+=1
         continue
     if(fPlotHitRate):
         fucked_hitrate.append([time_iframe,-999]) 
         hitrate.append([time_iframe, nhits]) 
-        
+    
+    maxout = tmp_matrix.astype(float)/11810.0 # checking if pixel value approaches/exceeds certain value
+    maxout_matrix += maxout >= 1.0
+
     # fiiling global hit,sumTOT hists
     frame_hits.append(nhits)
     frame_sumTOT.append(sumTOT)
@@ -410,8 +725,15 @@ for file in filelist:
         np.add.at(occ_matrix, (x,y), 1)
 
     # recording fraction of charge in the cluster regions of 1 and 2 sigmas
-    rfTOT_onesig = onesigmaTOT/sumTOT
-    rfTOT_twosig = twosigmaTOT/sumTOT
+    try:
+        rfTOT_onesig = onesigmaTOT/sumTOT
+    except ZeroDivisionError:
+        rfTOT_onesig = -999
+    try:
+        rfTOT_twosig = twosigmaTOT/sumTOT
+    except ZeroDivisionError:
+        rfTOT_twosig = -999
+
     frame_FI1STD.append(rfTOT_onesig)
     frame_FI2STD.append(rfTOT_twosig)
     # calculating relative annoumt of charge inside area between sigma1 and sigma2 lines
@@ -419,16 +741,27 @@ for file in filelist:
     frame_QBsigmas.append(frac_QBsigmas)
 
     # cheking average noise outside the 2sigma circle
-    frame_avg_noise.append(outTOT/outHits)
+    try:
+        avg_noise = outTOT/outHits
+    except ZeroDivisionError:
+        acg_noise = -999
+    #frame_avg_noise.append(outTOT/outHits)
+    frame_avg_noise.append(avg_noise)
    
     # getting charge density of hits within 2*sigma_min
-    qdensity = twosigmaTOT/twosigmaHits
+    try:
+        qdensity = twosigmaTOT/twosigmaHits
+    except ZeroDivisionError:
+        qdensity = -999
     frame_qdensity.append(qdensity)
     
     # approximate, circular clsuter area of 2 sigmas
     cluster_area = getClusterCircleArea(minRadius*2)
     # area as a fraction of pixels covered within 2 sigmas / total number of pixels
-    cluster_area_pixfrac = twosigmaHits/NPIXELS
+    try:
+        cluster_area_pixfrac = twosigmaHits/NPIXELS
+    except ZeroDivisionError:
+        cluster_area_pixfrac = -999
 
     # filling rest of lists/matrices
     frame_stdx.append(stdx)    
@@ -446,8 +779,24 @@ for file in filelist:
     diff_traces.append(abs(huya_diffs))
     sum_traces+=abs(huya_diffs)
 
-    MU.progress(nfiles, ifile)
+    # using blob-finder to count ions
+    blobs, labs, fSpark = detectBlobs(tmp_matrix, outdir, str(ifile), show_separation=False)
+    nblobs_frame = len(blobs)
+    nIonBlobs+=nblobs_frame
+    
+    nblob_tot = 0
+    for b in blobs:
+        iblobtot = b.intensity_image[b.image].sum()
+        nblob_tot += iblobtot
+        total_blob_tot += iblobtot    
+   
+    if(len(blobs) > 0):
+        avg_blob_tots.append(nblob_tot/len(blobs))
+    
+    if(fSpark):
+        nSparks+=1 
 
+    #if((fPlotFrames and npics <= nframes) or nblobs_frame>=4):
     if(fPlotFrames and npics <= nframes):
         if(nhits>100 and nhits<10000):
             #print(f"IS SINGLE CLUSTER: [{fSingleCluster}]")
@@ -489,20 +838,35 @@ for file in filelist:
             #plt.savefig(f"DIFFs-{ifile}.png")
             #plt.close()
 
+            ipictype = "png"
+            snap_these = [101,103,104]
+            if(ifile in snap_these):
+                ipictype = "pdf"
+
             MP.plotMatrix(tmp_matrix,
                           f"FRAME-{ifile}-{picname}",
                           labels=[f"EVENT-{ifile}", "x,[pixel]","y,[pixel]"],
-                          info=comment,
+                          #info=comment,
                           infopos=[-90,25],
                           outdir=outdir,
-                          figsize=(8,6),
+                          figsize=(8,7),
+                          figtype=ipictype,
                           #geomshapes=[circ_sig1,circ_sig2],
                           #plotMarker=[meany,meanx],
                           fLognorm=True,
                           fDebug=True)
 
+            ipname = str(ifile)
+            #if(nblobs_frame>=4):
+            #    ipname+="-IBAT"
+            #    print("EBAT!",flush=True)
+
+            blobs, _ , _ = detectBlobs(tmp_matrix, outdir, ipname, show_separation=True)
+            print(f"{MC.BLUE}skimage found [ {len(blobs)} ] blobs{MC.RST}")
+            blobs = None
+
         #end of raw frame plotting
-    
+
     THR = 750 #250
     badIDX = np.where(tmp_matrix<THR)
     skippix = 5
@@ -567,10 +931,14 @@ for file in filelist:
     peaksX, peaksY, propsX, propsY = getFramePeaks(masked_matrix, 
                                                     rel_height=RHEIGHT, 
                                                     min_dist=MDIST,
-                                                    peak_width=PWIDTH)
+                                                    peak_width=PWIDTH,
+                                                    fDebug=False)
 
     prelim_nxpeaks, prelim_nypeaks = len(peaksX), len(peaksY)
-
+    if(fPlotFrames and npics <= nframes):
+        if(nhits>100 and nhits<10000):
+            print(f"\"find_peaks\" found [ {prelim_nxpeaks} / {prelim_nypeaks} ] peaks")
+ 
     nIonPeaks += countIons(len(peaksX),len(peaksY))
 
     for xp,xw in zip(propsX["prominences"],propsX['widths']):
@@ -658,18 +1026,30 @@ for file in filelist:
                               comment=cut_comment, 
                               geometry=[c_sigma1,c_sigma2],
                               markers=[[cutMeanY,cutMeanX,"+","black","Qweigth"]])
+
+            blobs, labs, _ = detectBlobs(tmp_matrix, outdir, "MASKED-"+str(ifile))
+ 
             npics+=1
     
-    #if(npics==20):
-    #    exit(0) 
+    MU.progress(nfiles, ifile)
     # for loop ends here
+
 print("============================")
-print(f"FOUND {nIonPeaks} IONS")
+print(f"FOUND {nIonPeaks} ION PEAKS")
 print("============================")
+
+print("============================")
+print(f"FOUND {nIonBlobs} ION BLOBS")
+print("============================")
+
+print(f"--- Found {nSparks} sparks")
 
 avg_tot_sions = sum(single_sumTOT)/nSingleIons
 print(f"Found {nSingleIons} single ions")
-print(f"average TOT per Ion = {avg_tot_sions:.2f}")
+print(f"average TOT per Ion = {avg_tot_sions:.2f} (PEAK COUNTING)")
+
+total_avg_blob_tot = sum(avg_blob_tots)/len(avg_blob_tots)
+print(f"average TOT per Ion = {total_avg_blob_tot:.2f} (BLOB counting)")
 
 MP.plotMatrix(frame_charge_weights, 
               f"CHARGE_CENTERS-{picname}",
@@ -682,6 +1062,15 @@ MP.plotMatrix(frame_charge_weights,
 MP.plotMatrix(occ_matrix,
                 f"OCCUPANCY-{picname}",
                 labels=["Occupancy Matrix", "x,[pix]", "y.[pix]"],
+                cbarname=r'$N_{hits}$',
+                outdir=outdir,
+                fLognorm=True,
+                fDebug=True)
+
+MP.plotMatrix(maxout_matrix,
+                f"OVERLY-ACTIVE-PIXELS-{picname}",
+                labels=["Pixels Constantly Approaching Max TOT", "x,[pix]", "y.[pix]"],
+                cmap='viridis',
                 cbarname=r'$N_{hits}$',
                 outdir=outdir,
                 fLognorm=True,
@@ -718,7 +1107,7 @@ plt.grid(which='major', color='gray', linestyle='-',linewidth=0.5)
 plt.grid(which='minor', color='gray', linestyle='--',linewidth=0.25)
 plt.minorticks_on()
 plt.legend(loc='upper right')
-plt.savefig(f"Combined-Yaxis-DIFFs-{picname}.png")
+plt.savefig(f"{outdir}Combined-Yaxis-DIFFs-{picname}.png")
 plt.close()
 
 MP.plotMatrix(no_response_pix,
@@ -734,6 +1123,18 @@ MP.plotMatrix(no_response_pix,
                 fDebug=True)
 
 if(fPlotGlobalHists):
+
+    MP.simpleHist(
+            np.array(all_frame_hits), 
+            100, 
+            0, 
+            np.max(all_frame_hits), 
+            ["Global Hits per Frame (No Hit Cuts)", r"$N_{hits}$", r"$N_{frames}$"],
+            f"ALL-HITS-{picname}",
+            outdir=outdir,
+            ylog=True
+            )
+ 
     MP.simpleHist(
             np.array(frame_hits), 
             100, 
@@ -1053,36 +1454,65 @@ if(fPlotGlobalHists):
 
 if(fPlotHitRate):
     print("Plotting Hitrate...")
-    plt.figure(figsize=(10,6))
-    plt.plot([hitrate[i][0] for i in range(len(hitrate))],
-             [hitrate[i][1] for i in range(len(hitrate))],
-             color='darkblue', marker='s')
+    fig, (axg, axb) = plt.subplots(2,1,figsize=(10,6))
+    #axg = fig.add_subplot(0,1)
+    #axb = fig.add_subplot(1,1, sharex=axg)
+
+    axg.plot([hitrate[i][0] for i in range(len(hitrate))],
+              [hitrate[i][1] for i in range(len(hitrate))],
+              color='darkblue', marker='s')
     
-    plt.plot([fucked_hitrate[i][0] for i in range(len(fucked_hitrate))],
-             [fucked_hitrate[i][1] for i in range(len(fucked_hitrate))],
-             color='firebrick', marker='o')
-    plt.title("Hits vs Time")
-    plt.xlabel('Time,[s]')
-    plt.ylabel(r'$N_{hits}$')
-    plt.grid(True)
+    axb.plot([fucked_hitrate[i][0] for i in range(len(fucked_hitrate))],
+               [fucked_hitrate[i][1] for i in range(len(fucked_hitrate))],
+               color='firebrick', marker='o')
+
+    axg.set_title("Hits vs Time [Good frames]")
+    axg.tick_params(labelbottom=False)
+    axg.set_ylabel(r'$N_{hits}$')
+    axg.grid(which='major', color='grey', linestyle='-',linewidth=0.5)
+    axg.grid(which='minor', color='grey', linestyle='--',linewidth=0.25)
+    axg.minorticks_on()
+
+    axb.set_title("Hits vs Time [Bad frames]")
+    axb.set_xlabel("Time, [s]")
+    axb.set_ylabel(r'$N_{hits}$')
+    axb.grid(which='major', color='grey', linestyle='-',linewidth=0.5)
+    axb.grid(which='minor', color='grey', linestyle='--',linewidth=0.25)
+    axb.minorticks_on()
+
+
+    plt.tight_layout()
     plt.savefig(f"{outdir}HITRATE-{picname}.png")
     plt.close()
 
-print(f"Read {nfiles}, skipped {nskipped}")
+print(f"Read {nfiles}, skipped {nskipped} (low={low_nhits},high={high_nhits})")
 
 if(fCIT):
 
     N_Nitrogen = 0
    
+    nCF_high = 0
     total_sumTOT = 0
+
+    n_nitro_blobs = 0
  
+    nbad_frames = 0
+    nfiles = len(filelist)
     ifile = 0
     for f in filelist:
     
         ifile+=1
-        tmp_matrix = np.loadtxt(file,dtype=int)
+        tmp_matrix = np.loadtxt(f,dtype=int)
         nhits = np.count_nonzero(tmp_matrix)# using total hits 
 
+        if(nhits > 30000 or nhits < 500):
+             nbad_frames += 1
+             if(fCountBS and nhits > 30000):
+                N_Nitrogen += 1
+                nbad_frames -= 1
+                nCF_high += 1
+             continue
+    
         THR = 750 #250
         badIDX = np.where(tmp_matrix<THR)
         skippix = 5
@@ -1094,37 +1524,108 @@ if(fCIT):
         masked_matrix[:, -skippix:] = np.ma.masked # right
 
         # using pixels with TOT above threshold
-        cut_sumTOT = np.sum(masked_matrix)
-        total_sumTOT+=cut_sumTOT
-        if(nhits>3e4):
-             if(fCountBS):
-                N_Nitrogen+=1
-             continue
-    
+        cut_sumTOT = masked_matrix.filled(0).sum()
+        total_sumTOT += cut_sumTOT
+
+        # collecting data for occupancy matrix but with noise suppressed
+        nonzero_pix = np.nonzero(masked_matrix.filled(0))
+        for ix, iy in zip(*nonzero_pix):
+            np.add.at(occ_matrix_nonoise, (ix,iy), 1)
+
         N_Nitrogen += np.floor(float(cut_sumTOT)/float(avg_tot_sions))
 
         nhits, cut_sumTOT = None, None
         tmp_matrix = None
 
-    print(f"Separate Counting results in {N_Nitrogen} Ions in {ifile} frames")
-    
+        # counting blobs in masked matrix
+        n_nitro_blobs += simpleCountBlobs(masked_matrix)
+
+        MU.progress(nfiles, ifile)
+
+    print(f"\nSeparate Counting results in {N_Nitrogen} Ions in {ifile} frames")
+    print(f"________\nFound {nCF_high} crap frames with N>3e4 (out of {nbad_frames} in total)\n~~~~~~~~~~")    
+
     # Extrapolating how many ions collected in total
 
-    total_runtime = (t_frame+t_dead)*ifile 
-    total_nitrogen = (t_dead+t_frame)/t_frame*N_Nitrogen
+    print(f"t_frame={t_frame} s")
+    t_dead_msg = f"t_dead={t_dead:.4f}"
+    if(fEstimatedTdead):
+        t_dead_msg += " [ESTIMATED]!"
+    print(t_dead_msg) 
+
+    # ----------------------------------------------
+    total_runtime = None
+    if(t_run == -1):
+        total_runtime = t_frame+t_dead*ifile
+        print(f"Using [estimated] run time {total_runtime}")
+    else:
+        total_runtime = t_run # converting to seconds
+        #total_runtime = t_run*60 # converting to seconds
+        print(f"Using [provided] run time {total_runtime}")
+
+    # Counting Ions by using "find_peaks" 
+    #
+    total_nitrogen = t_dead/t_frame*N_Nitrogen
     ionrate = total_nitrogen/total_runtime
 
-    print("------ COUNTING (TOT-based) -------")
+    # Counting Ions based on average TOT per single Ion
+    # (sumTOT(All_frames)/avgTOT(single ion))
+    #
+    N_Nitrogen_TOT = total_sumTOT/avg_tot_sions
+    total_nitrogen_tot = t_dead/t_frame*N_Nitrogen_TOT
+    ionrate_tot = total_nitrogen_tot/total_runtime
+
+    # Counting Ions based on the recognized blobs over all data set
+    #
+    #N_blob_TOT = total_sumTOT/total_avg_blob_tot
+    #total_blob_tot = (t_dead+t_frame)/t_frame*N_blob_TOT
+    #ionrate_blob = total_blob_tot/total_runtime
+    
+    #total_nitro_blobs = (t_dead+t_frame)/t_frame*n_nitro_blobs
+    total_nitro_blobs = t_dead/t_frame*nIonBlobs
+    ionrate_blobs = total_nitro_blobs/total_runtime
+
+
+    # here counting the number of recognizable events 
+    # & dividing by the number of frames they were in
+    # Then extrapolating that rate over the whole run
+    ngood_frames = nfiles - nbad_frames
+    part_runtime = (t_frame+t_dead)*ngood_frames 
+    part_rate = N_Nitrogen/part_runtime
+    extrap_ion_dose = part_rate*total_runtime
+
+    print(f"Accounting only for good frames: {ngood_frames} --> {part_runtime:.2f} [s] of good runtime")
+    print(f"Partial ion rate = {part_rate:.2f} [Hz]")
+    print(f"Corresponds to total exposure of <{extrap_ion_dose:.2f}> ions")
+    
+    print(f"{MC.RED}------ COUNTING (TOT-based) -------{MC.RST}")
     print(f"Averge TOT-per-single cluster = {avg_tot_sions:.2f}")
     print(f"Total collected TOT = {total_sumTOT:.2f}")
-    print(f"Resulting in {total_sumTOT/avg_tot_sions:.2f} ions\n")
+    print(f"Resulting in {N_Nitrogen_TOT:.2f} ions detected")
+    print(f"Resulting in {ionrate_tot:.2f} [Hz]")
+    print(f"{MC.GREEN_BGR}OVERALL DOSE: {total_nitrogen_tot:.2f} ions{MC.RST}\n")
+
+    print(f"{MC.GREEN}------ COUNTING (BLOB-counting-based) -------{MC.RST}")
+    #print(f"Frames have {n_nitro_blobs:.2f} valid BLOBS")
+    print(f"Frames have {nIonBlobs:.2f} valid BLOBS")
+    print(f"Resulting in {ionrate_blobs:.2f} [Hz]")
+    print(f"{MC.GREEN_BGR}OVERALL DOSE: {total_nitro_blobs:.2f} ions{MC.RST}\n") 
+
+    print(f"{MC.YELLOW}------ COUNTING (FRAME-based) -------{MC.RST}")
     print(f"Ions observed = {N_Nitrogen:.2f}")
-    print(f"Run time = {total_runtime:.2f} minutes")
+    print(f"Run time = {total_runtime/60.0:.2f} minutes")
     print(f"Dead-time scaling factor = {t_dead/t_frame:.2f}")
     print(f"rate={ionrate:.2f} [Hz]")
+    print(f"{MC.GREEN_BGR}OVERALL DOSE: {total_nitrogen:.2f} ions{MC.RST}")
 
 
-
+MP.plotMatrix(occ_matrix_nonoise,
+                f"OCCUPANCY-PRUNED-{picname}",
+                labels=["Occupancy Matrix (PRUNED)", "x,[pix]", "y.[pix]"],
+                cbarname=r'$N_{hits}$',
+                outdir=outdir,
+                fLognorm=True,
+                fDebug=True)
 
 # Later make first for loop to evaluate some parameters by which automatically one could
 # select single clusters and count their charge, then apply charge counting

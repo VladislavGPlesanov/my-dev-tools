@@ -4,6 +4,8 @@ import h5py
 from matplotlib import colors, cm
 from matplotlib.colors import LogNorm
 import tables as tb 
+import sys
+import shutil
 
 
 class myPlotter:
@@ -376,6 +378,23 @@ class myPlotter:
 
 class myUtils:
 
+
+    def safe_call(self,func,*args,**kwargs):
+    
+        try:
+            func(*args,**kwargs)
+        except Exception as ex:
+            print(f"[myUtils::safe_call] Error: {ex}")
+
+    def safe_division(num, denom, failreturn=-999):
+        
+        yoba = None
+        try:
+            yoba = num/denom
+        except ZeroDivisionError:
+            yoba = failreturn
+        return yoba
+
     def progress(self, total, n):
 
         try:
@@ -383,7 +402,35 @@ class myUtils:
         except ZeroDivisionError:
             perc = 0.0
         finally:
-            print(f"\r{perc}% done", end="",flush=True)
+            if(n==total):
+                print(f"\r{perc}% done\n", end="",flush=True)
+            else:
+                print(f"\r{perc}% done", end="",flush=True)
+
+    def progress_bar(self, iteration, total):
+
+        # detecting terminal width
+        term_width = shutil.get_terminal_size().columns
+
+        # reserving space for text
+        barwidth = term_width - 40
+        barwidth = max(10,barwidth)
+
+        frac = iteration/total
+        filled = int(barwidth*frac)
+
+        # unicode chars
+        fchar = "\u2588"
+        echar = "\u2591"
+
+        bar = fchar*filled + echar*(barwidth-filled)
+        perc = frac*100        
+        sys.stdout.write(f"\r|{bar}| {perc:6.2f}% ({iteration}/{total})")
+        sys.stdout.flush()
+        if(iteration==total):
+            print()
+
+        
 
     def removePath(self,string):
         string_split = string.split('/')                                                                                                                                                                   
@@ -438,53 +485,97 @@ class myUtils:
      
         return base_group_name
 
-#class myColors:
-#
-#    def _init_(self):
-#
-#        self.bgr_col = None
-#        self.text_col = None
-#        self.colordict = {
-#            
-#            
-#        }
-#
-#    def set
-#
-#    # put these into a helper class
-#    #"\033[1;37;40m \033[2;37:40m TextColour BlackBackground  
-#    #"\033[1;30;40m Dark Gray      \033[0m 1;30;40m           
-#    #"\033[1;31;40m Bright Red     \033[0m 1;31;40m           
-#    #"\033[1;32;40m Bright Green   \033[0m 1;32;40m           
-#    #"\033[1;33;40m Yellow         \033[0m 1;33;40m           
-#    #"\033[1;34;40m Bright Blue    \033[0m 1;34;40m           
-#    #"\033[1;35;40m Bright Magenta \033[0m 1;35;40m           
-#    #"\033[1;36;40m Bright Cyan    \033[0m 1;36;40m           
-#    #"\033[1;37;40m White          \033[0m 1;37;40m           
-#    #
-#    #        TextColour GreyBackground                
-#    # \033[0;30;47m Black      \033[0m 0;30;47m       
-#    # \033[0;31;47m Red        \033[0m 0;31;47m       
-#    # \033[0;32;47m Green      \033[0m 0;32;47m       
-#    # \033[0;33;47m Brown      \033[0m 0;33;47m       
-#    # \033[0;34;47m Blue       \033[0m 0;34;47m       
-#    # \033[0;35;47m Magenta    \033[0m 0;35;47m       
-#    # \033[0;36;47m Cyan       \033[0m 0;36;47m       
-#    # \033[0;37;40m Light Grey \033[0m 0;37;40m       
-#    #
-#    #WhiteText ColouredBackground\033[0;37;40m\n"
-#    #\033[0;37;41m Black      \033[0m 0;37;41m"
-#    #\033[0;37;42m Black      \033[0m 0;37;42m"
-#    #\033[0;37;43m Black      \033[0m 0;37;43m"
-#    #\033[0;37;44m Black      \033[0m 0;37;44m"
-#    #\033[0;37;45m Black      \033[0m 0;37;45m"
-#    #\033[0;37;46m Black      \033[0m 0;37;46m"
-#    #\033[0;37;47m Black      \033[0m 0;37;47m"
-#    #\033[0;37;48m Black      \033[0m 0;37;48m"
-#
+class myColors:
 
-# other helper classes later....
-#class hdfHelper(object):
-#
-#    def __init__():
-#  
+    RST = '\033[0m'                                                                                                                                                                                    
+    RED = '\033[1;31m'
+    BLUE = '\033[1;34m'
+    GREEN = '\033[1;32m'
+    GRAY = '\033[1;37m'
+    YELLOW = '\033[1;33m'                                                                        
+    CYAN = '\033[1;36m'                                                                          
+    MAGEN = '\033[1;35m'                                                                         
+    RED_BGR = '\x1b[41m'                                                                         
+    BLUE_BGR = '\x1b[44m'                                                                        
+    GREEN_BGR = '\x1b[42m'                                                                       
+    YEL_BGR = '\x1b[43m'                                                                         
+    CYAN_BGR = '\x1b[46m'                                                                        
+    WHITE_BGR = '\x1b[47m'                                                                       
+    MAG_BGR = '\x1b[45m'       
+
+class mySymbols:
+
+    # =========================
+    # Greek lowercase
+    # =========================
+    alpha = "\u03B1"
+    beta = "\u03B2"
+    gamma = "\u03B3"
+    delta = "\u03B4"
+    epsilon = "\u03B5"
+    zeta = "\u03B6"
+    eta = "\u03B7"
+    theta = "\u03B8"
+    iota = "\u03B9"
+    kappa = "\u03BA"
+    lambda_ = "\u03BB"
+    mu = "\u03BC"
+    nu = "\u03BD"
+    xi = "\u03BE"
+    pi = "\u03C0"
+    rho = "\u03C1"
+    sigma = "\u03C3"
+    tau = "\u03C4"
+    phi = "\u03C6"
+    chi = "\u03C7"
+    psi = "\u03C8"
+    omega = "\u03C9"
+
+    # =========================
+    # Greek uppercase
+    # =========================
+    Gamma = "\u0393"
+    Delta = "\u0394"
+    Theta = "\u0398"
+    Lambda = "\u039B"
+    Xi = "\u039E"
+    Pi = "\u03A0"
+    Sigma = "\u03A3"
+    Phi = "\u03A6"
+    Psi = "\u03A8"
+    Omega = "\u03A9"
+
+    # =========================
+    # Math operators
+    # =========================
+    plusminus = "\u00B1"
+    times = "\u00D7"
+    divide = "\u00F7"
+    approx = "\u2248"
+    neq = "\u2260"
+    leq = "\u2264"
+    geq = "\u2265"
+    infinity = "\u221E"
+    partial = "\u2202"
+    nabla = "\u2207"
+    integral = "\u222B"
+    #sum = "\u2211"
+    product = "\u220F"
+    sqrt = "\u221A"
+
+    # =========================
+    # Arrows
+    # =========================
+    left = "\u2190"
+    right = "\u2192"
+    up = "\u2191"
+    down = "\u2193"
+    leftright = "\u2194"
+
+    # =========================
+    # Misc physics symbols
+    # =========================
+    degree = "\u00B0"
+    angstrom = "\u212B"
+    micro = "\u00B5"
+
