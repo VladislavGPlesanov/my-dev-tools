@@ -1,6 +1,7 @@
 import sys
 import os
 import numpy as np
+import numpy.ma as ma
 import matplotlib.pyplot as plt
 import tables as tb
 from sklearn.cluster import DBSCAN 
@@ -267,6 +268,10 @@ def toDegrees(angle):
 def toRadian(angle):
 
     return angle*3.14159/180
+
+def toPixelID(pos):
+
+    return int(np.round(pos))
 
 def removeNAN(data):
 
@@ -658,6 +663,49 @@ def multiHist(nuarray_list, nbins, binbounds, labels, legends, logy ,picname, od
     plt.legend()
     plt.savefig(f"{odir}/multiHist-{picname}.png")   
 
+def plotMultiModulation(datalist,# list of numpy arrays!
+                        datalabels, 
+                        plotlabels,
+                        picname,
+                        odir,
+                        figsize=(8,6),
+                        debug=False):
+
+    #colors = ["tomato", "goldenrod","limegreen","royalblue", "aquamarine", "teal", "mediumblue", "violet"]
+    colors = ["tomato","royalblue", "limegreen","aquamarine", "teal", "mediumblue", "violet"]
+
+    plt.figure(figsize=figsize);
+
+    minbin, maxbin = -np.pi, np.pi
+    nbins = 100
+
+    nlist = 0 
+    for dlist in datalist:
+
+        clear_data = dlist[~np.isnan(dlist)]
+        cts, edges = np.histogram(clear_data, bins=nbins, range=(minbin,maxbin), density=True)
+
+        plt.hist(edges[:-1], 
+                 weights=cts, 
+                 bins=nbins, 
+                 range=(minbin,maxbin), 
+                 align='left', 
+                 histtype='stepfilled', 
+                 facecolor=colors[nlist],
+                 alpha=0.2,
+                 label=datalabels[nlist])
+
+        nlist+=1
+    
+    plt.title(plotlabels[0])
+    plt.xlabel(plotlabels[1])
+    plt.ylabel(plotlabels[2])
+    plt.legend()
+
+    plt.savefig(f"{odir}/MULTI-MODULATION-{picname}.png")
+    plt.close()
+
+
 
 def fitAndPlotModulation(nuarray, nbins, minbin, maxbin, labels, picname, odir, debug):
 
@@ -666,8 +714,14 @@ def fitAndPlotModulation(nuarray, nbins, minbin, maxbin, labels, picname, odir, 
     if(debug):
         print(f"{OUT_MAGEN}[fitAndPlotModulation] --> {picname} --> {labels[0]} {OUT_RST}")
     clear_data = nuarray[~np.isnan(nuarray)]
-    #counts, bin_edges = np.histogram(clear_data, bins = nbins, range=(minbin,maxbin), density=True)
-    counts, bin_edges = np.histogram(clear_data, bins = nbins, range=(minbin,maxbin))
+    counts, bin_edges = None, None
+    if("-DIFF-" in picname):
+        #counts, bin_edges = np.histogram(clear_data, bins = nbins, range=(minbin,maxbin), density=True)
+        counts = nuarray
+        bin_edges = np.linspace(-np.pi, np.pi, num=100)
+    else:
+        #counts, bin_edges = np.histogram(clear_data, bins = nbins, range=(minbin,maxbin), density=True)
+        counts, bin_edges = np.histogram(clear_data, bins = nbins, range=(minbin,maxbin))
     bin_centers = (bin_edges[:-1]+bin_edges[1:])/2
     
     count_errors = np.sqrt(counts)
@@ -717,6 +771,10 @@ def fitAndPlotModulation(nuarray, nbins, minbin, maxbin, labels, picname, odir, 
     elif("CutOnPosition" in picname):
         fBinColor='darkorange'
         branch = "Mod_Cut"
+    elif("DIFF" in picname):
+        fBinColor='darkblue'
+    elif("CompReg" in picname):
+        fBinColor = 'royalblue'
     else:
         fBinColor='forestgreen'
         branch = "Mod_Orig"
@@ -795,21 +853,22 @@ def fitAndPlotModulation(nuarray, nbins, minbin, maxbin, labels, picname, odir, 
         print(f"{OUT_RED}{G_chi}={chired:.2f}{OUT_RST}")
         print("^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^")
 
-    main_results[branch][mukey] = mu
-    main_results[branch][Apkey] = Ap
-    main_results[branch][Bpkey] = Bp
-    main_results[branch][phikey] = phi
-    main_results[branch][chikey] = chired
-    main_results[branch][muerrkey] = muErr
-    main_results[branch][Aperrkey] = Ap_err
-    main_results[branch][Bperrkey] = Bp_err
-    main_results[branch][phierrkey] = phi_err
-    main_results[branch][Ikey] = intensity
-    main_results[branch][Qkey] = Q
-    main_results[branch][Ukey] = U
-    main_results[branch][Ierrkey] = intensity_err
-    main_results[branch][Qerrkey] = dQ
-    main_results[branch][Uerrkey] = dU
+    if("-DIFF-" not in picname and "CompReg" not in picname):
+        main_results[branch][mukey] = mu
+        main_results[branch][Apkey] = Ap
+        main_results[branch][Bpkey] = Bp
+        main_results[branch][phikey] = phi
+        main_results[branch][chikey] = chired
+        main_results[branch][muerrkey] = muErr
+        main_results[branch][Aperrkey] = Ap_err
+        main_results[branch][Bperrkey] = Bp_err
+        main_results[branch][phierrkey] = phi_err
+        main_results[branch][Ikey] = intensity
+        main_results[branch][Qkey] = Q
+        main_results[branch][Ukey] = U
+        main_results[branch][Ierrkey] = intensity_err
+        main_results[branch][Qerrkey] = dQ
+        main_results[branch][Uerrkey] = dU
 
     plt.legend(loc='upper right')
 
@@ -819,6 +878,7 @@ def fitAndPlotModulation(nuarray, nbins, minbin, maxbin, labels, picname, odir, 
     plt.grid()
     plt.savefig(f"{odir}/STOLEN-1DHist-{picname}.png")
     plt.close()
+
 
 def simpleHistSpectrum(nuarray, nbins, minbin, maxbin, labels, picname, odir, debug, scale=None):
 
@@ -971,9 +1031,15 @@ def simpleHist(nuarray, nbins, minbin, maxbin, labels, picname, odir, debug, fit
     elif("tmp_excent" in picname):
         cutoff = 20
     elif("tmp_hits" in picname):
-        cutoff = 2000
+        if("SIM-TPX3" in picname):
+            cutoff = 500
+        else:
+            cutoff = 2000
     elif("tmp_sumTOT" in picname):
-        cutoff = 30000
+        if("SIM-TPX3" in picname):
+            cutoff = 500
+        else:
+            cutoff = 30000
     else:
         cutoff = 20e3
 
@@ -1328,12 +1394,19 @@ def plot2dEvent(nuarray, info, picname, odir, debug, figtype=None, plotMarker=No
     elif("title" in info):
         title = info.split(":")[1]
         if("STOKES" in picname):
+            ncompr = int(np.floor(nuarray.shape[0]/256.0))
             if("STOKES-Q" in picname or "STOKES-U" in picname):
                 ms = ax.matshow(nuarray.T, cmap='jet', vmin=-1,vmax=1)
             else:
                 ms = ax.matshow(nuarray.T, cmap='jet')
-            deflabelx = "x, [pixel/4]"
-            deflabely = "y, [pixel/4]"
+            deflabelx = f"x, [pixel/{ncompr}]"
+            deflabely = f"y, [pixel/{ncompr}]"
+        elif("MEAN-sumTOT" in picname):
+            sumtot_cap = 5000
+            bad_pix = np.where(nuarray>sumtot_cap)
+            nuarray_cap = np.ma.masked_array(nuarray, np.zeros_like(nuarray, dtype=int))
+            nuarray_cap[bad_pix] = np.ma.masked
+            ms = ax.matshow(nuarray_cap.T, cmap='jet')
         else:
             ms = ax.matshow(nuarray.T, cmap='jet', norm=LogNorm(vmin=1,vmax=np.nanmax(nuarray)))
         ax.set_title(title)
@@ -1567,6 +1640,8 @@ parser.add_argument("--plotevents", action='store_true', help="Plot Individual e
 parser.add_argument("--combinedTOT", action='store_true', help="Plopt combined sumTOT plot for all data sets")
 parser.add_argument("--stokes", action='store_true', help="Plot Stokes parameter realted data")
 parser.add_argument("--plotroot", action='store_true', help="Plot ROOT histograms")
+parser.add_argument("--plotcrap", action='store_true', help="Plot absurd events (see definition in code)")
+parser.add_argument("--flatfield", action='store_true', help="Plot Flat Field Plots (see definition in code)")
 args = parser.parse_args()
 
 plotname = args.name
@@ -1636,6 +1711,13 @@ tmp_excent, tmp_hits, tmp_sumTOT, tmp_evtnr = [], [], [], []
 tmp_centerX, tmp_centerY = [], []
 tmp_length,tmp_width = [], []
 
+########################################################
+#matrix_AP_sumTOT = np.zeros((256,256),dtype=int)
+#matrix_AP_nevt = np.zeros((256,256),dtype=int)
+
+matrix_WC_sumTOT = np.zeros((256,256),dtype=int)
+matrix_WC_nevt = np.zeros((256,256),dtype=int)
+########################################################
 tmp_RMSL, tmp_RMST = [], []
 
 tmp_densityRMS, tmp_densityWL = [], []
@@ -1643,6 +1725,13 @@ tmp_densityRMS, tmp_densityWL = [], []
 tmp_secondangles_glob = []
 tmp_secondangles_Y, tmp_secondangles_Y_conv = [], []
 tmp_BGRangles = []
+
+# ----- lookin' at angles outside beam spot (MP casse only)
+tmp_compareRegion = []
+matrix_compReg = np.zeros((256,256),dtype=int)
+# ----------------------------------------
+matrix_90deg = np.zeros((256,256),dtype=int)
+matrix_0deg = np.zeros((256,256),dtype=int)
 
 tmp_theta = []
 theta_secondstage = None
@@ -1702,7 +1791,18 @@ matrix_wQ = np.zeros(downpix, dtype=float)
 matrix_wU = np.zeros(downpix, dtype=float) 
 
 #############################################
+# relevant for Copper Flat Field Data
+#
+mcuff_topleft, mcuff_topmid, mcuff_topright = [], [], []
+mcuff_midleft, mcuff_midmid, mcuff_midright = [], [], []
+mcuff_botleft, mcuff_botmid, mcuff_botright = [], [], []
 
+mcuff_edgeleft = []
+mcuff_edge_bottom = []
+
+mcuff_matrix = np.zeros((256,256),dtype=int)
+
+#############################################
 tmp_weightedY, tmp_weightedX = [], []
 
 tmp_convX, tmp_convY = [],[]
@@ -1726,6 +1826,7 @@ fTiming = False
 fCharge = False
 fConverted = False
 fLongData = False
+fPlotCrap = False
 
 ####################################################
 # flags to enable certain plots
@@ -1736,6 +1837,9 @@ fPlotROOT = args.plotroot
 fPlotStokes = args.stokes
 fPlotTiming = args.timing
 fPlotCombinedTOT = args.combinedTOT
+fPlotCrap = args.plotcrap
+fFlatField = args.flatfield
+
 # ----
 fPlotGlobalSumTOT = False
 fPlotGlobalAngles = True
@@ -2189,7 +2293,8 @@ for file in recofiles:
 
         # checks/cuts:
     
-        Rx0,Ry0 = None, None
+        #Rx0,Ry0 = None, None
+        Rx0, Ry0 = abs_meanx, abs_meany
         Rcut = abs_stdx if abs_stdx<=abs_stdy else abs_stdy
         minSumTOT, maxSumTOT = 100, 10000
         minHits, maxHits = 25, 1000
@@ -2314,7 +2419,7 @@ for file in recofiles:
                 minHits, maxHits = 60, 160
                 Rx0, Ry0 = 136.16, 135.11
             elif("CP5" in file): # 90 deg
-                Rcut = Rcut*0.25
+                Rcut = Rcut*0.75
                 minSumTOT, maxSumTOT = 2250, 5390
                 minHits, maxHits = 70, 160
                 Rx0, Ry0 = 109.21, 80.95 
@@ -2332,14 +2437,21 @@ for file in recofiles:
             Rcut = abs_stdy*2
         elif("ROME" in file or "BeamScan-bottom-Vanode" in file):
             minSumTOT, maxSumTOT = 100, 32000
+        elif("SIM-TPX3" in file):
+            #Rcut = Rcut*3
+            Rcut = 220
+            
+        elif("Fe55" in file):
+            Rx0, Ry0 = 125.0, 125.0
+            Rcut = 220
+            wx_min, wx_max = 6, 249
+            wy_min, wy_max = 6, 249
         else:
             Rx0, Ry0 = abs_meanx, abs_meany
 
-        if("SIM-TPX3" in file):
-            Rcut = Rcut*3
-
         report_cuts = "CUTS APPLIED:"
-        report_cuts+=f"Rxy = {Rx0:.4f},{Ry0:.4f}\n" 
+        report_cuts+=f"Rx0 = {Rx0:.4f}\n" 
+        report_cuts+=f"Ry0 = {Ry0:.4f}\n" 
         report_cuts+=f"Rcut = {Rcut:.4f}\n" 
         report_cuts+=f"sumTOT = {minSumTOT},{maxSumTOT}\n" 
         report_cuts+=f"nhits = {minHits},{maxHits}\n" 
@@ -2369,8 +2481,13 @@ for file in recofiles:
                 isumElec = np.sum(electrons[ievent])
     
             nhits = len(event)
-    
-            densityRMS = nhits/(RMS_T[ievent]/RMS_L[ievent])
+   
+            densityRMS = None
+            try: 
+                densityRMS = nhits/(RMS_T[ievent]/RMS_L[ievent])
+            except Exception as ex:
+                print(f"densityRMS calc failed: {ex}")
+                densityRMS = -1
             #densityWL = nhits/(width[ievent]/length[ievent])
             areaWL = width[ievent]*length[ievent] 
             #--------------------------------------------------------------
@@ -2413,13 +2530,90 @@ for file in recofiles:
             np.add.at(weightCenters, (int(np.round(weightX)), int(np.round(weightY))), 1)
             if(fPlotGlobalCenters):
                 np.add.at(weightCenters_GLOB, (int(np.round(weightX)), int(np.round(weightY))), 1)
-            
+
+            ##############################################################
+            # relevant for Copper flat field 
+            fTopLeft, fTopMid, fTopRight = False, False, False
+            fMidLeft, fMidMid, fMidRight = False, False, False
+            fBotLeft, fBotMid, fBotRight = False, False, False
+            fEdgeLeft, fEdgeBot = False, False
+
+            if(fFlatField and "ROME-Copper-Flat" in file):
+                cp_x = toPixelID(checkNAN(conversionX[ievent]))
+                cp_y = toPixelID(checkNAN(conversionY[ievent]))
+                # regions
+
+                # x, top left begins, x top left ends
+                x_tl_b, x_tl_e = 50.0, 100.0
+                # x, top mid
+                x_tm_b, x_tm_e = 109.0, 159.0
+                # x top right
+                x_tr_b, x_tr_e = 168.0, 218.0
+                # x mid
+                x_ml_b, x_ml_e = 50.0, 100.0
+                x_mm_b, x_mm_e = 109.0, 159.0
+                x_mr_b, x_mr_e = 168.0, 218.0
+                # x bottom 
+                x_bl_b, x_bl_e = 50.0, 100.0
+                x_bm_b, x_bm_e = 109.0, 159.0
+                x_br_b, x_br_e = 168.0, 218.0
+                
+                # y, top left begins, y top left ends
+                y_tl_b, y_tl_e = 205.0, 255.0
+                y_tm_b, y_tm_e = 205.0, 255.0
+                y_tr_b, y_tr_e = 205.0, 255.0
+                # y mid
+                y_ml_b, y_ml_e = 136.0, 186.0
+                y_mm_b, y_mm_e = 136.0, 186.0
+                y_mr_b, y_mr_e = 136.0, 186.0
+                # y bottom 
+                y_bl_b, y_bl_e = 72.0, 122.0
+                y_bm_b, y_bm_e = 72.0, 122.0
+                y_br_b, y_br_e = 72.0, 122.0
+ 
+                if((cp_x>x_tl_b and cp_x<x_tl_e) and
+                   (cp_y>y_tl_b and cp_y<y_tl_e)):
+                    fTopLeft = True
+                    np.add.at(mcuff_matrix, (cp_x, cp_y), 1)
+                if((cp_x>x_tm_b and cp_x<x_tm_e) and
+                  (cp_y>y_tm_b and cp_y<y_tm_e)):
+                    fTopMid = True
+                    np.add.at(mcuff_matrix, (cp_x, cp_y), 1)
+                if((cp_x>x_tr_b and cp_x<x_tr_e) and
+                  (cp_y>y_tr_b and cp_y<y_tr_e)):
+                    fTopRight = True
+                    np.add.at(mcuff_matrix, (cp_x, cp_y), 1)
+                if((cp_x>x_ml_b and cp_x<x_ml_e) and
+                  (cp_y>y_ml_b and cp_y<y_ml_e)):
+                    fMidLeft = True
+                    np.add.at(mcuff_matrix, (cp_x, cp_y), 1)
+                if((cp_x>x_mm_b and cp_x<x_mm_e) and
+                  (cp_y>y_mm_b and cp_y<y_mm_e)):
+                    fMidMid = True
+                    np.add.at(mcuff_matrix, (cp_x, cp_y), 1)
+                if((cp_x>x_mr_b and cp_x<x_mr_e) and
+                  (cp_y>y_mr_b and cp_y<y_mr_e)):
+                    fMidRight = True
+                    np.add.at(mcuff_matrix, (cp_x, cp_y), 1)
+                if((cp_x>x_bl_b and cp_x<x_bl_e) and
+                  (cp_y>y_bl_b and cp_y<y_bl_e)):
+                    fBotLeft = True
+                    np.add.at(mcuff_matrix, (cp_x, cp_y), 1)
+                if((cp_x>x_bm_b and cp_x<x_bm_e) and
+                  (cp_y>y_bm_b and cp_y<y_bm_e)):
+                    fBotMid = True
+                    np.add.at(mcuff_matrix, (cp_x, cp_y), 1)
+                if((cp_x>x_br_b and cp_x<x_br_e) and
+                    (cp_y>y_br_b and cp_y<y_br_e)):
+                    fBotRight = True
+                    np.add.at(mcuff_matrix, (cp_x, cp_y), 1)
+            ##############################################################
             if(not fNocuts):               
                 if("ROME" in file or fBeamScan):
                     goodConvXY = True if ((conversionX[ievent] >= wx_min) and 
-                                          (conversionX[ievent] <= wx_max) and 
-                                          (conversionY[ievent] >= wy_min) and 
-                                          (conversionY[ievent] <= wy_max)) else False
+                                         (conversionX[ievent] <= wx_max) and 
+                                         (conversionY[ievent] >= wy_min) and 
+                                         (conversionY[ievent] <= wy_max)) else False
                 else:
                     goodConvXY = checkClusterPosition(Rx0, 
                                                       Ry0,
@@ -2441,6 +2635,22 @@ for file in recofiles:
                 # overall cut to exclude outer part of chip and tracks
                 # with bragg peak at the chip edges
                 goodXY = True if (weightX >= wx_min and weightX <= wx_max and weightY >= wy_min and weightY <= wy_max) else False
+
+            if(goodXY):
+                wc_xpix = int(np.round(weightX))
+                wc_ypix = int(np.round(weightY))
+                np.add.at(matrix_WC_sumTOT, (wc_xpix, wc_ypix), sumTOT[ievent])
+                np.add.at(matrix_WC_nevt, (wc_xpix, wc_ypix), 1)
+
+            if(np.abs(toDegrees(secondangles[ievent]))>=85.0 and np.abs(toDegrees(secondangles[ievent]))<=95.0):
+                xpix = toPixelID(conversionX[ievent])
+                ypix = toPixelID(conversionY[ievent])
+                np.add.at(matrix_90deg, (xpix,ypix), 1)
+
+            if(np.abs(toDegrees(secondangles[ievent]))>=0.0 and np.abs(toDegrees(secondangles[ievent]))<5.0):
+                xpix = toPixelID(conversionX[ievent])
+                ypix = toPixelID(conversionY[ievent])
+                np.add.at(matrix_0deg, (xpix,ypix), 1)
 
             if (goodLength and 
                 goodXY and 
@@ -2477,16 +2687,28 @@ for file in recofiles:
                 tmp_RMSL.append(checkNAN(RMS_L[ievent]))
                 #tmp_evtArea.append(areaWL)
 
+                
                 if(fPlotGlobalSumTOT):
                     GLOB_sumTOT.append(checkNAN(sumTOT[ievent]))
                     GLOB_hits.append(checkNAN(hits[ievent]))
      
                 if(fConverted):
+                    ap_xpix = int(np.floor(checkNAN(conversionX[ievent])))
+                    ap_ypix = int(np.floor(checkNAN(conversionY[ievent])))
                     tmp_convX.append(checkNAN(conversionX[ievent]))
                     tmp_convY.append(checkNAN(conversionY[ievent]))
-                    np.add.at(absorption_points_pruned, (int(np.round(checkNAN(conversionX[ievent]))),int(np.round(checkNAN(conversionY[ievent])))),1)
+                    np.add.at(absorption_points_pruned, (ap_xpix, ap_ypix),1)
                     if(fPlotGlobalCenters):
-                        np.add.at(absorption_points_pruned_GLOB, (int(np.round(checkNAN(conversionX[ievent]))),int(np.round(checkNAN(conversionY[ievent])))),1)
+                        ap_xpix = int(np.floor(checkNAN(conversionX[ievent])))
+                        ap_ypix = int(np.floor(checkNAN(conversionY[ievent])))
+                        np.add.at(absorption_points_pruned_GLOB,(ap_xpix,ap_ypix),1)
+                        #np.add.at(matrix_AP_sumTOT, (ap_xpix, ap_ypix), sumTOT[ievent])
+                        #np.add.at(matrix_AP_nevt, (ap_xpix, ap_ypix), 1)
+                        
+                        #np.add.at(matrixSumTOTvsConvPoints, 
+                        #            (int(np.round(checkNAN(conversionX[ievent]))), 
+                        #             int(np.round(checkNAN(conversionY[ievent])))), 
+                        #         checkNAN(sumTOT[ievent]))
                     tmp_secondangles_Y_conv.append(checkNANphi(secondangles[ievent]))
             
                     # doing some maps of individual track stokes params (64x64 for now)
@@ -2495,15 +2717,15 @@ for file in recofiles:
                         Itrack, Qtrack, Utrack = getSingleTrackSokes(secondangles[ievent])
                         #downscale = 4.0
                         #downscale = 2.0
-                        xscaled = np.round(conversionX[ievent]/downscale)
-                        yscaled = np.round(conversionY[ievent]/downscale)
+                        xscaled = np.floor(conversionX[ievent]/downscale)
+                        yscaled = np.floor(conversionY[ievent]/downscale)
                         np.add.at(matrix_I, (int(xscaled),int(yscaled)), Itrack)
                         np.add.at(matrix_Q, (int(xscaled),int(yscaled)), Qtrack)
                         np.add.at(matrix_U, (int(xscaled),int(yscaled)), Utrack)
 
                         # plotting for weight centers
-                        wx = int(np.round(weightX/downscale))
-                        wy = int(np.round(weightY/downscale))
+                        wx = int(np.floor(weightX/downscale))
+                        wy = int(np.floor(weightY/downscale))
                         np.add.at(matrix_wI, (wx,wy), Itrack)
                         np.add.at(matrix_wQ, (wx,wy), Qtrack)
                         np.add.at(matrix_wU, (wx,wy), Utrack)
@@ -2530,6 +2752,28 @@ for file in recofiles:
                 for ix,iy,itot in zip(x[ievent],y[ievent], event):
                     np.add.at(matrix_cut, (ix,iy), 1)
                     np.add.at(cut_TOTMAP, (ix,iy), itot)
+
+                # for copper flat field
+                if(fFlatField and "ROME-Copper-Flat" in file):
+                    if(fTopLeft):
+                        mcuff_topleft.append(checkNAN(secondangles[ievent])) 
+                    if(fTopMid):
+                        mcuff_topmid.append(checkNAN(secondangles[ievent])) 
+                    if(fTopRight):
+                        mcuff_topright.append(checkNAN(secondangles[ievent])) 
+                    if(fMidLeft):
+                        mcuff_midleft.append(checkNAN(secondangles[ievent])) 
+                    if(fMidMid):
+                        mcuff_midmid.append(checkNAN(secondangles[ievent])) 
+                    if(fMidRight):
+                        mcuff_midright.append(checkNAN(secondangles[ievent])) 
+                    if(fBotLeft):
+                        mcuff_botleft.append(checkNAN(secondangles[ievent])) 
+                    if(fBotMid):
+                        mcuff_botmid.append(checkNAN(secondangles[ievent])) 
+                    if(fBotRight):
+                        mcuff_botright.append(checkNAN(secondangles[ievent])) 
+
                 naccepted+=1
 
             else:
@@ -2538,8 +2782,8 @@ for file in recofiles:
                 if(not np.isnan(conversionX[ievent]) and 
                    not np.isnan(conversionY[ievent])):
                     Itrack, Qtrack, Utrack = getSingleTrackSokes(secondangles[ievent])
-                    xscal = np.round(conversionX[ievent]/downscale)
-                    yscal = np.round(conversionY[ievent]/downscale)
+                    xscal = np.floor(conversionX[ievent]/downscale)
+                    yscal = np.floor(conversionY[ievent]/downscale)
                 
                     try:
                         np.add.at(fullmat_I, (int(xscal),int(yscal)), Itrack)
@@ -2556,7 +2800,46 @@ for file in recofiles:
                     bad_excent.append(excent[ievent])
                     bad_length.append(length[ievent])
                     bad_sumTOT.append(sumTOT[ievent])
-                 
+                
+
+                this_angle = None
+                cr_xpix, cr_ypix = None, None
+                if("MP-good-angles" in file):
+                    if(("-MP6-60deg" in file) or ("-MP7-30deg" in file) or ("-MP5-90deg-lowRate" in file)):
+                        if((conversionX[ievent]>45.0 and
+                           conversionX[ievent]<220.0 and 
+                           conversionY[ievent]>125.0 and 
+                           conversionY[ievent]<200.0) or (
+                           conversionX[ievent]>160.0 and 
+                           conversionX[ievent]<220.0 and 
+                           conversionY[ievent]>50.0 and 
+                           conversionY[ievent]<125.0)
+                           ):
+                            this_angle = secondangles[ievent]
+                            cr_xpix = int(np.floor(conversionX[ievent]))
+                            cr_ypix = int(np.floor(conversionY[ievent]))
+                    else:    
+                        if((conversionX[ievent]>25.0 and
+                           conversionX[ievent]<225.0 and 
+                           conversionY[ievent]>146.0 and 
+                           conversionY[ievent]<225.0) or (
+                           conversionX[ievent]>150.0 and 
+                           conversionX[ievent]<225.0 and 
+                           conversionY[ievent]>50.0 and 
+                           conversionY[ievent]<146.0) or(
+                           conversionX[ievent]>25.0 and 
+                           conversionX[ievent]<55.0 and 
+                           conversionY[ievent]>50.0 and 
+                           conversionY[ievent]<146.0)
+                           ):
+                            this_angle = secondangles[ievent]
+                            cr_xpix = int(np.floor(conversionX[ievent]))
+                            cr_ypix = int(np.floor(conversionY[ievent])) 
+
+                if(this_angle is not None):
+                    tmp_compareRegion.append(this_angle)
+                    np.add.at(matrix_compReg, (cr_xpix,cr_ypix), 1)
+ 
  
             if(fPlotSingleEvents and 
                (npics < 5 and
@@ -2567,7 +2850,8 @@ for file in recofiles:
                goodSumTOT and
                #goodHits and
                goodExcent) or
-               nhits > 10000 
+               (nhits > 20000 and 
+               fPlotCrap)
                #densityRMS > 1e6 
                #toaLength[ievent]>16000 or
                #(toaRMS[ievent]>1000 and toaRMS[ievent<4000]) or
@@ -2629,7 +2913,11 @@ for file in recofiles:
     ifilename = file.split("/")[-1].split(".")[0]
     isuffix = clearString(ifilename, '-', '-', ommit)
 
-    if(len(tmp_secondangles)>0):
+    fGoodSecAng = len(tmp_secondangles)>0
+    fGoodBGRAng = len(tmp_BGRangles)>0
+    fGoodCompReg = len(tmp_compareRegion)>0
+
+    if(fGoodSecAng):
         fitAndPlotModulation(np.array(tmp_secondangles),
                              100,
                              -np.pi,
@@ -2638,10 +2926,10 @@ for file in recofiles:
                              f"STOLEN-XpolSecondStage-CutOnPosition-{nfile}-{isuffix}",
                              outdir,
                              debug)
-    tmp_secondangles.clear() 
 
 
-    if(len(tmp_BGRangles)>0):
+
+    if(fGoodBGRAng):
         fitAndPlotModulation(np.array(tmp_BGRangles),
                              100,
                              -np.pi,
@@ -2650,6 +2938,31 @@ for file in recofiles:
                              f"STOLEN-XpolSecondStage-CutOnPosition-BGRangles-{nfile}-{isuffix}",
                              outdir,
                              debug)
+    if(fGoodCompReg):
+        fitAndPlotModulation(np.array(tmp_compareRegion),
+                             100,
+                             -np.pi,
+                             np.pi,
+                             ["Reconstructed Angle Distribution (ComparisonRegion)", "Angle [radian]", r"$N_{Entries}$"],
+                             f"STOLEN-XpolSecondStage-CompReg-{nfile}-{isuffix}",
+                             outdir,
+                             debug)
+
+        plot2dEvent(matrix_compReg, "title:Absorption Points (controlReg)", f"AP-CONTROL-{nfile}-{isuffix}",outdir, debug)
+        matrix_compReg = np.zeros((256,256),dtype=int)
+   
+    if(fGoodBGRAng and fGoodSecAng):
+     
+        plotMultiModulation([np.array(tmp_secondangles), np.array(tmp_BGRangles)],
+                            ["Signal", "BGR"],
+                            ["Reconstructed Angle Distribution (SIG-BGR)", "Angle [radian]", r"$N_{Entries}$"],
+                            f"STOLEN-XpolSecondStage-DIFF-{nfile}-{isuffix}",
+                            outdir) 
+
+    
+
+    tmp_compareRegion.clear()
+    tmp_secondangles.clear() 
     tmp_BGRangles.clear()    
 
     plot2dEvent(matrixTotal, "", f"OCCUPANCY-total-run-{nfile}-{isuffix}", outdir, debug)
@@ -2798,6 +3111,11 @@ for file in recofiles:
 
         rMaxSumTOT = 8000
         rMaxHits = 300
+
+        if("SIM-TPX3" in file):
+            rMaxSumTOT = 500
+            rMaxHits = 400
+
         if("ROME" in file or "BeamScan-bottom-Vanode" in file):
             rMaxSumTOT = 32000
             rMaxHits = 1000
@@ -2876,6 +3194,12 @@ for file in recofiles:
         plot2Dhist(np.array(tmp_convX), np.array(tmp_sumTOT), [r"Cluster $\Sigma$(TOT) X vs reconstructed Absorption X", "Absorption X", r"$\Sigma$(TOT)"], f"2D-AbsPointX-vs-sumTOT-{nfile}-{isuffix}", outdir, debug)
         plot2Dhist(np.array(tmp_convY), np.array(tmp_sumTOT), [r"Cluster $\Sigma$(TOT) Y vs reconstructed Absorption Y", "Absorption Y", r"$\Sigma$(TOT)"], f"2D-AbsPointY-vs-sumTOT-{nfile}-{isuffix}", outdir, debug)
 
+        plot2dEvent(matrix_90deg, r"title: Location of Tracks with $\phi=90^{\circ}\pm5^{\circ}$", f"90deg-Angles-{isuffix}",outdir,debug)
+        matrix_90deg = np.zeros((256,256),dtype=int)
+
+        plot2dEvent(matrix_0deg, r"title: Location of Tracks with $\phi=0^{\circ}\pm5^{\circ}$", f"0deg-Angles-{isuffix}",outdir,debug)
+        matrix_0deg = np.zeros((256,256),dtype=int)
+
         if(fPlotStokes): 
             print("[MAIN]: Plotting Stokes...")    
             # thhis one is mostly for MAgnetic peak data sets....
@@ -2899,7 +3223,10 @@ for file in recofiles:
 
             plot2dEvent(fullmat_I, f"title:Stokes I for Absorption Points in {matsize}x{matsize} map", f"STOKES-I-FULLMAT-AP-{isuffix}", outdir,debug)
             plot2dEvent(fullmat_Q/fullmat_I, f"title:Stokes Q for Absorption Points in {matsize}x{matsize} map", f"STOKES-Q-FULLMAT-AP-{isuffix}", outdir,debug)
-            plot2dEvent(fullmat_U/fullmat_I, f"title:Stokes U for Absorption Points in {matsize}x{matsize} map", f"STOKES-U-FULLMAT-AP-{isuffix}", outdir,debug)
+            plot2dEvent(fullmat_U/fullmat_I, 
+                        f"title:Stokes U for Absorption Points in {matsize}x{matsize} map", 
+                        f"STOKES-U-FULLMAT-AP-{isuffix}", 
+                        outdir,debug)
 
             # reseting matrices 
             fullmat_I = np.zeros(downpix,dtype=float)
@@ -2913,6 +3240,28 @@ for file in recofiles:
             matrix_wI = np.zeros(downpix,dtype=float)
             matrix_wQ = np.zeros(downpix,dtype=float)
             matrix_wU = np.zeros(downpix,dtype=float)
+
+            #plot2dEvent(matrixSumTOTvsConvPoints, r"title:$\Sigma$(TOT) vs Absorption Point x,y", f"2D-sumTOT-vs-AbsPointsXY-{isuffix}",outdir, debug)
+            #matrixSumTOTvsConvPoints = np.zeros((256,256),dtype=int)
+
+            #avg_sumTOT_perAP = matrix_AP_sumTOT/matrix_AP_nevt
+            #plot2dEvent(avg_sumTOT_perAP, 
+            #            r"title:Mean $\Sigma$(TOT) per Absoprtion Point (X,Y)",
+            #            f"MEAN-sumTOT-perPixel-{isuffix}",
+            #            outdir,
+            #            debug)
+            #matrix_AP_sumTOT  = np.zeros((256,256),dtype=int)
+            #matrix_AP_nevt  = np.zeros((256,256),dtype=int)
+
+            avg_sumTOT_perWC = matrix_WC_sumTOT/matrix_WC_nevt
+            plot2dEvent(avg_sumTOT_perWC, 
+                        r"title:Mean $\Sigma$(TOT) per Cluster Weight Center",
+                        f"MEAN-sumTOT-perPixel-WeightCenter-{isuffix}",
+                        outdir,
+                        debug)
+            matrix_WC_sumTOT  = np.zeros((256,256),dtype=int)
+            matrix_WC_nevt  = np.zeros((256,256),dtype=int)
+
 
 
     if(fTiming and fPlotTiming):
@@ -3006,6 +3355,29 @@ for file in recofiles:
     nfile+=1
 
 # plotting GLOBAL plots
+if(fFlatField):
+    plot2dEvent(mcuff_matrix, "title:Absorption Points for Selected Regions",f"ABS-CuFF-REGIONS-{plotname}", outdir, debug)
+
+    mcuff_regions = [mcuff_topleft, mcuff_topmid, mcuff_topright,
+                      mcuff_midleft, mcuff_midmid, mcuff_midright,  
+                      mcuff_botleft, mcuff_botmid, mcuff_botright]
+
+    basetitle = r"title:Flat Field $\phi_{\mathrm{reco}}$ Distribution "
+    strpositions = ["TopLeft", "TopMid", "TopRight",
+                    "midLeft", "MidMid", "MidRight",
+                    "BotLeft", "BotMid", "BotRight"]
+    basepicname = "STOLEN-CuFF-"
+
+    for iregion, istrpos in zip(mcuff_regions, strpositions):
+        if(len(iregion)>0):
+            fitAndPlotModulation(np.array(iregion),
+                                 100,
+                                 -np.pi,
+                                 np.pi,
+                                 [basetitle+istrpos, "Angle [radian]", r"$N_{Entries}$"],
+                                 basepicname+istrpos,
+                                 outdir,
+                                 debug)
 
 if(fPlotGlobalSumTOT):
     simpleHist(np.array(GLOB_sumTOT), 100, np.nanmin(GLOB_sumTOT), np.nanmax(GLOB_sumTOT), [r"$\Sigma$(TOT) per Cluster",r"$\Sigma$(TOT)","Events,[N]"], f"tmp_sumTOT-GLOBAL", outdir, debug) 
@@ -3050,24 +3422,45 @@ if(fPlotGlobalAngles):
 
 fConstAngle = checkDataSetConsistency(countangles,"angles")
 fConstRate = checkDataSetConsistency(countrates,"rates")
-fConstSoruce = checkDataSetConsistency(countSources,"data types")
+fConstSource = checkDataSetConsistency(countSources,"data types")
 
-fAbortGlobal =  not fConstRate and not fConstAngle and not fConstSoruce
+fAbortGlobal =  not fConstRate and not fConstAngle and not fConstSource
 
-               #sum(val != 0 for val in countangles.values()) > 1 and 
-               #sum(val != 0 for val in countrates.values()) > 1
+# flagbox for global flag states
 
-if(debug):
-    print(f"angles counted:\n{countangles.keys()}\n{countangles.values()}")
+globflagbox = [
+    f"ConstAngle = {fConstAngle}",
+    f"ConstRate = {fConstRate}",
+    f"ConstSource = {fConstSource}",
+    f"AbortGlobal = {fAbortGlobal}"
+]
+
+for line in globflagbox:
+    state = line.split("=")[1]
+    if("True" in state):
+        line = f"{OUT_GREEN_BGR}"+line+f"{OUT_RST}"
+    else:
+        line = f"{OUT_RED_BGR}"+line+f"{OUT_RST}"
+
+makeFancySection(globflagbox)
+
+if(fPlotGlobalCenters and fAbortGlobal):
+    print("DENYING GLOBAL PLOTOS:")
+    print(f"angles={countangles}")
+    print(f"rates={countrates}")
+    print(f"sources={countSources}")
 
 if(fAbortGlobal):
-    fPlotGlobalCenters = False
-    fPlotGlobalStokes = False
-    if(debug):
-        print(f"Detecting run with data for multiple angle settings: Ommiting GLobal cummulative matrix plots")
+    if(not fFlatField):
+        fPlotGlobalCenters = False
+        fPlotGlobalStokes = False 
+        if(debug):
+            print(f"Detecting run with data for multiple angle settings: Ommiting GLobal cummulative matrix plots")
+    else:
+        print("Some parameters are inconsistent within the set of runs\nPlotting for Flat Field data anyway...")
 
 if(fPlotGlobalCenters):
-    plot2dEvent(weightCenters_GLOB, "title:Weight Centers of All tracks (GLOBAL)", f"weight-centers-GLOBAL-{isuffix}", outdir, debug)
+    plot2dEvent(weightCenters_GLOB, "title:Weght Centers of All tracks (GLOBAL)", f"weight-centers-GLOBAL-{isuffix}", outdir, debug)
     plot2dEvent(absorption_points_pruned_GLOB, "title:Absorption Points Pruned (GLOBAL)", f"AbsPointsPruned-GLOB-{isuffix}",outdir, debug)
     weightCenters_GLOB = None
 
@@ -3075,13 +3468,13 @@ if(fPlotGlobalCenters):
 
 if(fPlotGlobalStokes):
 
-    plot2dEvent(glob_fullmat_I, "title:Stokes I for individual Tracks in {matsize}x{matsize} map\n(All data sets, Full Matrix)", f"FULL-GLOB-STOKES-I-{isuffix}", outdir, debug)
-    plot2dEvent(glob_fullmat_Q/glob_fullmat_I, "title:Stokes Q for individual Tracks in {matsize}x{matsize} map\n(All data sets,Full Matrix)", f"FULL-GLOB-STOKES-Q-{isuffix}", outdir, debug)
-    plot2dEvent(glob_fullmat_U/glob_fullmat_I, "title:Stokes U for individual Tracks in {matsize}x{matsize} map\n(All data sets, Full Matrix)", f"FULL-GLOB-STOKES-U-{isuffix}", outdir, debug)
+    plot2dEvent(glob_fullmat_I, f"title:Stokes I for individual Tracks in {matsize}x{matsize} map\n(All data sets, Full Matrix)", f"FULL-GLOB-STOKES-I-{isuffix}", outdir, debug)
+    plot2dEvent(glob_fullmat_Q/glob_fullmat_I, f"title:Stokes Q for individual Tracks in {matsize}x{matsize} map\n(All data sets,Full Matrix)", f"FULL-GLOB-STOKES-Q-{isuffix}", outdir, debug)
+    plot2dEvent(glob_fullmat_U/glob_fullmat_I, f"title:Stokes U for individual Tracks in {matsize}x{matsize} map\n(All data sets, Full Matrix)", f"FULL-GLOB-STOKES-U-{isuffix}", outdir, debug)
  
-    plot2dEvent(glob_matrix_I, "title:Stokes I for individual Tracks in {matsize}x{matsize} map (All data sets)", f"GLOB-STOKES-I-{isuffix}", outdir, debug)
-    plot2dEvent(glob_matrix_Q/glob_matrix_I, "title:Stokes Q for individual Tracks in {matsize}x{matsize} map (All data sets)", f"GLOB-STOKES-Q-{isuffix}", outdir, debug)
-    plot2dEvent(glob_matrix_U/glob_matrix_I, "title:Stokes U for individual Tracks in {matsize}x{matsize} map (All data sets)", f"GLOB-STOKES-U-{isuffix}", outdir, debug)
+    plot2dEvent(glob_matrix_I, f"title:Stokes I for individual Tracks in {matsize}x{matsize} map (All data sets)", f"GLOB-STOKES-I-{isuffix}", outdir, debug)
+    plot2dEvent(glob_matrix_Q/glob_matrix_I, f"title:Stokes Q for individual Tracks in {matsize}x{matsize} map (All data sets)", f"GLOB-STOKES-Q-{isuffix}", outdir, debug)
+    plot2dEvent(glob_matrix_U/glob_matrix_I, f"title:Stokes U for individual Tracks in {matsize}x{matsize} map (All data sets)", f"GLOB-STOKES-U-{isuffix}", outdir, debug)
  
 # plotting some shite about HSCANs
 if(fPlotGlobalLineScan):

@@ -8,6 +8,9 @@ from lmfit import Model
 from time import sleep
 import matplotlib.patches as patch
 
+from MyPlotter import myUtils
+from MyPlotter import myPlotter
+
 def initMatrix(dtype):
 
     return np.zeros((256,256),dtype=dtype)
@@ -91,6 +94,9 @@ def plotMatrix(matrix, labels, picname, auxpicname):
 
 ###GREEK LETTERS###
 
+MU = myUtils()
+MP = myPlotter()
+
 G_mu = '\u03bc'
 G_sigma = '\u03c3'
 G_chi = '\u03c7'
@@ -123,12 +129,45 @@ with tb.open_file(fbefore) as f:
     cluster_x = f.get_node(bgname+"x")
     cluster_y = f.get_node(bgname+"y")
     ToT = f.get_node(bgname+"ToT")
+   
+    npic = 0  
+    tmp_good_tot = []
+    nevents_total = len(ToT)
+    cntr = 0
+    for event in ToT:
+        nhits = len(event)
+        if(nhits<10000):
 
-    for xpos, ypos, tot in zip(cluster_x, cluster_y, ToT):
-        np.add.at(mat_before, (xpos,ypos), 1)            
-        np.add.at(tot_mat_bef, (xpos,ypos), tot)            
+            tmp_track = initMatrix(int)
+            for xpos, ypos, tot in zip(cluster_x[cntr], cluster_y[cntr], event):
+                np.add.at(mat_before, (xpos,ypos), 1)            
+                np.add.at(tot_mat_bef, (xpos,ypos), tot)            
+                np.add.at(tmp_track, (xpos,ypos), tot)            
+       
+            if(npic<10 and
+               nhits > 25): 
+                MP.plotMatrix(tmp_track,
+                              f"track-before-{cntr}",
+                              labels=[f"Fe55, Before, Event {cntr}", "pix, [x]","pix, [y]"],
+                              figsize=(8,7),
+                              cmap='viridis',
+                              fDebug=True)
+                npic+=1
 
-    TOT_before = np.concatenate(ToT)
+            tmp_track = None
+            tmp_good_tot.append(event)
+
+        cntr+=1
+        MU.progress(nevents_total, cntr)
+
+    #for xpos, ypos, tot in zip(cluster_x, cluster_y, ToT):
+    #    np.add.at(mat_before, (xpos,ypos), 1)            
+    #    np.add.at(tot_mat_bef, (xpos,ypos), tot)            
+
+    #TOT_before = np.concatenate(ToT)
+    TOT_before = np.concatenate(tmp_good_tot)
+    #TOT_before = np.array(tmp_good_tot)
+    tmp_good_tot = None
 
 print(f"Processed FILE before: {fbefore}")
 
@@ -140,11 +179,44 @@ with tb.open_file(fafter) as f:
     cluster_y = f.get_node(bgname+"y")
     ToT = f.get_node(bgname+"ToT")
 
-    for xpos, ypos, tot in zip(cluster_x, cluster_y, ToT):
-        np.add.at(mat_after, (xpos,ypos), 1)            
-        np.add.at(tot_mat_aft, (xpos,ypos), tot)            
+    npic = 0
+    tmp_good_tot = []
+    cntr = 0
+    for event in ToT:
+        nhits = len(event)
+        if(nhits<10000):
+    
+            tmp_track = initMatrix(int)
 
-    TOT_after = np.concatenate(ToT)
+            for xpos, ypos, tot in zip(cluster_x[cntr], cluster_y[cntr], event):
+                np.add.at(mat_after, (xpos,ypos), 1)            
+                np.add.at(tot_mat_aft, (xpos,ypos), tot)            
+                np.add.at(tmp_track, (xpos,ypos), tot)            
+      
+            if(npic<10 and
+               nhits > 25): 
+                MP.plotMatrix(tmp_track,
+                              f"track-after-{cntr}",
+                              labels=[f"Fe55, After, Event {cntr}", "pix, [x]","pix, [y]"],
+                              figsize=(8,7),
+                              cmap='jet',
+                              fDebug=True)        
+                npic+=1
+            tmp_track = None
+
+            tmp_good_tot.append(event)
+
+        cntr+=1
+        MU.progress(nevents_total, cntr)
+
+    #for xpos, ypos, tot in zip(cluster_x, cluster_y, ToT):
+    #    np.add.at(mat_after, (xpos,ypos), 1)            
+    #    np.add.at(tot_mat_aft, (xpos,ypos), tot)            
+
+    TOT_after = np.concatenate(tmp_good_tot)
+    #TOT_after = np.array(tmp_good_tot)
+    #TOT_after = np.concatenate(ToT)
+    tmp_good_tot = None
 
 print(f"Processed FILE after: {fafter}")
 
