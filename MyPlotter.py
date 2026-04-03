@@ -332,8 +332,8 @@ class myPlotter:
             ax.set_ylabel(labels[2])
         else:
             ax.set_title(deftitle)
-            ax.set_xlabel(defxlabel)
-            ax.set_ylabel(defylabel)
+            ax.set_xlabel(deflabelx)
+            ax.set_ylabel(deflabely)
         if(fGrid):
             ax.grid(c='black', ls=':',lw=0.4)
             

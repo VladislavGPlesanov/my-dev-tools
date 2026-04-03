@@ -108,6 +108,12 @@ nrun = 0
 fValid = True
 fDrift = False
 
+#### in case have sliding region data ###
+
+regions = []
+reg_mus, reg_muerrs, reg_chis = [], [], []
+fSlidingMod = False
+
 for line in f:
 
     if("-SUCCESS-" in line):
@@ -218,6 +224,20 @@ for line in f:
                 Qmod.append(float(par.split("=")[1]))
             if("Qerr=" in par):
                 Qmoderr.append(float(par.split("=")[1]))
+
+    if("sliding" in line and "modulation" in line):
+        fSlidingMod = True
+
+    if(fSlidingMod and "mu" in line and "muerr" in line and "chired" in line):
+        regname = line.split(":")[0]
+        regvalues = lien.split(":")[1].split(",")
+        for entry in regvalues:
+            if("mu" in entry):
+                reg_mus.append(float(entry.split("=")[1]))
+            if("muerr" in entry):
+                reg_muerrs.append(float(entry.split("=")[1]))
+            if("chired" in entry):
+                reg_chis.append(float(entry.split("=")[1]))
 
 
 print(mu)
@@ -632,5 +652,6 @@ if(fSingle):
     plt.close()
 
 
+#if()
 
 

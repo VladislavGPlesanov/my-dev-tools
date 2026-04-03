@@ -12,7 +12,7 @@ from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 import math
 import glob
 import datetime as dtime
-from matplotlib.patches import Ellipse
+from matplotlib.patches import Ellipse, Rectangle
 import argparse as ap
 
 from MyPlotter import myUtils
@@ -172,8 +172,10 @@ main_results={
     "Mod_Orig":{},
     "Mod_BGR":{},
     "Mod_Cut":{}
+#    "Part_Res":{}
 }
 
+part_results = {}
 
 def getCut(dict_entry, check_value):
 
@@ -705,12 +707,11 @@ def plotMultiModulation(datalist,# list of numpy arrays!
     plt.savefig(f"{odir}/MULTI-MODULATION-{picname}.png")
     plt.close()
 
-
-
 def fitAndPlotModulation(nuarray, nbins, minbin, maxbin, labels, picname, odir, debug):
 
     # faithfully stolen from Markus's plot_angles.py
     # fitting 
+
     if(debug):
         print(f"{OUT_MAGEN}[fitAndPlotModulation] --> {picname} --> {labels[0]} {OUT_RST}")
     clear_data = nuarray[~np.isnan(nuarray)]
@@ -764,6 +765,7 @@ def fitAndPlotModulation(nuarray, nbins, minbin, maxbin, labels, picname, odir, 
     Ikey, Qkey, Ukey = "I","Q","U"
     Ierrkey, Qerrkey, Uerrkey = "Ierr", "Qerr", "Uerr"
     branch = None
+    fSlidingMod = False
 
     if("BGR" in picname):
         fBinColor='gray'
@@ -773,6 +775,10 @@ def fitAndPlotModulation(nuarray, nbins, minbin, maxbin, labels, picname, odir, 
         branch = "Mod_Cut"
     elif("DIFF" in picname):
         fBinColor='darkblue'
+    elif("PART-MOD" in picname):
+        fBinColor='crimson'
+        fSlidingMod = True
+        branch = picname.split("-")[2]
     elif("CompReg" in picname):
         fBinColor = 'royalblue'
     else:
@@ -853,7 +859,7 @@ def fitAndPlotModulation(nuarray, nbins, minbin, maxbin, labels, picname, odir, 
         print(f"{OUT_RED}{G_chi}={chired:.2f}{OUT_RST}")
         print("^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^")
 
-    if("-DIFF-" not in picname and "CompReg" not in picname):
+    if("-DIFF-" not in picname and "CompReg" not in picname and not fSlidingMod):
         main_results[branch][mukey] = mu
         main_results[branch][Apkey] = Ap
         main_results[branch][Bpkey] = Bp
@@ -869,6 +875,12 @@ def fitAndPlotModulation(nuarray, nbins, minbin, maxbin, labels, picname, odir, 
         main_results[branch][Ierrkey] = intensity_err
         main_results[branch][Qerrkey] = dQ
         main_results[branch][Uerrkey] = dU
+    if(fSlidingMod):
+        part_results[branch] = {
+            "mu":mu,
+            "muerr":muErr,
+            "chired":chired
+        }
 
     plt.legend(loc='upper right')
 
@@ -1033,11 +1045,17 @@ def simpleHist(nuarray, nbins, minbin, maxbin, labels, picname, odir, debug, fit
     elif("tmp_hits" in picname):
         if("SIM-TPX3" in picname):
             cutoff = 500
+        elif("CP" in picname or "MP" in picname or "DB" in picname):
+            cutoff = 400
         else:
             cutoff = 2000
     elif("tmp_sumTOT" in picname):
         if("SIM-TPX3" in picname):
             cutoff = 500
+        elif("Fe55" in picname):
+            cutoff = 9000
+        elif("CP" in picname or "MP" in picname or "DB" in picname):
+            cutoff = 10000 
         else:
             cutoff = 30000
     else:
@@ -1642,6 +1660,7 @@ parser.add_argument("--stokes", action='store_true', help="Plot Stokes parameter
 parser.add_argument("--plotroot", action='store_true', help="Plot ROOT histograms")
 parser.add_argument("--plotcrap", action='store_true', help="Plot absurd events (see definition in code)")
 parser.add_argument("--flatfield", action='store_true', help="Plot Flat Field Plots (see definition in code)")
+parser.add_argument("--swipemod", action='store_true', help="Do a modulatin sweep along x axis (see definition in code)")
 args = parser.parse_args()
 
 plotname = args.name
@@ -1803,6 +1822,38 @@ mcuff_edge_bottom = []
 mcuff_matrix = np.zeros((256,256),dtype=int)
 
 #############################################
+swipe_area = 32 # pixels
+swipe_steps = 16
+swipe_centery = 160
+xcenter_spacing = np.floor(256/swipe_steps)
+swipe_ymin = swipe_centery-swipe_area/2
+swipe_ymax = swipe_centery+swipe_area/2
+
+sliding_reg = [ [] for i in range(int(swipe_steps))]
+
+sliding_bounds = np.linspace(swipe_area/2,256-swipe_area/2, swipe_steps)
+
+square_left = np.array(sliding_bounds)-swipe_area/2
+square_right = np.array(sliding_bounds)+swipe_area/2
+if(debug):
+    for c, l, r in zip(sliding_bounds, square_left, square_right):
+        print(f"box {l:.2f}<---{c:.2f}--->{r:.2f}")
+
+dummy_mat = np.ones((256,256),dtype=int)
+ms = None
+fig, ax = plt.subplots(figsize=(9,9))
+ms = ax.matshow(dummy_mat.T, cmap='viridis')
+for rc, rl, rr in zip(sliding_bounds, square_left, square_right):
+    rect = Rectangle((rl,swipe_centery-swipe_area/2),swipe_area, swipe_area, linewidth=1.5,edgecolor='red', facecolor='none')
+    ax.add_patch(rect)
+ax.set_xlabel("x")
+ax.set_xlabel("y")
+ax.invert_yaxis()
+
+plt.savefig(f"{outdir}/checking-sliding-regions-{plotname}.png")
+plt.close()
+#exit(0)
+############################################
 tmp_weightedY, tmp_weightedX = [], []
 
 tmp_convX, tmp_convY = [],[]
@@ -1839,6 +1890,7 @@ fPlotTiming = args.timing
 fPlotCombinedTOT = args.combinedTOT
 fPlotCrap = args.plotcrap
 fFlatField = args.flatfield
+fSwipeModulation = args.swipemod
 
 # ----
 fPlotGlobalSumTOT = False
@@ -2278,7 +2330,6 @@ for file in recofiles:
             if(debug):
                 print(f"Deviation in absorption x and y are:\n{OUT_BLUE} sigma_x={abs_stdx:.4f}, sigma_y={abs_stdy:.4f} {OUT_RST}")
     
-
         #exit(0)
         ntotal = ToT.shape[0]
         freport.write(f"\nN_clusters = {ntotal}")
@@ -2473,7 +2524,7 @@ for file in recofiles:
         for event in ToT: 
 
             if("after-0deg-1p46MHz" in file and EVENTNR[ievent]>245000):
-                print("BREAKING loop!")
+                print("BREAKING loop for MHz run!")
                 break
 
             isumElec = 0
@@ -2488,7 +2539,6 @@ for file in recofiles:
             except Exception as ex:
                 print(f"densityRMS calc failed: {ex}")
                 densityRMS = -1
-            #densityWL = nhits/(width[ievent]/length[ievent])
             areaWL = width[ievent]*length[ievent] 
             #--------------------------------------------------------------
              
@@ -2537,6 +2587,21 @@ for file in recofiles:
             fMidLeft, fMidMid, fMidRight = False, False, False
             fBotLeft, fBotMid, fBotRight = False, False, False
             fEdgeLeft, fEdgeBot = False, False
+
+            if(fSwipeModulation):
+                axpix = toPixelID(checkNAN(conversionX[ievent]))
+                aypix = toPixelID(checkNAN(conversionY[ievent]))
+                isecang = checkNAN(secondangles[ievent])
+
+                bcnt = 0
+                for bleft, bright, slidreg in zip(square_left, square_right, sliding_reg):
+                    if(aypix>=swipe_ymin and aypix<=swipe_ymax):
+                        if(axpix>=bleft and axpix<=bright):
+                            slidreg.append(isecang)
+                        else:
+                            continue
+                    else:
+                        break
 
             if(fFlatField and "ROME-Copper-Flat" in file):
                 cp_x = toPixelID(checkNAN(conversionX[ievent]))
@@ -2754,7 +2819,7 @@ for file in recofiles:
                     np.add.at(cut_TOTMAP, (ix,iy), itot)
 
                 # for copper flat field
-                if(fFlatField and "ROME-Copper-Flat" in file):
+                if(fFlatField and ("ROME-Copper-Flat" in file or "Fe55" in file or "Vgrid" in file)):
                     if(fTopLeft):
                         mcuff_topleft.append(checkNAN(secondangles[ievent])) 
                     if(fTopMid):
@@ -2888,7 +2953,6 @@ for file in recofiles:
                 #------------------------------------------------------------------
                 npics+=1
      
-            #progress(ntotal, ievent)
             MU.progress_bar(ievent,ntotal)
             ievent+=1
         
@@ -2905,6 +2969,7 @@ for file in recofiles:
 
     if(debug):
         print("Resetting result dictionary...")
+        print(main_results)
     main_results.fromkeys(main_results,0)
 
     # making file name suffixes 
@@ -3080,7 +3145,7 @@ for file in recofiles:
              f"tmp_theta-{nfile}-{isuffix}", 
              outdir, 
              debug) 
-   
+
     if(fCharge):
  
         safe_call(simpleHist,
@@ -3278,6 +3343,8 @@ for file in recofiles:
     freport.write("\nModulation factor Calculations:\n")
     outstring = ""
     for branch in main_results.keys():
+        if(debug):
+            print(main_results[branch]) 
         outstring+=f"{branch}:"
         subset = main_results[branch]
         nkeys = 0
@@ -3289,11 +3356,12 @@ for file in recofiles:
                 outstring+="\n"
             else:
                 outstring+=","
+
         outstring+="\n"
    
     freport.write(outstring)
     outstring = None
- 
+
     freport.write(f"\nFinished file {file}")
     freport.write("\n----------------------------------------\n")
     freport.flush()
@@ -3307,7 +3375,7 @@ for file in recofiles:
     anono_list = ['reco','weighted','eVelApp'] 
     dlabel = clearString(dname,'-',',',anono_list)
 
-    freport.write(f"Annotation:{dlabel}")
+    freport.write(f"Annotation:{dlabel}\n")
     freport.flush()
   
     if(fPlotCombinedTOT): 
@@ -3356,28 +3424,99 @@ for file in recofiles:
 
 # plotting GLOBAL plots
 if(fFlatField):
-    plot2dEvent(mcuff_matrix, "title:Absorption Points for Selected Regions",f"ABS-CuFF-REGIONS-{plotname}", outdir, debug)
 
-    mcuff_regions = [mcuff_topleft, mcuff_topmid, mcuff_topright,
-                      mcuff_midleft, mcuff_midmid, mcuff_midright,  
-                      mcuff_botleft, mcuff_botmid, mcuff_botright]
+    non_zero = np.count_nonzero(mcuff_matrix)
 
-    basetitle = r"title:Flat Field $\phi_{\mathrm{reco}}$ Distribution "
-    strpositions = ["TopLeft", "TopMid", "TopRight",
-                    "midLeft", "MidMid", "MidRight",
-                    "BotLeft", "BotMid", "BotRight"]
-    basepicname = "STOLEN-CuFF-"
+    if(non_zero>0):    
+        plot2dEvent(mcuff_matrix, "title:Absorption Points for Selected Regions",f"ABS-CuFF-REGIONS-{plotname}", outdir, debug)
 
-    for iregion, istrpos in zip(mcuff_regions, strpositions):
-        if(len(iregion)>0):
-            fitAndPlotModulation(np.array(iregion),
-                                 100,
-                                 -np.pi,
-                                 np.pi,
-                                 [basetitle+istrpos, "Angle [radian]", r"$N_{Entries}$"],
-                                 basepicname+istrpos,
-                                 outdir,
-                                 debug)
+        mcuff_regions = [mcuff_topleft, mcuff_topmid, mcuff_topright,
+                          mcuff_midleft, mcuff_midmid, mcuff_midright,  
+                          mcuff_botleft, mcuff_botmid, mcuff_botright]
+
+        basetitle = r"title:Flat Field $\phi_{\mathrm{reco}}$ Distribution "
+        strpositions = ["TopLeft", "TopMid", "TopRight",
+                        "midLeft", "MidMid", "MidRight",
+                        "BotLeft", "BotMid", "BotRight"]
+        basepicname = "STOLEN-CuFF-"
+
+        for iregion, istrpos in zip(mcuff_regions, strpositions):
+            if(len(iregion)>0):
+                fitAndPlotModulation(np.array(iregion),
+                                     100,
+                                     -np.pi,
+                                     np.pi,
+                                     [basetitle+istrpos, "Angle [radian]", r"$N_{Entries}$"],
+                                     basepicname+istrpos,
+                                     outdir,
+                                     debug)
+    else:
+         print("mcuff_matrix is empty!\n No plots here")
+
+reg_mus, reg_muers, reg_chis = [], [], []
+
+if(fSwipeModulation):
+    if(debug):
+        print("Sliding region sweep has entries in regions:")
+        print(part_results)
+    for modlist,lbound, rbound in zip(sliding_reg, square_left, square_right):
+        if(debug):
+            print(f"listx[{lbound:.2f},{rbound:.2f}]={len(modlist)}")
+        ititle="Moduation within "+r"y$\in$"+f"{swipe_ymin:.2f};{swipe_ymax:.2f}"+r"x=$\in$"+f"({lbound:.2f};{rbound:.2f})"
+        region_name = f"x{int(np.floor(lbound))}_{int(np.floor(rbound))}_y{int(np.floor(swipe_ymin))}_{int(np.floor(swipe_ymax))}"
+        fitAndPlotModulation(np.array(modlist),
+                             100,
+                             -np.pi,
+                             np.pi,
+                             [ititle,"angle, [rad]",r"$N_{entries}$"],
+                             f"PART-MOD-{region_name}",
+                             outdir,
+                             debug)
+
+    ################################################################
+
+    if(debug):
+        print(part_results)
+    regstr = ""
+    freport.write("------------sliding--modulation----------------\n")
+    for br in part_results:
+        regstr+=f"{br}:"
+        regset = part_results[br]
+        for k in regset.keys():
+            regstr+=f"{k}={part_results[br][k]},"
+            if(k=="mu"):
+                reg_mus.append(part_results[br][k])
+            if(k=="muerr"):
+                reg_muers.append(part_results[br][k])
+            if(k=="chired"):
+                reg_chis.append(part_results[br][k])
+
+        regstr = regstr[:-1]
+        regstr+="\n"
+        freport.write(regstr)
+        freport.flush()
+        regstr = ""
+
+    freport.write("----------------------------")
+
+    fig, ax = plt.subplots(figsize=(9,8))
+    ax.errorbar(sliding_bounds, 
+                np.array(reg_mus)*100.0, 
+                yerr=reg_muers, 
+                color="royalblue", 
+                ecolor="black",
+                ms=8,
+                capsize=4)
+    ax.set_title("Sliding region scan reconstructed Modulation vs region position")
+    ax.set_xlabel("region center, [x pix]")
+    ax.set_ylabel("Reconstructed Modulation, [%]")
+    ax.set_ylim([0,100])
+    ax.minorticks_on()
+    ax.grid(which='major', color='gray', linestyle="-", linewidth=0.5)
+    ax.grid(which='minor', color='gray', linestyle="--", linewidth=0.25)
+    plt.savefig(f"{outdir}/SLIDING_REG_SCAN-{plotname}.png")
+    plt.close()
+
 
 if(fPlotGlobalSumTOT):
     simpleHist(np.array(GLOB_sumTOT), 100, np.nanmin(GLOB_sumTOT), np.nanmax(GLOB_sumTOT), [r"$\Sigma$(TOT) per Cluster",r"$\Sigma$(TOT)","Events,[N]"], f"tmp_sumTOT-GLOBAL", outdir, debug) 

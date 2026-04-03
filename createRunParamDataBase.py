@@ -5,7 +5,7 @@ import re
 from datetime import datetime
 
 BASE_DIR = "/media/vlad/NitroBeam/from-tpc23/RUNPARAMS"
-OUTPUT_JSON = "fsr_parameters.json"
+OUTPUT_JSON = "fsr_parameters_v2.json"
 
 
 def parse_fsr_file(filepath):

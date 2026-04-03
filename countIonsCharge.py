@@ -499,6 +499,7 @@ parser.add_argument("-SR", "--srbit", type=int, default=1, help="SR bits")
 parser.add_argument("-ST", "--stbit", type=int, default=15, help="ST bits")
 parser.add_argument("--runtime", type=int, default=-1, help="recorded run time of the measurement (enter n minutes,\ndefault:-1, in this case using t_dead=44ms)")
 parser.add_argument("--nframes", type=int, default=-1, help="Number of frames to plot (Default=-1), Enter positive integer")
+parser.add_argument("--bsframes", type=int, default=-1, help="Number of bullshit frames to plot (Default=-1), Enter positive integer")
 parser.add_argument("--cutnoise", action='store_true' , help="cut noisy frames out")
 parser.add_argument("--plotglobal", action='store_true' , help="Plot global parametere histograms")
 #parser.add_argument("--plotframes", action='store_true' , help="Plot single frames")
@@ -506,6 +507,9 @@ parser.add_argument("--makedir", action='store_true' , help="Dump plots in a cus
 parser.add_argument("--hitrate", action='store_true' , help="Plot hits vs time for a run")
 parser.add_argument("--countTOT", action='store_true' , help="Count ions based on the average TOT in a single cluster events")
 parser.add_argument("--countBS", action='store_true' , help="Also count bullshit frames. One frame = one ion")
+parser.add_argument("--chess", action='store_true' , help="process run with the chessboard pixel config")
+#parser.add_argument("--TOA", action='store_true' , help="Process TOA run")
+#parser.add_argument("--TOT", action='store_true' , help="Process TOT run")
 
 args = parser.parse_args()
 
@@ -514,15 +518,33 @@ picname = args.name
 SR = args.srbit
 ST = args.stbit
 nframes = args.nframes
+nbsframes = args.bsframes
+#fTOA = args.TOA
+#fTOT = args.TOT
+fChess = args.chess
+
 t_run = args.runtime
 
 if(not os.path.isdir(directory)):
     print(f"Directory {directory} does not exist, nahuy....")
     exit(0)
 
+chessPixConfig = np.loadtxt("/media/vlad/NitroBeam/from-tpc23/RUNPARAMS/RunParams_006844_250826_12-57-42/chip_1_board_0_fec_0_matrix.txt",dtype=int)
+mode_matrix = np.zeros((256,256),dtype=int)
+toa_pixels, tot_pixels = None, None
+if(fChess):
+    for ipix in range(256):
+        for jpix in range(256):
+            regval = str(np.binary_repr(chessPixConfig[i,j],width=14))
+            mode_bit = 8
+            if(regval[mode_bit]=="1"):
+                np.add.at(mode_matrix, (ipx,jpix), 1)
+
+    toa_pixels = np.where(mode_matrix>0)
+    tot_pixels = np.where(mode_matrix==0)
+
 fPlotGlobalHists = args.plotglobal
 fCutNoise = args.cutnoise
-#fPlotFrames = args.plotframes
 fMakeDir = args.makedir
 fPlotHitRate = args.hitrate
 fCountBS = args.countBS
@@ -564,13 +586,13 @@ print(f"Run number is: {MC.BLUE} {run_numb} {MC.RST}")
 
 fsr_data = None
 
-with open("fsr_parameters.json") as jfile:
+with open("RunData-JSON/fsr_parameters.json") as jfile:
     runDB = json.load(jfile)
     try:
         fsr_data = runDB[run_label]
     except Exception as ex:
         print(f"Could not load json for {run_numb}: {ex}")
-        exit(0)
+        #exit(0)
 
 jfile.close()
 jfile=None
@@ -656,6 +678,7 @@ ifile = 0
 nskipped = 0
 low_nhits, high_nhits = 0, 0
 npics = 0
+nbspics = 0
 for file in filelist:
 
     ifile+=1
@@ -664,7 +687,7 @@ for file in filelist:
     # i-th frame hits and sum TOT
     nhits = np.count_nonzero(tmp_matrix)
     sumTOT = np.sum(tmp_matrix)
-
+    
     all_frame_hits.append(nhits)
     time_iframe = None
     if(fPlotHitRate):
@@ -672,6 +695,21 @@ for file in filelist:
     # for now lets see full picture
     # if have more than 30k htis : probably spark and bullshit frame - discard for first loop
     if(fCutNoise and (nhits > 30000 or nhits < 500)):
+
+        if(nbsframes>0 and nbspics<nbsframes and nhits>30000):
+            print(f"{MC.YELLOW} --> Saving BS frame {nbspics} with {nhits} hits... {MC.RST}")
+            MP.plotMatrix(tmp_matrix,
+                          f"BS-FRAME-{ifile}-{picname}",
+                          labels=[f"High Occupancy Event {ifile}", "x,[pixel]","y,[pixel]"],
+                          #infopos=[-90,25],
+                          outdir=outdir,
+                          figsize=(8,7),
+                          #figtype=ipictype,
+                          #geomshapes=[circ_sig1,circ_sig2],
+                          #plotMarker=[meany,meanx],
+                          fLognorm=True,
+                          fDebug=True)
+            nbspics+=1
         if(nhits>30000 and fPlotHitRate):
             fucked_hitrate.append([time_iframe, nhits])
         if(nhits>3e4):
@@ -683,7 +721,7 @@ for file in filelist:
     if(fPlotHitRate):
         fucked_hitrate.append([time_iframe,-999]) 
         hitrate.append([time_iframe, nhits]) 
-    
+
     maxout = tmp_matrix.astype(float)/11810.0 # checking if pixel value approaches/exceeds certain value
     maxout_matrix += maxout >= 1.0
 
@@ -826,18 +864,6 @@ for file in filelist:
                                     facecolor='none')#, 
                                     #clip_on=True)
 
-            #huya_matrix = tmp_matrix.reshape(64,4,64,4).sum(axis=(1,3))
-            #huya_projY = huya_matrix.sum(axis=1)
-            #huya_diffs = np.diff(huya_projY)
-            #plt.figure()
-            #plt.plot([i for i in range(len(huya_diffs))], abs(huya_diffs))
-            #plt.title(f'FRAME[{ifile}], TOT diffs of downscaled sum of matrix')
-            #plt.xlabel('step')
-            #plt.ylabel(r'$\Delta$(TOT)')
-            ##plt.yscale('log')
-            #plt.savefig(f"DIFFs-{ifile}.png")
-            #plt.close()
-
             ipictype = "png"
             snap_these = [101,103,104]
             if(ifile in snap_these):
@@ -857,9 +883,6 @@ for file in filelist:
                           fDebug=True)
 
             ipname = str(ifile)
-            #if(nblobs_frame>=4):
-            #    ipname+="-IBAT"
-            #    print("EBAT!",flush=True)
 
             blobs, _ , _ = detectBlobs(tmp_matrix, outdir, ipname, show_separation=True)
             print(f"{MC.BLUE}skimage found [ {len(blobs)} ] blobs{MC.RST}")
@@ -948,21 +971,6 @@ for file in filelist:
     for yp,yw in zip(propsY["prominences"],propsY['widths']):
         yprominences.append(int(yp))
         ywidths.append(float(yw))
-
-    #idx_s1,idy_s1 = np.nonzero(oneSigmaPix)
-    #idx_s2,idy_s2 = np.nonzero(twoSigmaPix)
-
-    ##oneSigmaHits = len(oneSigmaPix)
-    #twoSigmaHits = len(idx_s2)
-    #isumTOT = getSumTOT(matrix)
-    #itot_onesigma = np.sum(matrix[idx_s1,idy_s1])
-    #itot_twosigma = np.sum(matrix[idx_s2,idy_s2])
-    #iHits = getHits(matrix)   
-    #itot_fi1std = itot_onesigma/isumTOT # cluster TOT within one sigma
-    #itot_fi2std = itot_twosigma/isumTOT # cluster TTO within two sigmas 
-    #iqbsigma = (itot_fi2std - itot_fi1std)/isumTOT # cluster TOT within one ant two sigma slice
-    #iqdensity = itot_twosigma/twoSigmaHits # Q per number of hits within two sigma 
-    #iarea_pixfrac = twoSigmaHits/(256*256)# realtive number of pixels within 2 sigma (n/65k) 
  
     if(prelim_nxpeaks==1 and prelim_nypeaks==1):
         single_hits.append(nhits)
@@ -1590,7 +1598,8 @@ if(fCIT):
     # & dividing by the number of frames they were in
     # Then extrapolating that rate over the whole run
     ngood_frames = nfiles - nbad_frames
-    part_runtime = (t_frame+t_dead)*ngood_frames 
+    #part_runtime = (t_frame+t_dead)*ngood_frames 
+    part_runtime = t_frame*ngood_frames 
     part_rate = N_Nitrogen/part_runtime
     extrap_ion_dose = part_rate*total_runtime
 
