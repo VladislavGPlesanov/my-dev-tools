@@ -37,7 +37,7 @@ for file in flist:
         continue
     else:
         n_lowcount+=1
-        print(f'File: {file} has {npixels_active} pixels active or less')
+        #print(f'File: {file} has {npixels_active} pixels active or less')
         f = open(file,'r')    
         for line in f:
             if("FEC" in line or "Board" in line or "Chip" in line):

@@ -17,8 +17,8 @@ times = np.linspace(60.0,18000.0,100)
 
 fix_bgr = [10,100,1000,10000,100000]
 
-const_bgr = 5000
-const_mu = 0.5
+const_bgr = 3900 #5000 default
+const_mu = 0.3
 const_t = minutes*60.0
 
 factor = 4.29

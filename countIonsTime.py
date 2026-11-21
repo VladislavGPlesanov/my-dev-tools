@@ -274,8 +274,10 @@ parser.add_argument('-n', "--name", type=str, default='EBALA', help="suffix of t
 parser.add_argument("-SR", "--srbit", type=int, default=0, help="SR bits")
 parser.add_argument("-ST", "--stbit", type=int, default=250, help="ST bits")
 parser.add_argument("--runtime", type=int, default=-1, help="recorded run time of the measurement (enter n minutes,\ndefault:-1, in this case using t_dead=44ms)")
+parser.add_argument("-t", "--deftime", type=int, default = 600, help="Defaut runtime in seconds (indicated in run log) default=10min (600s)")
 parser.add_argument("--nframes", type=int, default=-1, help="Number of frames to plot (Default=-1), Enter positive integer")
 parser.add_argument("--cutnoise", action='store_true' , help="cut noisy frames out")
+parser.add_argument("--savecounts", action='store_true' , help="write counting results to json file")
 args = parser.parse_args()
 
 
@@ -285,6 +287,9 @@ SR = args.srbit
 ST = args.stbit
 t_run = args.runtime
 nframes = args.nframes
+deftime = args.deftime
+
+counting_results = "RunData-JSON/runIonCounts.json"
 
 if(not os.path.isdir(directory)):
     print(f"Directory {directory} does not exist, nahuy....")
@@ -292,9 +297,9 @@ if(not os.path.isdir(directory)):
 
 fPlotFrames = True if nframes > 0 else False
 fCutNoise = args.cutnoise
+fSaveCounts = args.savecounts
 
-
-outdir = f"NITRO-CHARGE-{picname}/"
+outdir = f"NITRO-TOA-{picname}/"
 if not os.path.exists(outdir):
     os.makedirs(outdir)
 
@@ -323,6 +328,7 @@ with open("RunData-JSON/fsr_parameters.json") as jfile:
 jfile.close()
 jfile=None
 
+t_dead_const = 0.048
 t_dead = 0.048 # deadtime in seconds (for ~20.83 Hz readout rate in full matrix readout)
 t_frame = getFrameTime(ST,SR)
 fEstimatedTdead = False
@@ -343,18 +349,23 @@ ifile, nskipped, npics = 0, 0, 0
 
 nTOAclusters = 0
 
+total_hits = []
+pruned_hits = []
+
 for file in filelist:
 
     ifile+=1
     tmp_matrix = np.loadtxt(file, dtype=int)
 
     nhits = np.count_nonzero(tmp_matrix)
-    sumTOT = np.sum(tmp_matrix)
+    total_hits.append(nhits)    
+
     if(fCutNoise and (nhits > 30000 or nhits < 500)):
         nskipped+=1
         continue
 
     ########### further happens only with normal frames ############# 
+    pruned_hits.append(nhits)
     nonzeropix = np.nonzero(tmp_matrix)
 
     cts, edges = np.histogram(np.ravel(tmp_matrix[nonzeropix]), 100, range=(0,11810))
@@ -367,13 +378,16 @@ for file in filelist:
     if(fPlotFrames and npics <= nframes):
         MP.plotMatrix(tmp_matrix,
                         f"FRAME-TOA-{ifile}-{picname}",
-                        labels=[f"EVENT-{ifile}", "x,[pixel]","y,[pixel]"],
+                        #labels=[f"EVENT-{ifile}", "x,[pixel]","y,[pixel]"],
+                        labels=[f"", "x,[pixel]","y,[pixel]"],
                         infopos=[-90,25],
                         outdir=outdir,
                         figsize=(8,7),
                         cbarname="TOA",
                         #figtype=ipictype,
-                        fLognorm=False,
+                        sizeTextAxis=14,
+                        sizeTextAxisLabels=14,
+                        fLognorm=False,#True,
                         fDebug=False)
 
         plotDetailedEvent(tmp_matrix,
@@ -463,12 +477,12 @@ for file in filelist:
         #    plt.savefig(f"{outdir}DENSITIES-LARGE-STDXY-{ifile}-{picname}.png")
         #    plt.close()
         #    toa_pixels = None
-    toa_coords.append(good_pixels)
-    #print(len(toa_coords[0]))
-    toaMean = np.mean([tc_low,tc_high])
-    nTOAclusters+=1
-    toa_labels.append(f"TOA={toaMean:.2f}")
-    #print(f"frame[{ifile}]: Mean cluster TOA = {toaMean:.2f}, stdx={pix_stdx:.2f}, stdy={pix_stdy:.2f}")
+        toa_coords.append(good_pixels)
+        #print(len(toa_coords[0]))
+        toaMean = np.mean([tc_low,tc_high])
+        nTOAclusters+=1
+        toa_labels.append(f"TOA={toaMean:.2f}")
+        #print(f"frame[{ifile}]: Mean cluster TOA = {toaMean:.2f}, stdx={pix_stdx:.2f}, stdy={pix_stdy:.2f}")
  
     if(fPlotFrames and npics <= nframes):
         plotToaClusters(toa_coords,
@@ -496,12 +510,39 @@ print(f"t_frame = {t_frame} [s]")
 print(f"t_dead = {t_dead} [s]")
 print(f"t_run = {t_run} [s]")
 
-
 print(f"\n{MC.GREEN}Recognized {nTOAclusters} ions from TOA clustering{MC.RST}")
 total_nitro_ions = t_dead/t_frame*nTOAclusters
 total_rate = total_nitro_ions/t_run
 print(f"{MC.GREEN}TOTAL dose = {total_nitro_ions:.2f} [ions]{MC.RST}")
 print(f"{MC.GREEN}ion rate = {total_rate:.2f} [Hz]{MC.RST}")
+
+# recalculating time
+part_rate = total_nitro_ions/(nfiles*(t_dead_const+t_frame))
+print(f"{MC.CYAN_BGR}PArtial Rate = {part_rate:.2f} [Hz] ((n ions in all frames) / (nframes*(t_dead+t_frame))){MC.RST}")
+part_total_exposure = part_rate*deftime
+defminutes = float(deftime)/60.0
+print(f"{MC.CYAN_BGR}Over thr run time of {defminutes:.2f} [min] we got {part_total_exposure:.2f} IONS{MC.RST}")
+
+
+# saving counting results to JSON
+if(fSaveCounts):  
+    with open(counting_results, "r") as cr:
+        iondata = json.load(cr)
+    print("Got the counting json file")
+    
+    iondata["counts"][run_label] = {
+        "runtype":"TOA",
+        "total_dose": total_nitro_ions, 
+        "part_dose": part_total_exposure, 
+        "total_rate": total_rate, 
+        "part_rate": part_rate
+    }       
+    
+    print("Added data")
+    with open(counting_results,"w") as cr:
+        json.dump(iondata, cr, indent=4)
+    
+    print("Saved counting json file")
 
 MP.plotMatrix(occ_matrix,
               f"OCCUPANCY-TOA-{picname}",
@@ -510,7 +551,26 @@ MP.plotMatrix(occ_matrix,
               figsize=(10,9),
               figtype="png",
               cbarname="occurance",
+              netblock=16,
               fLognorm=True,
               fDebug=False)
+
+MP.simpleHist(np.array(total_hits),
+              100,
+              0,
+              np.max(total_hits),
+              ["Hits per Frame (TOTAL)", r"$N_{Hits}$",r"$N_{Frames}$"],
+              f"TOTAL-HITS-{picname}",
+              outdir=outdir,
+              ylog=True
+              )
+
+MP.simpleHist(np.array(pruned_hits),
+              100,
+              0,
+              np.max(pruned_hits),
+              ["Hits per Frame (CUT @ 3e4 hits)", r"$N_{Hits}$",r"$N_{Frames}$"],
+              f"PRUNED-HITS-{picname}",
+              outdir=outdir)
 
 

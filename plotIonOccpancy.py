@@ -354,7 +354,8 @@ for file in inputlist:
 
     tot_cut = None     
 
-    tot_cut = 1200
+    tot_cut = 50
+    #tot_cut = 1200
     #tot_cut = 100
     #min_distance = 9 # "eps" parameter
     #min_cluster_size = 99 # "min_samples" parameter    
@@ -374,28 +375,28 @@ for file in inputlist:
     n_neigh = 2
     labels, eps, min_samples, mean_neigh_dist = dynamic_dbscan(points, min_samples_scale, eps_scale, n_neigh)
 
-    ##############################################################################
-    # trying dynamic DBscan on downscaled matrix data
-    min_samples_scale_down = 0.001
-    eps_scale_down = 1
+    ###############################################################################
+    ## trying dynamic DBscan on downscaled matrix data
+    #min_samples_scale_down = 0.001
+    #eps_scale_down = 1
 
-    trans_rebined_array = rescaled_mat.T 
-    resc_totcut = 400
-    res_y, res_x = np.where(trans_rebined_array>=resc_totcut)
-    res_points = np.column_stack((res_y,res_x))
+    #trans_rebined_array = rescaled_mat.T 
+    #resc_totcut = 400
+    #res_y, res_x = np.where(trans_rebined_array>=resc_totcut)
+    #res_points = np.column_stack((res_y,res_x))
 
-    try:
-        Dlabels, Deps, Dmin_samples, Dmean_neigh_dist = dynamic_dbscan(res_points, min_samples_scale_down, eps_scale_down, n_neigh)
-    except Exception as ex:
-        print(f"FAiled to do DBscan: {ex}")
-        Dlabels = [-1]
-        Deps = -1 
-        Dmin_samples = -1
-        Dmean_neigh_dist = -1        
+    #try:
+    #    Dlabels, Deps, Dmin_samples, Dmean_neigh_dist = dynamic_dbscan(res_points, min_samples_scale_down, eps_scale_down, n_neigh)
+    #except Exception as ex:
+    #    print(f"FAiled to do DBscan: {ex}")
+    #    Dlabels = [-1]
+    #    Deps = -1 
+    #    Dmin_samples = -1
+    #    Dmean_neigh_dist = -1        
 
 
-    points_surv = len(res_points)
-    unq_res_labels = set(Dlabels)
+    #points_surv = len(res_points)
+    #unq_res_labels = set(Dlabels)
     ##############################################################################
 
     unq_labels = set(labels)
@@ -627,8 +628,12 @@ print("-----------------------------------------------")
 print(f"Average nhits per ion = {avg_hits_per_ion:.2f}")
 print(f"Average TOT per ion = {avg_tot_per_ion:.2f}")
 print("-----------------------------------------------")
-plotSimpleHist(cluster_hits, 100, outdir, (0,4000),  ["Hits per cluster", r"$N_{hits}$", r"$N_{clusters}$"], "ClusterHits-"+picname)
-plotSimpleHist(cluster_tot, 100, outdir, (0,2.4e7),  ["TOT per cluster", r"$\sum{TOT}$", r"$N_{clusters}$"], "ClusterTOT-"+picname)
+# for ion runs 
+#plotSimpleHist(cluster_hits, 100, outdir, (0,4000),  ["Hits per cluster", r"$N_{hits}$", r"$N_{clusters}$"], "ClusterHits-"+picname)
+#plotSimpleHist(cluster_tot, 100, outdir, (0,2.4e7),  ["TOT per cluster", r"$\sum{TOT}$", r"$N_{clusters}$"], "ClusterTOT-"+picname)
+# for IRON runs 
+plotSimpleHist(cluster_hits, 100, outdir, (0,400),  ["Hits per cluster", r"$N_{hits}$", r"$N_{clusters}$"], "ClusterHits-"+picname)
+plotSimpleHist(cluster_tot, 100, outdir, (0,6e4),  ["TOT per cluster", r"$\sum{TOT}$", r"$N_{clusters}$"], "ClusterTOT-"+picname)
 
 plotSimpleHist(singleClust_nhits, 100, outdir, (0,1300),  ["Hits per Single cluster", r"$N_{hits}$", r"$N_{clusters}$"], "SingleClusterHits-"+picname)
 plotSimpleHist(singleClust_tot, 100, outdir, (0,2.2e6),  ["TOT per Single cluster", r"$\sum{TOT}$", r"$N_{clusters}$"], "SingleClusterTOT-"+picname)

@@ -8,7 +8,7 @@ from scipy.optimize import curve_fit
 from lmfit import Model
 from matplotlib.colors import LogNorm
 import matplotlib.patches as patches
-from mpl_toolkits.axes_grid1.inset_locator import inset_axes
+#from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 import math
 import glob
 import h5py
@@ -17,9 +17,9 @@ import datetime as dtime
 import ROOT as rt
 
 # for interactive 3d plotting 
-from mpl_toolkits.mplot3d import Axes3D
+#from mpl_toolkits.mplot3d import Axes3D
 import plotly.graph_objects as go
-from plotly.subplots import make_subplots
+#from plotly.subplots import make_subplots
 
 ###GREEK LETTERS###
 
@@ -422,10 +422,20 @@ def examineTrack(rawposx, rawposy, charges, phi1, phi2,
 
     fig, ax, ax2, ax3 = None, None, None, None
 
+    s_startpix, s_endpix, sWCmarker, sAPmarker = None, None, None, None
+
     if(theta_fs is not None):
         fig, (ax,ax2,ax3) = plt.subplots(1,3, figsize=(18,6))
+        s_startpix = 4
+        s_endpix = 4
+        sWCmarker = 80
+        sAPmarker = 80
     else:
-        fig, ax = plt.subplots()
+        fig, ax = plt.subplots(figsize=(8,8))
+        s_startpix = 38
+        s_endpix = 38
+        sWCmarker = 120
+        sAPmarker = 120
 
     line_length = 20
     centerX = np.average(rawposx, weights=charges)
@@ -463,16 +473,16 @@ def examineTrack(rawposx, rawposy, charges, phi1, phi2,
                rawposy[startidx.astype(int)], 
                color='orange', 
                marker='s', 
-               s=4*charges[startidx.astype(int)]/maxcharge)
+               s=s_startpix*charges[startidx.astype(int)]/maxcharge)
 
     ax.scatter(rawposx[endidx.astype(int)], 
                rawposy[endidx.astype(int)], 
                color='blue', 
                marker='s', 
-               s=4*charges[endidx.astype(int)]/maxcharge)
+               s=s_endpix*charges[endidx.astype(int)]/maxcharge)
 
-    ax.scatter(centerX, centerY, color='red', label='Q center', marker='o', s=40)
-    ax.scatter(absX,absY, color='green', label="Abs.Point",marker='o', s=40)   
+    ax.scatter(centerX, centerY, color='red', label='Q center', marker='o', s=sWCmarker)
+    ax.scatter(absX,absY, color='green', label="Abs.Point",marker='o', s=sAPmarker)   
     ax.scatter([],[], color='white', label=r"$n_{hits}$="+f"{len(rawposx)}") 
     ax.scatter([],[], color='white', label=r"$n_{start}$="+f"{len(rawposx[startidx.astype(int)])}") 
 
@@ -543,6 +553,14 @@ def examineTrack(rawposx, rawposy, charges, phi1, phi2,
     ax.set_aspect('equal', adjustable='box')
     ax.grid(True)
     ax.legend(loc='upper left')
+    
+    axfontsize, axticksize = 16, 16
+    ax.xaxis.label.set_fontsize(axfontsize)
+    ax.yaxis.label.set_fontsize(axfontsize)
+
+    ax.tick_params(axis='x', labelsize=axticksize)
+    ax.tick_params(axis='y', labelsize=axticksize)
+  
 
     if(theta_fs is not None):
         # plotting x-z and y-z projections
@@ -570,9 +588,18 @@ def examineTrack(rawposx, rawposy, charges, phi1, phi2,
 
         ax2.set_title('track: x-z plane')
         ax2.set_xlabel('x [pixel]')
-        #ax2.set_ylabel('z [ns]')
         ax2.set_ylabel(cmnt)
         ax2.legend(loc='upper left')
+
+        ## fokin' with axis ax2 formatting
+        ##fontsize_ax2, ticksize_ax2 = 18, 18
+
+        #ax2.xaxis.label.set_fontsize(axfontsize)
+        #ax2.yaxis.label.set_fontsize(axfontsize)
+
+        #ax2.tick_params(axis='x', labelsize=axticksize)
+        #ax2.tick_params(axis='y', labelsize=axticksize)
+        ######################################################
         
         x1 = centerX + line_length*np.sin(theta_fs)
         x2 = centerX - line_length*np.sin(theta_fs)
@@ -591,6 +618,13 @@ def examineTrack(rawposx, rawposy, charges, phi1, phi2,
         ax3.set_ylabel(cmnt)
         ax3.legend(loc='upper left')
         ax3.grid(True)
+
+        ## fokin' with ax3 formatting
+        #ax3.xaxis.label.set_fontsize(axfontsize)
+        #ax3.yaxis.label.set_fontsize(axfontsize)
+
+        #ax3.tick_params(axis='x', labelsize=axticksize)
+        #ax3.tick_params(axis='y', labelsize=axticksize)
 
         # same shite limits as for first plot for x-axis
 
@@ -614,14 +648,16 @@ def examineTrack(rawposx, rawposy, charges, phi1, phi2,
 
     #------------------------------------
 
-    plt.savefig(f"{odir}/reco-event-Moments-{picname}.png")
+    plt.savefig(f"{odir}/reco-event-Moments-{picname}.png",dpi=256)
     plt.close()
 
     # PLOTTING EXTRA SCATTER PLOT TO ASSES HOW PIXELS PULL THE FIT
     #
     #
     try:
-        fig, ax = plt.subplots()
+        wpixelsize = 120# 50 #legacy
+        wAPsize = 160 # 40 # legacy
+        fig, ax = plt.subplots(figsize=(8,8))
         ax.cla()
         ax.set_title("Pixel weighting by distance to impact point")
         ax.set_xlabel("x [pixel]")
@@ -632,13 +668,12 @@ def examineTrack(rawposx, rawposy, charges, phi1, phi2,
         distance = np.sqrt(np.power(coords[0] - absX, 2) + np.power(coords[1] - absY, 2))
         Qweight = charges*np.exp(-(distance/WGHT))
 
-        ax.scatter(absX,absY, color='green', label="Absorption Point",marker='o', s=40)   
+        ax.scatter(absX,absY, color='green', label="Absorption Point",marker='o', s=wAPsize)   
         ax.scatter(coords[0][startidx.astype(int)], 
                    coords[1][startidx.astype(int)], 
                    color='royalblue', 
                    marker='s', 
-                   #s=Qweight/50)
-                   s=50*(Qweight[startidx.astype(int)]/np.max(Qweight)))
+                   s=wpixelsize*(Qweight[startidx.astype(int)]/np.max(Qweight)))
 
         ax.add_patch(circle_in_weight)
         ax.add_patch(circle_out_weight)
@@ -649,7 +684,7 @@ def examineTrack(rawposx, rawposy, charges, phi1, phi2,
         ax.grid(True)
         ax.legend(loc='upper left')
 
-        plt.savefig(f"{odir}/reco-event-ChargeWeighting-{picname}.png")
+        plt.savefig(f"{odir}/reco-event-ChargeWeighting-{picname}.png",dpi=256)
         plt.close()
     except Exception as ex:
         print(f"Failed to plot weighting of pixels: {ex}")
@@ -1516,7 +1551,14 @@ def plotDbscan(index, dblabels, ievent, nfound, odir):
     plt.savefig(f"{odir}/DBSCAN-{ievent}.png")
 
 #def plot2dEvent(nuarray, info, picname, odir, plotMarker=None):
-def plot2dEvent(nuarray, info, picname, odir, figtype=None, plotMarker=None):  
+def plot2dEvent(nuarray, 
+                info, 
+                picname, 
+                odir, 
+                figtype=None, 
+                plotMarker=None, 
+                cmap=None, 
+                fLognorm=False): 
     
     print(f"{OUT_YELLOW} [plot2dEvent]--> {picname} ({len(nuarray)}) {OUT_RST}")
  
@@ -1524,41 +1566,81 @@ def plot2dEvent(nuarray, info, picname, odir, figtype=None, plotMarker=None):
         print(f"{OUT_RED}[ERROR::EMPTY_DATA] {picname} matrix all zeros! {OUT_RST}")
         return 0
 
+    defFigSize = None
+    defCaxPos = None
+
+    defcmap = 'jet'
+    if(cmap is not None):
+        defcmap = cmap
+
+    if(len(info)==0):
+        #defFigSize = (8.5,8)
+        defFigSize = (9,8)
+        #defCaxPos = [0.88,0.1,0.05,0.8]
+        defCaxPos = [0.85,0.1,0.05,0.8]
+    else:
+        defFigSize = (8,6)
+        defCaxPos = [0.86, 0.1, 0.05, 0.8]
+
     # ---- matrix 2d hist ----
-    fig, ax = plt.subplots(figsize=(8,6))
-    cax = fig.add_axes([0.86,0.1,0.05,0.8])
-    #ms = ax.matshow(nuarray, cmap='plasma')
+    fig, ax = plt.subplots(figsize=defFigSize)
+    cax = fig.add_axes(defCaxPos)
     ms = None
     if("total" in picname):
-        #ms = ax.matshow(nuarray.T, cmap='viridis', norm=LogNorm(vmin=1,vmax=np.nanmax(nuarray)))
-        ms = ax.matshow(nuarray.T, cmap='viridis', norm=LogNorm(vmin=1,vmax=np.nanmax(nuarray)))
+        if(fLognorm):
+            ms = ax.matshow(nuarray.T, cmap='viridis')
+        else:
+            ms = ax.matshow(nuarray.T, cmap='viridis', norm=LogNorm(vmin=1,vmax=np.nanmax(nuarray)))
         ax.set_title("Pixel occupancy (Beam profile)")
         fig.colorbar(ms,cax=cax,orientation='vertical',label='Occupancy')
-    elif("events" in picname):
-        #ms = ax.matshow(nuarray.T, cmap='jet', norm=LogNorm(vmin=1,vmax=np.nanmax(nuarray)))
-        ms = ax.matshow(nuarray.T, cmap='viridis')
-        ax.set_title("Tracks")
-        fig.colorbar(ms,cax=cax,orientation='vertical',label='ToT')
+    #elif("events" in picname):
+    elif("events" in picname or "cluster" in picname):
+        if(fLognorm):
+            ms = ax.matshow(nuarray.T, cmap='jet', norm=LogNorm(vmin=1,vmax=np.nanmax(nuarray)))
+        else:
+            #ms = ax.matshow(nuarray.T, cmap='viridis')
+            ms = ax.matshow(nuarray.T, cmap='jet')
+        #ax.set_title("Tracks")
+        #fig.colorbar(ms,cax=cax,orientation='vertical',label='ToT')
+        cbar = fig.colorbar(ms,cax=cax,orientation='vertical',label='ToT')
+        cbar.set_label('ToT', fontsize=14)
+
+        fig.subplots_adjust(left=0.1, right=0.8, top=0.9, bottom=0.1)
+
     elif(info=="absorption"):
-        ms = ax.matshow(nuarray.T, cmap='jet', norm=LogNorm(vmin=1,vmax=np.nanmax(nuarray)))
+        if(fLognorm):
+            ms = ax.matshow(nuarray.T, cmap='jet', norm=LogNorm(vmin=1,vmax=np.nanmax(nuarray)))
+        else:
+            ms = ax.matshow(nuarray.T, cmap='jet')
         ax.set_title("Absorption Points")
         fig.colorbar(ms,cax=cax,orientation='vertical',label=r'$N_{Entries}$')
     elif("title" in info):
         title = info.split(":")[1]
-        ms = ax.matshow(nuarray.T, cmap='jet', norm=LogNorm(vmin=1,vmax=np.nanmax(nuarray)))
+        if(fLognorm):
+            ms = ax.matshow(nuarray.T, cmap='jet', norm=LogNorm(vmin=1,vmax=np.nanmax(nuarray)))
+        else:
+            ms = ax.matshow(nuarray.T, cmap='jet')
         ax.set_title(title)
         ax.grid(c='indigo', ls=":",lw=0.4)
         fig.colorbar(ms,cax=cax,orientation='vertical',label=r'$N_{Entries}$') 
     else:
-        title_prefix = odir[4:]
-        title_prefix = title_prefix[:-1]
-        #ms = ax.matshow(nuarray.T, cmap='jet', norm=LogNorm(vmin=1,vmax=np.nanmax(nuarray)))
-        ms = ax.matshow(nuarray.T, cmap='jet')
-        ax.set_title(f"{title_prefix}\nPixel Map")
+
+        if(fLognorm):
+            ms = ax.matshow(nuarray.T, cmap=defcmap, norm=LogNorm(vmin=1,vmax=np.nanmax(nuarray)))
+        else:
+            ms = ax.matshow(nuarray.T, cmap=defcmap)
+
+        if(len(info)>0):
+            title_prefix = odir[4:]
+            title_prefix = title_prefix[:-1]
+            ax.set_title(f"{title_prefix}\nPixel Map")
         fig.colorbar(ms,cax=cax,orientation='vertical')
 
-    ax.set_xlabel("Pixel x")
-    ax.set_ylabel("Pixel y")
+    ax.set_xlabel("x [pixel]")
+    ax.set_ylabel("y [pixel]")
+
+    #cbar = fig.colorbar(ms,ax=ax)
+    cax.tick_params(labelsize=14)
 
     start = 50
     if("info" in info):
@@ -1569,10 +1651,18 @@ def plot2dEvent(nuarray, info, picname, odir, figtype=None, plotMarker=None):
         marky = plotMarker[1]
         ax.scatter([markx],[marky],c='red', marker='d',s=80)
 
+    # making bigger axis labels/numbers/ticks...
+    axfontsize, axticksize = 16, 16
+    ax.xaxis.label.set_fontsize(axfontsize)
+    ax.yaxis.label.set_fontsize(axfontsize)
+
+    ax.tick_params(axis='x', labelsize=axticksize)
+    ax.tick_params(axis='y', labelsize=axticksize)
+ 
     ax.invert_yaxis()
     plt.plot()
     if(figtype is None or type(figtype) is not str):
-        fig.savefig(f"{odir}/reco-event-{picname}.png")
+        fig.savefig(f"{odir}/reco-event-{picname}.png",dpi=256)
     else:
         fig.savefig(f"{odir}/reco-event-{picname}.{figtype}")
     
@@ -1659,7 +1749,7 @@ def getMatrixProfile(matrix, iaxis, labels, picname, odir):
     # thus the names of containers for case of profileX are inverted for slicing in Y 
     # but they serve same purpose
 
-    print(f"{OUT_YEL_BGR} [plot2dEvent]--> {picname} ({matrix.shape}) {OUT_RST}")
+    print(f"{OUT_YEL_BGR} [getMatrixProfile]--> {picname} ({matrix.shape}) {OUT_RST}")
     if(np.sum(matrix)==0):
         print(f"{OUT_RED}[ERROR::EMPTY_DATA] {picname} matrix all zeros! {OUT_RST}")
         return 0
@@ -2172,26 +2262,27 @@ with tb.open_file(recofile, 'r') as f:
         #--------------------------------------------------------------
          
         rotAngDeg = round(rotAng[ievent]*180/3.1415,2)
-        characs = "info:"
-        characs += r"$\Sigma$(TOT)"+f"={sumTOT[ievent]}"
-        characs += "\n"+r"$X_{c}$"+f"={centerX[ievent]:.2f}"
-        characs += "\n"+r"$Y_{c}$"+f"={centerY[ievent]:.2f}"
-        characs += "\n"+r"$\epsilon$"+f"={excent[ievent]:.2f}"
-        characs += f"\nnhits={nhits}"
-        characs += f"\nlen={length[ievent]:.2f}\nwidth={width[ievent]:.2f}"
-        characs += "\n"+r"$RMS_{T}$"+f"={RMS_T[ievent]:.2f}"
-        characs += "\n"+r"$RMS_{L}$"+f"={RMS_L[ievent]:.2f}"
-        characs += f"\n"+r"$\rho$(RMS)="+f"{densityRMS:.2f}"
-        characs += f"\n"+r"$\rho$(WL)="+f"{densityWL:.2f}"
-        characs += f"\n"+r"$\rho$(Pix)="+f"{densityPixXY:.2f}"
-        characs += f"\nEvent=[{EVENTNR[ievent]}]"
+        characs = ""
+        #characs += "info:"
+        #characs += r"$\Sigma$(TOT)"+f"={sumTOT[ievent]}"
+        #characs += "\n"+r"$X_{c}$"+f"={centerX[ievent]:.2f}"
+        #characs += "\n"+r"$Y_{c}$"+f"={centerY[ievent]:.2f}"
+        #characs += "\n"+r"$\epsilon$"+f"={excent[ievent]:.2f}"
+        #characs += f"\nnhits={nhits}"
+        #characs += f"\nlen={length[ievent]:.2f}\nwidth={width[ievent]:.2f}"
+        #characs += "\n"+r"$RMS_{T}$"+f"={RMS_T[ievent]:.2f}"
+        #characs += "\n"+r"$RMS_{L}$"+f"={RMS_L[ievent]:.2f}"
+        #characs += f"\n"+r"$\rho$(RMS)="+f"{densityRMS:.2f}"
+        #characs += f"\n"+r"$\rho$(WL)="+f"{densityWL:.2f}"
+        #characs += f"\n"+r"$\rho$(Pix)="+f"{densityPixXY:.2f}"
+        #characs += f"\nEvent=[{EVENTNR[ievent]}]"
 
-        if(toaMean is not None): 
-            characs += f"\n\ntoaMEAN={toaMean[ievent]:.2f}"
-            characs += f"\ntoaRMS={toaRMS[ievent]:.2f}"
-            characs += f"\ntoaLength={toaLength[ievent]:.2f}"
-            characs += f"\ntoaSkew={toaSkew[ievent]:.2f}"
-            characs += f"\ntoaKurt={toaKurt[ievent]:.2f}"
+        #if(toaMean is not None): 
+        #    characs += f"\n\ntoaMEAN={toaMean[ievent]:.2f}"
+        #    characs += f"\ntoaRMS={toaRMS[ievent]:.2f}"
+        #    characs += f"\ntoaLength={toaLength[ievent]:.2f}"
+        #    characs += f"\ntoaSkew={toaSkew[ievent]:.2f}"
+        #    characs += f"\ntoaKurt={toaKurt[ievent]:.2f}"
         
         #alt_rotang.append(rotAng[ievent])
        
@@ -2285,6 +2376,7 @@ with tb.open_file(recofile, 'r') as f:
         #goodHits = True if (hits[ievent]>=minHits and hits[ievent]<maxHits) else False
         #goodExcent = True if (excent[ievent] < 20) else False
         goodExcent = True if (excent[ievent] <= maxExcent) else False
+        picExcent = True if (excent[ievent] >= 2.0 and excent[ievent]<=20) else False
         #goodExcent = True if (excent[ievent] <= maxExcent and excent[ievent] >= minExcent) else False
         #goodArea = True if (areaWL <= 50) else False
 
@@ -2497,7 +2589,7 @@ with tb.open_file(recofile, 'r') as f:
                 bad_length.append(length[ievent])
                 bad_sumTOT.append(sumTOT[ievent])
  
-        if((npics < 10 and
+        if((npics < 100 and
            #goodLength and
            #not goodConvXY and 
            goodConvXY and
@@ -2507,7 +2599,7 @@ with tb.open_file(recofile, 'r') as f:
            goodHits and
            #density < 0 #and 
            #not goodHits) or # and
-           goodExcent
+           picExcent
            ) or
            nhits > 5000 #or
            #toaLength[ievent]>16000 or
@@ -2522,7 +2614,12 @@ with tb.open_file(recofile, 'r') as f:
  
             # this block is for plotting photoelectron tracks: -------------------------
             if(fConverted):
-                plot2dEvent(matrix, characs, f"cluster-{ievent}-{plotname}", outdir, [conversionX[ievent],conversionY[ievent]])
+                plot2dEvent(matrix, 
+                            characs, 
+                            f"cluster-{ievent}-{plotname}", 
+                            outdir, 
+                            [conversionX[ievent],conversionY[ievent]], 
+                            cmap='jet')
 
                 event_charges = None
                 if(fCharge):

@@ -487,23 +487,28 @@ def plot_scat(xdata, ydata, title, plotname, label, axisnames):
     fig = plt.figure()
     ax1 = fig.add_subplot(111)
     ax1.scatter(xdata,ydata, s=10,c='b',marker="s",label=label)
-    plt.legend()
+    #plt.legend()
     if(max(ydata)>5000):
        ax1.set_yscale("log")
-    if max(xdata) > 5000:
-       ax1.set_xscale("log")
+    #if max(xdata) > 5000:
+    #   ax1.set_xscale("log")
     fig.suptitle(title)
     ax1.set_xlabel(axisnames[0])
     ax1.set_ylabel(axisnames[1])
-    if("Data Length"in title):
-       ax1.set_ylim(min(ydata)*0.9,max(ydata)*1.1)
-    elif("timestamp" in title and "iteration" not in title):
-       ax1.set_xlim(min(xdata[1:len(xdata)]),max(xdata))
-    elif("iteration" and "timestamp" in title):
-       avgy = sum(ydata)/len(ydata)
-       ax1.set_ylim(min(ydata[1:len(ydata)])*0.999,max(ydata)*1.001)
-       ax1.set_yscale('linear')
-       ax1.set_xscale('linear')
+    if("DataLength" in plotname):
+       #ax1.set_ylim(min(ydata)*0.9,max(ydata)*1.1)
+       median_len = np.median(ydata)
+       #_, xmax = ax1.get_xlim()
+       #_, ymax = ax1.get_ylim()
+       #ax1.text(xmax*0.6,ymax*0.8, f"median={median_len:.2f}")
+       ax1.text(5000,1e5, f"median={median_len:.2f}")
+    #elif("timestamp" in title and "iteration" not in title):
+    #   ax1.set_xlim(min(xdata[1:len(xdata)]),max(xdata))
+    #elif("iteration" and "timestamp" in title):
+    #   avgy = sum(ydata)/len(ydata)
+    #   ax1.set_ylim(min(ydata[1:len(ydata)])*0.999,max(ydata)*1.001)
+    #   ax1.set_yscale('linear')
+    #   ax1.set_xscale('linear')
     else: 
        ax1.set_ylim(min(ydata)*0.8,max(ydata)*1.2)
     ax1.grid(True)
@@ -1044,6 +1049,7 @@ with tb.open_file(filename, 'r') as f:
         conf = None
         Vstart = None
         Vstop = None
+        vth_range = None
         if("PixelDAC" in filename):
             mdata = f.root.meta_data_0[:].T 
             conf = dict(f.root.configuration.run_config_0[:])
@@ -1051,10 +1057,14 @@ with tb.open_file(filename, 'r') as f:
             conf = dict(f.root.configuration.run_config[:])
             mdata = f.root.meta_data[:].T 
 
-        Vstart = int(conf[b'Vthreshold_start'])
-        Vstop = int(conf[b'Vthreshold_stop'])
         scurves = None
         if("ThresholdScan" in filename and testIfHasInterpreted(f)):
+
+            Vstart = int(conf[b'Vthreshold_start'])
+            Vstop = int(conf[b'Vthreshold_stop'])
+
+            print(f"Using vstart={Vstart}, vstop={Vstop}")
+            vth_range = Vstop-Vstart
             conf = dict(f.root.configuration.run_config[:])
             scurves = None
             ##### shit for scurves
@@ -1079,6 +1089,7 @@ with tb.open_file(filename, 'r') as f:
            pixelMap2d(histOcc,"NS-histOcc-2D-"+clean_filename)
 
         scanid, idx_start, idx_stop, dec, dis, datalen, tstamp_0, tstamp_end, rx_fifo = ([] for i in range(9))
+        nevent = []
 
         dac_n_fifo_comb = []
         dac_n_hits = []
@@ -1098,8 +1109,8 @@ with tb.open_file(filename, 'r') as f:
 
         n_chunks = 0
 
-        #t_interval = 0.05 #s
-        t_interval = 2 #s
+        t_interval = 0.05 #s
+        #t_interval =  #s
 
         scurvex = []
         scurvey = []
@@ -1110,10 +1121,9 @@ with tb.open_file(filename, 'r') as f:
 
         n_datacolumns = None
 
-        flag_old_scanid = True
-        print(f"Using vstart={Vstart}, vstop={Vstop}")
-        vth_range = Vstop-Vstart
+        flag_old_scanid = False #True
 
+        ithEvent = 0
         for i in range(0,len(mdata)):
            if(i==0):
                 n_datacolumns = len(mdata[i])
@@ -1134,6 +1144,8 @@ with tb.open_file(filename, 'r') as f:
                time_e = np.float64(mdata[i][4])
                tstamp_0.append(time_s/1e9)
                tstamp_end.append(time_e/1e9)
+               ithEvent+=1
+               nevent.append(ithEvent)
            else:
                tstamp_0.append(np.float64(mdata[i][3]))
                tstamp_end.append(np.float64(mdata[i][4]))
@@ -1145,7 +1157,7 @@ with tb.open_file(filename, 'r') as f:
           # else:
           #          scanid.append(Vstart+mdata[i][5]-vth_range)
            if(i==0 and mdata[i][5]==Vstart):
-                flag_old_scanid = False
+                flag_old_scanid = True
            if(flag_old_scanid):
                scanid.append(Vstart+mdata[i][5])
            else:
@@ -1295,14 +1307,14 @@ with tb.open_file(filename, 'r') as f:
             #plot_scat(x,#tstamp_0,
 
             if(len(rx_fifo)>0):
-                plot_scat(tstamp_0,
+                plot_scat(nevent,#tstamp_0,
                           rx_fifo,
                           "timestamp vs RX fifo size",
                           clean_filename+"_tstamp_vs_rx_fifo_size",
                           "RX FIFO size",
                           ["timestamp","RX fifo size"])
     
-            plot_scat(tstamp_0,
+            plot_scat(nevent,#tstamp_0,
                       datalen,
                       "timestamp vs data length",
                       clean_filename+"_DataLength-vs-iterationIndex",
@@ -1318,14 +1330,14 @@ with tb.open_file(filename, 'r') as f:
 
             #plot_scat(idx_start,
             #plot_scat(x,#tstamp_0,
-            plot_scat(tstamp_0,
+            plot_scat(nevent,#tstamp_0,
                       dec,
                       "decoding errors vs timestamp",
                       clean_filename+"_DecodingErr-vs-Timestamp",
                       "Decoding Err.",
                       ["timestamp","Decoding Errors [N]"])
 
-            plot_scat(tstamp_0,
+            plot_scat(nevent,#tstamp_0,
                       dis,
                       "discard errors vs timestamp",
                       clean_filename+"_DiscardErr-vs-Timestamp",

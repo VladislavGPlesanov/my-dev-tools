@@ -12,6 +12,8 @@ from matplotlib import cm
 from matplotlib.gridspec import GridSpec
 
 from scipy.signal import find_peaks
+from scipy.optimize import curve_fit
+from scipy.stats import binned_statistic
 
 import glob
 import os
@@ -26,6 +28,15 @@ from skimage import filters, measure, morphology
 from skimage.feature import peak_local_max
 from skimage.segmentation import watershed
 from skimage.color import label2rgb
+
+from scipy.spatial import cKDTree
+
+# linear fit between 4096 (0.025s dead time) and 65536 (0.4s max)
+td_slope = 6.103515620101e-6
+td_offset = 1.268210634667e-10
+
+ndiv = 4
+npix_redreg = 256**2/ndiv**2
 
 def initMatrix(size, dtype):
     return np.zeros((size,size),dtype=dtype)
@@ -49,13 +60,17 @@ def countIons(nx, ny):
         #nmin = ny if ny<nx else nx
         return nmax
 
-
 def estimateDeadTime(tframe, nframes, trun):
 
     # lets use seconds here...
     tdead = trun/nframes - tframe
     return tdead
     
+def estimateFrameDeadTime(nhits):
+
+    tdead_frame = td_slope*nhits + td_offset 
+
+    return tdead_frame
 
 def getClusterCenter(matrix):
 
@@ -105,6 +120,47 @@ def checkClusterPosition(centerX, centerY, clusterX, clusterY, radius):
 
 def getClusterCircleArea(radius):
     return np.pi*radius**2
+
+def computeClusterDensity(coords, sigma=3.0):
+
+    # this one computes density of neighbors for each pixel
+    y,x = coords
+    points = np.column_stack((x,y))
+    N = len(points)
+    density = np.zeros(N)
+    for i,p in enumerate(points):
+        dist2 = np.sum((points-p)**2, axis=1)
+        density[i] = np.sum(np.exp(-dist2/(2*sigma**2)))
+
+    return density
+
+def computeChargeDensity(coords, charges, sigma=3.0, cutoff=3):
+
+    # this one calculates charge density
+    
+    y,x = coords
+    points = np.column_stack((x,y))
+    charges = np.asarray(charges/np.max(charges))
+    #charges = np.sqrt(charges)
+    #charges = np.asarray(charges)
+     
+    tree = cKDTree(points)
+    density = np.zeros(len(points))
+    
+    radius = cutoff * sigma
+
+    for i,p in enumerate(points):
+
+        idx = tree.query_ball_point(p, r=radius)
+        neigh = points[idx]
+        q = charges[idx]
+
+        dist2 = np.sum((neigh - p)**2, axis=1)
+        weights = np.exp(-dist2/(2*sigma**2))
+        
+        density[i] = np.sum(q * weights)
+
+    return density
 
 def plotDetailedEvent(matrix,
                     picname,
@@ -286,23 +342,38 @@ def getFramePeaks(matrix,        # matrix (original or pruned)
 
 # same, but with "watersheding" and plotting
 
+def checkRegionCounts(matrix, nsplit=4):
+
+    h, w = matrix.shape
+    sh = h//nsplit
+    sw = w//nsplit
+    
+    blocks = matrix.reshape(nsplit, sh, nsplit, sw)
+    blocks = blocks.swapaxes(1,2)
+
+    reg_cts = blocks.sum(axis=(2,3))
+
+    return reg_cts
+
+
 def detectBlobs(matrix,
                 outdir,
                 picname,
-                min_blob_width = 10,
+                min_blob_width = 5,
                 max_blob_width = 40,
-                min_area = 100,
-                aspect_ratio_thr = 2.5,
-                excent_thr = 2.5,
+                min_area = 25,
+                aspect_ratio_thr = 3,
+                excent_thr = 3.5,
                 show_separation = True
                 ):
 
     # getting threshold
     thr = filters.threshold_otsu(matrix)
+    #thr = 1000
     binmatrix = matrix > thr
 
     # removing "noise"
-    binmatrix = morphology.remove_small_objects(binmatrix, min_size=30)
+    binmatrix = morphology.remove_small_objects(binmatrix, min_size=20)
 
     # distance transform
     distances = distance_transform_edt(binmatrix)
@@ -417,13 +488,12 @@ def detectBlobs(matrix,
 
     return good_regs, labels, spark
 
-
 def simpleCountBlobs(matrix,
                     min_bwidth = 5,
                     max_bwidth = 40,
                     min_area = 50,
                     max_aspect_ratio = 2.5,
-                    max_excent = 3
+                    max_excent = 4
                     ):
 
     # getting threshold
@@ -440,7 +510,7 @@ def simpleCountBlobs(matrix,
         binmatrix = matrix > thr 
 
     # removing "noise"
-    binmatrix = morphology.remove_small_objects(binmatrix, min_size=15)
+    binmatrix = morphology.remove_small_objects(binmatrix, min_size=20)
 
     # distance transform
     distances = distance_transform_edt(binmatrix)
@@ -457,6 +527,7 @@ def simpleCountBlobs(matrix,
 
     # watersheding 
     labels = watershed(-distances, markers, mask=binmatrix)
+    nlabels = len(labels)
 
     # filtering regions
     regions = measure.regionprops(labels, intensity_image=matrix)
@@ -479,7 +550,63 @@ def simpleCountBlobs(matrix,
 
             nblobs+=1
 
-    return nblobs
+    return nblobs, nlabels
+
+
+def checkSparks(matrix, 
+                min_col = 3,
+                min_norm_height = 0.5,
+                thr=None
+                ):
+
+    # Handle masked arrays
+    if np.ma.isMaskedArray(matrix):
+        matrix = matrix.filled(0)
+
+    # Binary image
+    if thr is None:
+        binary = matrix > 0
+    else:
+        binary = matrix > threshold
+
+    ny, nx = binary.shape
+
+    # Active pixels per column
+    colsum = np.sum(binary, axis=0)
+
+    # Column must contain at least this many active pixels
+    min_hits = int(min_norm_height * ny)
+
+    suspicious = np.where(colsum >= min_hits)[0]
+
+    if len(suspicious) == 0:
+        return False, [], []
+
+    # Find consecutive runs
+    runs = []
+    start = suspicious[0]
+    prev = suspicious[0]
+
+    for c in suspicious[1:]:
+        if c == prev + 1:
+            prev = c
+        else:
+            runs.append((start, prev))
+            start = prev = c
+
+    runs.append((start, prev))
+
+    # Keep only sufficiently wide runs
+    good_runs = []
+    columns = []
+
+    for s, e in runs:
+        width = e - s + 1
+        if width >= min_col:
+            good_runs.append((s, e))
+            columns.extend(range(s, e + 1))
+
+    return len(good_runs) > 0, columns, good_runs
 
 ############################################################
 # MAIN
@@ -508,6 +635,9 @@ parser.add_argument("--hitrate", action='store_true' , help="Plot hits vs time f
 parser.add_argument("--countTOT", action='store_true' , help="Count ions based on the average TOT in a single cluster events")
 parser.add_argument("--countBS", action='store_true' , help="Also count bullshit frames. One frame = one ion")
 parser.add_argument("--chess", action='store_true' , help="process run with the chessboard pixel config")
+parser.add_argument("--ironrun", action='store_true', help="process Fe55 run")
+parser.add_argument("--savecounts", action='store_true', help="save counting results to hardcoded json file")
+
 #parser.add_argument("--TOA", action='store_true' , help="Process TOA run")
 #parser.add_argument("--TOT", action='store_true' , help="Process TOT run")
 
@@ -519,15 +649,17 @@ SR = args.srbit
 ST = args.stbit
 nframes = args.nframes
 nbsframes = args.bsframes
-#fTOA = args.TOA
-#fTOT = args.TOT
 fChess = args.chess
+fIron = args.ironrun
+fSaveCounts = args.savecounts
 
 t_run = args.runtime
 
 if(not os.path.isdir(directory)):
     print(f"Directory {directory} does not exist, nahuy....")
     exit(0)
+
+counting_results = "RunData-JSON/runIonCounts.json"
 
 chessPixConfig = np.loadtxt("/media/vlad/NitroBeam/from-tpc23/RUNPARAMS/RunParams_006844_250826_12-57-42/chip_1_board_0_fec_0_matrix.txt",dtype=int)
 mode_matrix = np.zeros((256,256),dtype=int)
@@ -568,7 +700,7 @@ print("\n")
 
 outdir = None
 if (fMakeDir):
-    outdir = f"NITRO-CHARGE-{picname}/"
+    outdir = f"NITRO-TOT-{picname}/"
     if not os.path.exists(outdir):
         os.makedirs(outdir)
 
@@ -585,8 +717,10 @@ run_label = "Run_"+run_numb
 print(f"Run number is: {MC.BLUE} {run_numb} {MC.RST}")
 
 fsr_data = None
+#fsrfile = "RunData-JSON/fsr_parameters.json"
+fsrfile = "RunData-JSON/fsr_parameters_v3.json"
 
-with open("RunData-JSON/fsr_parameters.json") as jfile:
+with open(fsrfile,'r') as jfile:
     runDB = json.load(jfile)
     try:
         fsr_data = runDB[run_label]
@@ -610,21 +744,29 @@ t_dead = 0.048 # deadtime in seconds
 t_frame = getFrameTime(ST,SR)
 fEstimatedTdead = False
 
+fTimeFromInput = False
+
 if(t_run > 0):
     fEstimatedTdead = True
+    fTimeFromInput = True
     t_dead = estimateDeadTime(t_frame, nfiles, t_run*60) # since my input times are in minutes...
     print(f"Run time specified--> using estimated t_dead={t_dead:.4f} [s]")
 else:
     t_run = fsr_data["t_run"]
-    fEstimatedTdead = True
-    t_dead = estimateDeadTime(t_frame, nfiles, t_run)
-    print(f"Run time based on JSON data --> using estimated t_dead={t_dead:.4f} [s]")
+    if(t_run != -1):
+        fEstimatedTdead = True
+        t_dead = estimateDeadTime(t_frame, nfiles, t_run)
+    print(f"Run time based on JSON data is {t_run:.2f} [s] --> using estimated t_dead={t_dead:.4f} [s]")
 
 # lists for first step in gathering global characteristics of frames
 
 runtime = []
 hitrate = []
 fucked_hitrate = []
+
+dtimes = []
+part_trun = 0
+full_time = 0
 
 all_frame_hits = []
 frame_hits, frame_sumTOT = [], []
@@ -662,6 +804,8 @@ avg_blob_tots = []
 
 occ_matrix = initMatrix(256,int)
 occ_matrix_nonoise = initMatrix(256,int)
+occ_matrix_noise = initMatrix(256,int)
+occ_matrix_shite = initMatrix(256,int)
 maxout_matrix = initMatrix(256,int)
 
 ##########################
@@ -679,6 +823,7 @@ nskipped = 0
 low_nhits, high_nhits = 0, 0
 npics = 0
 nbspics = 0
+
 for file in filelist:
 
     ifile+=1
@@ -688,13 +833,20 @@ for file in filelist:
     nhits = np.count_nonzero(tmp_matrix)
     sumTOT = np.sum(tmp_matrix)
     
+    iframe_dt = estimateFrameDeadTime(nhits)
+    dtimes.append(iframe_dt)
+
     all_frame_hits.append(nhits)
     time_iframe = None
     if(fPlotHitRate):
         time_iframe = ifile*0.048
+        #time_iframe = ifile*iframe_dt
+
     # for now lets see full picture
-    # if have more than 30k htis : probably spark and bullshit frame - discard for first loop
+    # if have more than 30k hits : probably spark and bullshit frame - discard for first loop
     if(fCutNoise and (nhits > 30000 or nhits < 500)):
+
+        nzpixels = np.nonzero(tmp_matrix)
 
         if(nbsframes>0 and nbspics<nbsframes and nhits>30000):
             print(f"{MC.YELLOW} --> Saving BS frame {nbspics} with {nhits} hits... {MC.RST}")
@@ -714,8 +866,14 @@ for file in filelist:
             fucked_hitrate.append([time_iframe, nhits])
         if(nhits>3e4):
             high_nhits+=1
+            #nzpixels = np.nonzero(tmp_matrix)
+            for nzx,nzy in zip(*nzpixels):
+                np.add.at(occ_matrix_shite, (nzx,nzy), 1)
         if(nhits<500):
             low_nhits+=1
+            #nzpixels = np.nonzero(tmp_matrix)
+            for nzx,nzy in zip(*nzpixels):
+                np.add.at(occ_matrix_noise, (nzx,nzy), 1)
         nskipped+=1
         continue
     if(fPlotHitRate):
@@ -818,29 +976,49 @@ for file in filelist:
     sum_traces+=abs(huya_diffs)
 
     # using blob-finder to count ions
-    blobs, labs, fSpark = detectBlobs(tmp_matrix, outdir, str(ifile), show_separation=False)
-    nblobs_frame = len(blobs)
-    nIonBlobs+=nblobs_frame
-    
-    nblob_tot = 0
-    for b in blobs:
-        iblobtot = b.intensity_image[b.image].sum()
-        nblob_tot += iblobtot
-        total_blob_tot += iblobtot    
+    #blobs, labs, fSpark = detectBlobs(tmp_matrix, outdir, str(ifile), show_separation=False)
    
-    if(len(blobs) > 0):
-        avg_blob_tots.append(nblob_tot/len(blobs))
-    
-    if(fSpark):
-        nSparks+=1 
+    testmat = np.zeros((256,256),dtype=int)
+    goodpix = np.where((tmp_matrix>500) & (tmp_matrix<11810))
+    goodtot = tmp_matrix[goodpix] 
+    np.add.at(testmat, (goodpix), goodtot)
+    nblobs_frame, nlabs_frame = simpleCountBlobs(testmat)
+    #nblobs_frame = len(blobs)
+    nIonBlobs+=nblobs_frame 
 
+    testmat, goodpix, goodtot = None, None, None
+
+    #nblob_tot = 0
+    #for b in blobs:
+    #    iblobtot = b.intensity_image[b.image].sum()
+    #    nblob_tot += iblobtot
+    #    total_blob_tot += iblobtot    
+   
+    #if(len(blobs) > 0):
+    #    avg_blob_tots.append(nblob_tot/len(blobs))
+    
+    #if(fSpark):
+    #    nSparks+=1 
+
+    # checking for sparks
+    spark, cols, runs = checkSparks(tmp_matrix, min_norm_height=0.8)
+    fSpark = False
+    if(spark):
+        fSpark = True
+        nSparks += 1
+        print(f"Suspected spark - FRAME={ifile}, Columns={cols}, Runs={runs}")
+        
     #if((fPlotFrames and npics <= nframes) or nblobs_frame>=4):
-    if(fPlotFrames and npics <= nframes):
-        if(nhits>100 and nhits<10000):
+    if((fPlotFrames and npics <= nframes) or fSpark):
+        #if(nhits>100 and nhits<10000):
+        if(nhits>100):
             #print(f"IS SINGLE CLUSTER: [{fSingleCluster}]")
             comment = ""
             comment+=r"$N_{hits}$="+f"{nhits}\n:"
             comment+=r"$\Sigma$(TOT)="+f"{sumTOT}\n:"
+            if(fSpark):
+                comment+="SUS.SPARK\n:"
+                comment+=f"ColNr={runs}\n:"
             #comment+=r"$\bar{y}$="+f"{meanx:.2f}\n:"# coords inverted
             #comment+=r"$\bar{x}$="+f"{meany:.2f}\n:"# coords inverted
             #comment+=r"$\sigma_{x}$="+f"{stdx:.2f}\n:"
@@ -871,12 +1049,15 @@ for file in filelist:
 
             MP.plotMatrix(tmp_matrix,
                           f"FRAME-{ifile}-{picname}",
-                          labels=[f"EVENT-{ifile}", "x,[pixel]","y,[pixel]"],
-                          #info=comment,
-                          infopos=[-90,25],
+                          #labels=[f"EVENT-{ifile}", "x,[pixel]","y,[pixel]"],
+                          labels=[f"", "x,[pixel]","y,[pixel]"],
+                          info=comment,
+                          infopos=[-65,25],
                           outdir=outdir,
                           figsize=(8,7),
                           figtype=ipictype,
+                          sizeTextAxis=14,
+                          sizeTextAxisLabels=14,
                           #geomshapes=[circ_sig1,circ_sig2],
                           #plotMarker=[meany,meanx],
                           fLognorm=True,
@@ -887,6 +1068,18 @@ for file in filelist:
             blobs, _ , _ = detectBlobs(tmp_matrix, outdir, ipname, show_separation=True)
             print(f"{MC.BLUE}skimage found [ {len(blobs)} ] blobs{MC.RST}")
             blobs = None
+
+            #print(f"{MC.YELLOW}Checking regions{MC.RST}")
+            ##ndiv = 4 re-defined on very top as global param
+            #active_pix = (tmp_matrix.T>150) & (tmp_matrix.T < 11810)
+            #check_mat = np.zeros((256,256),dtype = int)
+            #np.add.at(check_mat, active_pix, 1)
+
+            ##reg_counts = np.round(checkRegionCounts(check_mat,ndiv)/npix_redreg, 4)*100.0
+            #reg_counts = checkRegionCounts(check_mat,ndiv)
+            #reg_counts_norm = np.round(reg_counts/np.sum(reg_counts),2)
+            #print(f"Active pixels:\n{reg_counts_norm}" )
+
 
         #end of raw frame plotting
 
@@ -985,6 +1178,7 @@ for file in filelist:
         nSingleIons+=1
 
     if(fPlotFrames and npics<=nframes):
+    #if((fPlotFrames and npics<=nframes) or nblobs_frame>7):
         if(nhits>100 and nhits<10000):
             #################################################
             cut_comment = ""
@@ -1035,11 +1229,47 @@ for file in filelist:
                               geometry=[c_sigma1,c_sigma2],
                               markers=[[cutMeanY,cutMeanX,"+","black","Qweigth"]])
 
-            blobs, labs, _ = detectBlobs(tmp_matrix, outdir, "MASKED-"+str(ifile))
- 
+            blobs, _ , _ = detectBlobs(tmp_matrix, outdir, "MASKED-"+str(ifile))
+
+            #iframe_coords = np.where((tmp_matrix.T>250) & (tmp_matrix.T<11800))
+            #iframe_tots = tmp_matrix.T[iframe_coords]
+            #iframe_density = computeChargeDensity(iframe_coords, iframe_tots)
+            #plt.figure(figsize=(8,7))
+            #plt.scatter(*iframe_coords, c=iframe_density, s=10, cmap='inferno')
+            ##hlineset = np.linspace(0,256,ndiv)
+            ##vlineset = np.linspace(0,256,ndiv)
+            #for step in range(ndiv):
+            #    plt.hlines(256-step*(256/ndiv),0,256,linestyles="--", color="red")
+            #    plt.vlines(256-step*(256/ndiv),0,256,linestyles="--", color="red")
+            #plt.xlabel("x,[pix]")
+            #plt.ylabel("y,[pix]")
+            #plt.xlim([0,256])
+            #plt.ylim([0,256])
+            #plt.title(f"Normalized Charge Density [frame {ifile}]")
+            #plt.savefig(f"{outdir}TOT-DENSITY-{ifile}.png")
+            #plt.close()
+
+            #density_matrix = np.zeros((256,256),dtype=float)
+            #np.add.at(density_matrix, (iframe_coords), iframe_density)
+            #plotDetailedEvent(
+            #        density_matrix,
+            #        f"FRAME-DENSITY-{ifile}-{picname}",
+            #        outdir=outdir
+            #)
+
+            #blobs, _ , _ = detectBlobs(density_matrix, outdir, "DENSITY-"+str(ifile))
+
+            #iframe_coords = None
+            #iframe_tots = None
+            #iframe_density = None
+
             npics+=1
+
+    #if(ifile==100):
+    #    exit(0)
     
     MU.progress(nfiles, ifile)
+    #MU.progress_bar(nfiles, ifile)
     # for loop ends here
 
 print("============================")
@@ -1050,20 +1280,34 @@ print("============================")
 print(f"FOUND {nIonBlobs} ION BLOBS")
 print("============================")
 
+print(f"--- Skipped {nskipped}/{nfiles} frames")
+print(f"--- Found {nSingleIons} Single Ions")
 print(f"--- Found {nSparks} sparks")
 
-avg_tot_sions = sum(single_sumTOT)/nSingleIons
+avg_tot_sions = None
+try:
+    avg_tot_sions = sum(single_sumTOT)/nSingleIons
+except ZeroDivisionError:
+    avg_tot_sions = 0
+
 print(f"Found {nSingleIons} single ions")
 print(f"average TOT per Ion = {avg_tot_sions:.2f} (PEAK COUNTING)")
 
-total_avg_blob_tot = sum(avg_blob_tots)/len(avg_blob_tots)
-print(f"average TOT per Ion = {total_avg_blob_tot:.2f} (BLOB counting)")
+
+#total_avg_blob_tot = None
+#try:
+#    total_avg_blob_tot = sum(avg_blob_tots)/len(avg_blob_tots)
+#except ZeroDivisionError:
+#    total_avg_blob_tot = 0
+
+#print(f"average TOT per Ion = {total_avg_blob_tot:.2f} (BLOB counting)")
 
 MP.plotMatrix(frame_charge_weights, 
               f"CHARGE_CENTERS-{picname}",
               labels=[f"Charge Weight Centers", "x, [pix]", "y, [pix]"],
-              cmap='viridis',
+              #cmap='viridis',
               cbarname=r"$N_{frames}$",
+              cmap='coolwarm',
               outdir=outdir,
               fDebug=True)
 
@@ -1071,17 +1315,40 @@ MP.plotMatrix(occ_matrix,
                 f"OCCUPANCY-{picname}",
                 labels=["Occupancy Matrix", "x,[pix]", "y.[pix]"],
                 cbarname=r'$N_{hits}$',
+                cmap='coolwarm',
                 outdir=outdir,
-                fLognorm=True,
+                #fLognorm=True,
                 fDebug=True)
+
+# plotting occupancy from events from BS frames...
+if(np.sum(occ_matrix_shite)>0):
+    MP.plotMatrix(occ_matrix_shite,
+                    f"OCCUPANCY-BSFRAMES-{picname}",
+                    labels=["Occupancy Matrix (High-Occupancy Frames)", "x,[pix]", "y.[pix]"],
+                    cbarname=r'$N_{hits}$',
+                    outdir=outdir,
+                    cmap='coolwarm',
+                    #fLognorm=True,
+                    fDebug=True)
+# plotting occupancy from events from BS frames...
+if(np.sum(occ_matrix_noise)>0):
+    MP.plotMatrix(occ_matrix_noise,
+                    f"OCCUPANCY-NOISEFRAMES-{picname}",
+                    labels=["Occupancy Matrix (Low-Occupancy Frames)", "x,[pix]", "y.[pix]"],
+                    cbarname=r'$N_{hits}$',
+                    cmap='coolwarm',
+                    outdir=outdir,
+                    #fLognorm=True,
+                    fDebug=True)
 
 MP.plotMatrix(maxout_matrix,
                 f"OVERLY-ACTIVE-PIXELS-{picname}",
                 labels=["Pixels Constantly Approaching Max TOT", "x,[pix]", "y.[pix]"],
-                cmap='viridis',
+                #cmap='viridis',
                 cbarname=r'$N_{hits}$',
+                cmap='coolwarm',
                 outdir=outdir,
-                fLognorm=True,
+                #fLognorm=True,
                 fDebug=True)
 
 quiet_pixels = np.ones((256,256))
@@ -1125,7 +1392,8 @@ MP.plotMatrix(no_response_pix,
                 info=dcomment,
                 infopos=[0,-20],
                 outdir=outdir,
-                cmap="gray",
+                cmap="Greens",#"gray",
+                #cbarmax=1,
                 cbarname="ON/OFF",
                 #fLognorm=True,
                 fDebug=True)
@@ -1414,7 +1682,6 @@ if(fPlotGlobalHists):
         outdir=outdir
         )
 
-
     print("TRYNA' PLOT 2D:")
 
     MP.plot2Dhist(np.array(frame_hits),
@@ -1493,6 +1760,49 @@ if(fPlotHitRate):
     plt.savefig(f"{outdir}HITRATE-{picname}.png")
     plt.close()
 
+    # plotting averaged hitrate over time
+
+    avg_step = 10
+    time = [hitrate[i][0] for i in range(len(hitrate))]
+    hits = [hitrate[i][1] for i in range(len(hitrate))]
+    
+    nbins = None
+    if(nfiles<4000):
+        nbins = len(time)//avg_step
+    else:
+        nbins = 100
+        avg_step = len(time)//100
+
+    median_hits = np.median(hits)
+ 
+    means, edges, _ = binned_statistic(
+        time,
+        hits,
+        statistic='mean',
+        bins=nbins
+    )
+
+    std, _, _ = binned_statistic(
+        time,
+        hits,
+        statistic='std',
+        bins=nbins
+    )
+
+    centers = 0.5*(edges[:-1]+edges[1:])
+
+    fig, ax = plt.subplots(figsize=(10,6))
+    #ax.scatter(centers,means,color="forestgreen",marker="s")
+    ax.errorbar(centers,means,yerr=std,color="forestgreen", ecolor="green",fmt="s")
+    ax.hlines(median_hits,time[1],time[-2],colors='darkblue',linestyles="--", label=f"median rate = {median_hits}")
+    ax.set_title("")
+    ax.set_xlabel("Time, [s]")
+    ax.set_ylabel(r"$\mathrm{N}_{\mathrm{hits}}$ averaged over"+f"{avg_step} consecutive frames, [N]")
+    ax.grid(True)
+    ax.legend()
+    plt.savefig(f"{outdir}HITRATE-AVERAGED-{picname}.png")
+
+
 print(f"Read {nfiles}, skipped {nskipped} (low={low_nhits},high={high_nhits})")
 
 if(fCIT):
@@ -1501,8 +1811,9 @@ if(fCIT):
    
     nCF_high = 0
     total_sumTOT = 0
+    total_BSframes = 0
 
-    n_nitro_blobs = 0
+    n_nitro_blobs, n_nitro_objects = 0, 0
  
     nbad_frames = 0
     nfiles = len(filelist)
@@ -1512,16 +1823,21 @@ if(fCIT):
         ifile+=1
         tmp_matrix = np.loadtxt(f,dtype=int)
         nhits = np.count_nonzero(tmp_matrix)# using total hits 
+        iframe_dt = estimateFrameDeadTime(nhits)
+        full_time += iframe_dt+t_frame
 
         if(nhits > 30000 or nhits < 500):
+             total_BSframes += 1
              nbad_frames += 1
              if(fCountBS and nhits > 30000):
                 N_Nitrogen += 1
                 nbad_frames -= 1
                 nCF_high += 1
              continue
-    
-        THR = 750 #250
+   
+        part_trun += iframe_dt+t_frame
+
+        THR = 500 #250
         badIDX = np.where(tmp_matrix<THR)
         skippix = 5
         masked_matrix = np.ma.masked_array(tmp_matrix, np.zeros_like(tmp_matrix, dtype=int))
@@ -1546,7 +1862,10 @@ if(fCIT):
         tmp_matrix = None
 
         # counting blobs in masked matrix
-        n_nitro_blobs += simpleCountBlobs(masked_matrix)
+        frame_nblobs, frame_nlabs = simpleCountBlobs(masked_matrix)
+        #n_nitro_blobs += simpleCountBlobs(masked_matrix)
+        n_nitro_blobs += frame_nblobs
+        n_nitro_objects += frame_nlabs
 
         MU.progress(nfiles, ifile)
 
@@ -1569,7 +1888,10 @@ if(fCIT):
     else:
         total_runtime = t_run # converting to seconds
         #total_runtime = t_run*60 # converting to seconds
-        print(f"Using [provided] run time {total_runtime}")
+        if(fTimeFromInput):
+            print(f"Using [provided] run time {total_runtime}")
+        else:
+            print(f"Using [JSON] run time {total_runtime}")
 
     # Counting Ions by using "find_peaks" 
     #
@@ -1590,24 +1912,30 @@ if(fCIT):
     #ionrate_blob = total_blob_tot/total_runtime
     
     #total_nitro_blobs = (t_dead+t_frame)/t_frame*n_nitro_blobs
-    total_nitro_blobs = t_dead/t_frame*nIonBlobs
+    #total_nitro_blobs = t_dead/t_frame*nIonBlobs
+    total_nitro_blobs = t_dead/t_frame*n_nitro_blobs
+    total_nitro_objects = t_dead/t_frame*n_nitro_objects
     ionrate_blobs = total_nitro_blobs/total_runtime
-
+    ionrate_objects = total_nitro_objects/total_runtime
 
     # here counting the number of recognizable events 
     # & dividing by the number of frames they were in
     # Then extrapolating that rate over the whole run
     ngood_frames = nfiles - nbad_frames
-    #part_runtime = (t_frame+t_dead)*ngood_frames 
-    part_runtime = t_frame*ngood_frames 
+    part_runtime = (t_frame+t_dead)*ngood_frames
+    #part_runtime = part_trun 
     part_rate = N_Nitrogen/part_runtime
     extrap_ion_dose = part_rate*total_runtime
-
+ 
+    print(f"{MC.BLUE}------ COUNTING (EXTRApolating) -------{MC.RST}")
     print(f"Accounting only for good frames: {ngood_frames} --> {part_runtime:.2f} [s] of good runtime")
+    print(f"Total run time = {full_time:.4f} [s]")
+    print(f"Partial run time (only good frames + estimated iframe dead time) = {part_trun:.4f} [s]")
+    print(f"Partial run time (only good frames + estimated average dead time) = {part_runtime:.4f} [s]")
     print(f"Partial ion rate = {part_rate:.2f} [Hz]")
-    print(f"Corresponds to total exposure of <{extrap_ion_dose:.2f}> ions")
+    print(f"{MC.GREEN_BGR}Corresponds to total exposure of <{extrap_ion_dose:.2f}> ions{MC.RST}")
     
-    print(f"{MC.RED}------ COUNTING (TOT-based) -------{MC.RST}")
+    print(f"{MC.RED}------ COUNTING (Global TOT / avgTOT-per-ion) -------{MC.RST}")
     print(f"Averge TOT-per-single cluster = {avg_tot_sions:.2f}")
     print(f"Total collected TOT = {total_sumTOT:.2f}")
     print(f"Resulting in {N_Nitrogen_TOT:.2f} ions detected")
@@ -1616,41 +1944,45 @@ if(fCIT):
 
     print(f"{MC.GREEN}------ COUNTING (BLOB-counting-based) -------{MC.RST}")
     #print(f"Frames have {n_nitro_blobs:.2f} valid BLOBS")
-    print(f"Frames have {nIonBlobs:.2f} valid BLOBS")
-    print(f"Resulting in {ionrate_blobs:.2f} [Hz]")
-    print(f"{MC.GREEN_BGR}OVERALL DOSE: {total_nitro_blobs:.2f} ions{MC.RST}\n") 
+    print(f"Frames have {MC.CYAN}{n_nitro_blobs:.2f} valid BLOBS, {n_nitro_objects:.2f} objects{MC.RST} in total found")
+    print(f"Resulting in {ionrate_blobs:.2f} [Hz] / {ionrate_objects:.2f} [Hz]")
+    print(f"{MC.GREEN_BGR}OVERALL DOSE: {total_nitro_blobs:.2f} ions{MC.RST}, {MC.CYAN_BGR}{total_nitro_objects:.2f}{MC.RST}\n") 
 
-    print(f"{MC.YELLOW}------ COUNTING (FRAME-based) -------{MC.RST}")
+    print(f"{MC.YELLOW}------ COUNTING (FRAME-based TOT counting) -------{MC.RST}")
     print(f"Ions observed = {N_Nitrogen:.2f}")
     print(f"Run time = {total_runtime/60.0:.2f} minutes")
     print(f"Dead-time scaling factor = {t_dead/t_frame:.2f}")
     print(f"rate={ionrate:.2f} [Hz]")
     print(f"{MC.GREEN_BGR}OVERALL DOSE: {total_nitrogen:.2f} ions{MC.RST}")
+   
+    if(fSaveCounts): 
+        with open(counting_results, "r") as cr:
+            iondata = json.load(cr)
+        print("Got the counting json file")
+
+        iondata["counts"][run_label] = {
+            "runtype": "TOT",
+            "extrap": extrap_ion_dose, 
+            "avgTOT":total_nitrogen_tot, 
+            "blobCTS":total_nitro_blobs, 
+            "frameTOT": total_nitrogen,
+            "NBSframes": total_BSframes
+        }       
+
+        print("Added data")
+        with open(counting_results,"w") as cr:
+            json.dump(iondata, cr, indent=4)
+
+        print("Saved counting json file")
 
 
 MP.plotMatrix(occ_matrix_nonoise,
                 f"OCCUPANCY-PRUNED-{picname}",
-                labels=["Occupancy Matrix (PRUNED)", "x,[pix]", "y.[pix]"],
+                #labels=["Occupancy Matrix (PRUNED)", "x,[pix]", "y.[pix]"],
+                labels=["", "x,[pix]", "y.[pix]"],
                 cbarname=r'$N_{hits}$',
                 outdir=outdir,
-                fLognorm=True,
+                #fLognorm=True,
                 fDebug=True)
 
-# Later make first for loop to evaluate some parameters by which automatically one could
-# select single clusters and count their charge, then apply charge counting
-# over all matrix for all frames (good ones)
-
-#print("Commence step 2 to select specific events")
-#
-#for file in filelist:
-#    
-#    tmp_matrix = np.loadtxt(file, dtype=int)    
-#
-#    nhits = np.count_nonzero(tmp_matrix)
-#    if(fCutNoise and (nhits > 30000 or nhits < 10)):
-#        nskipped+=1
-#        continue
-# 
-#    sumTOT = np.sum(tmp_matrix)
-#
-
+print("FINITO!")

@@ -4,12 +4,16 @@ import glob
 import numpy as np
 import matplotlib.pyplot as plt
 
+from MyPlotter import myUtils
+MU = myUtils()
+
 def getFrameTime(SR,ST):
 
     return 256**SR * 46 * ST / 4e7
 
 def fillList(path):
 
+    print(f"working through files in {path}:")
     avg_hits_per_proton = 1403.5 # average hits per single protons track in one frame
 
     nprotons = 0
@@ -19,9 +23,10 @@ def fillList(path):
     flist=sorted(flist)
 
     nframes=0
+    total_frames = len(flist)
     for file in flist:
-        if(nframes%100):
-            print(f"Opening File: {file}")
+        #if(nframes%100):
+        #    print(f"Opening File: {file}")
         #f = open(file,'r')
         nlines = 0
         ###############################################################
@@ -44,6 +49,7 @@ def fillList(path):
             nprotons += np.round(float(nhits)/avg_hits_per_proton,2)
         dlist.append(nhits)
         nframes+=1
+        MU.progress_bar(nframes,total_frames)
 
     flist=None
 
@@ -156,16 +162,19 @@ plt.close()
 
 default_scx_pos = [0.5, 2.5, 5, 7.5, 9.5, 11.5]
 
-plt.figure(figsize=(8,6))
-plt.scatter(default_scx_pos, reco_Rate, marker='+', color='g', label="Based on reco. data")
-plt.scatter(default_scx_pos, rate_list[0:6], marker='*', color='b', label="Based on Raw hits")
-plt.scatter(SCX_pos[6], rate_list[6], marker='^', color='r', label=r" Raw hits for 200 $\mu$m")
-plt.scatter(SCX_pos[7], rate_list[7], marker='v', color='g', label=r" Raw hits for 500 $\mu$m")
-plt.title("Proton Rate vs SCX1 Position")
-plt.xlabel("SCX1 position, [mm]")
-plt.ylabel("Rate, [Hz]")
+plt.figure(figsize=(8,8))
+plt.scatter(default_scx_pos, reco_Rate, marker='+', s=52, color='g', label="Based on reco. data")
+plt.scatter(default_scx_pos, rate_list[0:6], marker='*', s=52, color='b', label="Based on raw hits")
+#plt.scatter(SCX_pos[6], rate_list[6], marker='^', color='r', s=12, label=r" Raw hits for 200 $\mu$m")
+#plt.scatter(SCX_pos[7], rate_list[7], marker='v', color='g', s=12, label=r" Raw hits for 500 $\mu$m")
+#plt.title("Proton Rate vs SCX1 Position")
+plt.title("")
+plt.xlabel("SX1C Position, [mm]", fontsize=14)
+plt.ylabel("Proton Rate, [Hz]", fontsize=14)
+plt.tick_params(axis='x', labelsize=14)
+plt.tick_params(axis='y', labelsize=14)
 plt.yscale('log')
-plt.xlim([0,14])
+plt.xlim([0,12])
 plt.ylim([1e2,1e5])
 plt.grid(which='major', color='grey', linestyle='-',linewidth=0.5)
 plt.grid(which='minor', color='grey', linestyle='--',linewidth=0.25)

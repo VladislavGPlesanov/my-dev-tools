@@ -17,7 +17,7 @@ def initMatrix(dtype):
 
 def getBaseGroupName(file):
 
-    print(f"Reading {f}")
+    #print(f"Reading {f}")
     groups = file.walk_groups('/')
     grouplist = []
     for gr in groups:
@@ -113,6 +113,8 @@ mat_after = np.zeros((256,256),dtype=np.uint16)
 tot_mat_bef = initMatrix(np.uint16) 
 tot_mat_aft = initMatrix(np.uint16) 
 
+hits_before, hits_after = [], []
+
 TOT_before, TOT_after = None, None
 
 mask_matrix = None
@@ -120,7 +122,6 @@ maskfile = '/home/vlad/Timepix3/masks/W15-G6_mask_2023-07-07_19-07-00.h5'
 with tb.open_file(maskfile) as f:
 
     mask_matrix = f.root.mask_matrix[:].T
-
 
 with tb.open_file(fbefore) as f:
 
@@ -136,7 +137,8 @@ with tb.open_file(fbefore) as f:
     cntr = 0
     for event in ToT:
         nhits = len(event)
-        if(nhits<10000):
+        hits_before.append(nhits)
+        if(nhits<500):
 
             tmp_track = initMatrix(int)
             for xpos, ypos, tot in zip(cluster_x[cntr], cluster_y[cntr], event):
@@ -144,15 +146,15 @@ with tb.open_file(fbefore) as f:
                 np.add.at(tot_mat_bef, (xpos,ypos), tot)            
                 np.add.at(tmp_track, (xpos,ypos), tot)            
        
-            if(npic<10 and
-               nhits > 25): 
-                MP.plotMatrix(tmp_track,
-                              f"track-before-{cntr}",
-                              labels=[f"Fe55, Before, Event {cntr}", "pix, [x]","pix, [y]"],
-                              figsize=(8,7),
-                              cmap='viridis',
-                              fDebug=True)
-                npic+=1
+            #if(npic<10 and
+            #   nhits > 2000): 
+            #    MP.plotMatrix(tmp_track,
+            #                  f"track-before-{cntr}",
+            #                  labels=[f"Fe55, Before, Event {cntr}", "pix, [x]","pix, [y]"],
+            #                  figsize=(8,7),
+            #                  cmap='viridis',
+            #                  fDebug=True)
+            #    npic+=1
 
             tmp_track = None
             tmp_good_tot.append(event)
@@ -183,8 +185,9 @@ with tb.open_file(fafter) as f:
     tmp_good_tot = []
     cntr = 0
     for event in ToT:
+        hits_after.append(nhits)
         nhits = len(event)
-        if(nhits<10000):
+        if(nhits<500):
     
             tmp_track = initMatrix(int)
 
@@ -193,15 +196,15 @@ with tb.open_file(fafter) as f:
                 np.add.at(tot_mat_aft, (xpos,ypos), tot)            
                 np.add.at(tmp_track, (xpos,ypos), tot)            
       
-            if(npic<10 and
-               nhits > 25): 
-                MP.plotMatrix(tmp_track,
-                              f"track-after-{cntr}",
-                              labels=[f"Fe55, After, Event {cntr}", "pix, [x]","pix, [y]"],
-                              figsize=(8,7),
-                              cmap='jet',
-                              fDebug=True)        
-                npic+=1
+            #if(npic<10 and
+            #   nhits > 2000): 
+            #    MP.plotMatrix(tmp_track,
+            #                  f"track-after-{cntr}",
+            #                  labels=[f"Fe55, After, Event {cntr}", "pix, [x]","pix, [y]"],
+            #                  figsize=(8,7),
+            #                  cmap='jet',
+            #                  fDebug=True)        
+            #    npic+=1
             tmp_track = None
 
             tmp_good_tot.append(event)
@@ -219,6 +222,26 @@ with tb.open_file(fafter) as f:
     tmp_good_tot = None
 
 print(f"Processed FILE after: {fafter}")
+
+print(f"Checking hits: n_before={len(hits_before)}, n_after={len(hits_after)}")
+
+MP.simpleHist(hits_before,
+                100,
+                0,
+                np.nanmax(hits_before),
+                ["Hits per event (Before)",r"$N_{Hits}$",r"$N_{Events}$"],
+                f"HITS-BEFORE-{picname}",
+                ylog=True)
+
+MP.simpleHist(hits_after,
+                100,
+                0,
+                np.nanmax(hits_after),
+                ["Hits per event (After)",r"$N_{Hits}$",r"$N_{Events}$"],
+                f"HITS-AFTER-{picname}",
+                ylog=True)
+
+hits_before, hits_after = None, None
 
 datalist = [[TOT_before,"Before Irrad."],[TOT_after,"After Irrad."]]
 
@@ -238,9 +261,9 @@ revived_mask     = dead_before_mask & (~dead_after_mask)   # dead → alive
 still_dead_mask  = dead_before_mask & dead_after_mask       # always dead
 
 # Extract coordinates
-new_y, new_x = np.where(newly_dead_mask)
-rev_y, rev_x = np.where(revived_mask)
-still_y, still_x = np.where(still_dead_mask)
+new_y, new_x = np.where(newly_dead_mask.T)
+rev_y, rev_x = np.where(revived_mask.T)
+still_y, still_x = np.where(still_dead_mask.T)
 
 #print(f"Before we have:\n{ndead_bef} pixels dead\nAfter we have:\n{ndead_aft} pixels dead")
 
@@ -300,7 +323,7 @@ plotMatrix(
     picname
 )
 
-fig, ax = plt.subplots(figsize=(12,8))
+fig, ax = plt.subplots(figsize=(9,9))
 #cax = fig.add_axes([0.86,0.1,0.05,0.8])
 #ms = ax.matshow(mat_before.T, cmap=use_cmap, norm=LogNorm(vmin=1,vmax=np.nanmax(mat_before)))
 #ax.scatter(bdead_x, bdead_y, marker='*', c='r', label="Old dead pixels")
@@ -315,11 +338,14 @@ ax.set_title("Matrix - Dead Pixel Location")
 ax.set_ylabel("y")
 ax.set_xlabel("x")
 ax.xaxis.set_label_position('top') 
-ax.invert_yaxis()
+#ax.invert_yaxis()
 plt.legend()
 plt.savefig(f"Dead-Pixels-{picname}.png", dpi=400)
 #ms = None
 plt.close()
+
+fig, ax, = None, None
+MU, MP = None, None
 
 
 
